@@ -1,0 +1,109 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { cn } from '@/lib/utils';
+import {
+  LayoutDashboard,
+  Landmark,
+  CreditCard,
+  Repeat,
+  Sparkles,
+  Settings,
+  Home,
+  Users
+} from 'lucide-react';
+import Logo from './Logo';
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarFooter,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarMenuBadge,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
+  useSidebar,
+  SidebarSeparator,
+  SidebarGroup,
+  SidebarGroupLabel
+} from '@/components/ui/sidebar';
+
+const navItems = [
+  { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
+  { href: '/transactions', label: 'Transações', icon: Repeat },
+  { href: '/loans', label: 'Empréstimos', icon: Landmark },
+  { href: '/credit-cards', label: 'Cartões', icon: CreditCard },
+  { href: '/insights', label: 'Insights IA', icon: Sparkles },
+];
+
+const secondaryNavItems = [
+  { href: '/settings', label: 'Configurações', icon: Settings },
+];
+
+
+export function AppSidebar() {
+  const pathname = usePathname();
+  const { open } = useSidebar(); // Get sidebar state
+
+  return (
+    <Sidebar>
+      <SidebarHeader className="p-4">
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <Logo className={cn("transition-all duration-300 ease-in-out", open ? "h-10 w-10" : "h-8 w-8")} />
+          <h1
+            className={cn(
+              "font-bold text-2xl font-headline whitespace-nowrap transition-opacity duration-300 ease-in-out",
+              open ? "opacity-100" : "opacity-0 pointer-events-none"
+            )}
+          >
+            Solar Fin
+          </h1>
+        </Link>
+      </SidebarHeader>
+      
+      <SidebarContent className="flex-grow p-2">
+        <SidebarMenu>
+          {navItems.map((item) => (
+            <SidebarMenuItem key={item.href}>
+              <Link href={item.href} passHref legacyBehavior>
+                <SidebarMenuButton
+                  isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
+                  tooltip={open ? undefined : item.label}
+                  className="justify-start"
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span className={cn("truncate", !open && "sr-only")}>{item.label}</span>
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarContent>
+
+      <SidebarSeparator />
+
+      <SidebarFooter className="p-2">
+         <SidebarMenu>
+          {secondaryNavItems.map((item) => (
+            <SidebarMenuItem key={item.href}>
+               <Link href={item.href} passHref legacyBehavior>
+                <SidebarMenuButton
+                  isActive={pathname.startsWith(item.href)}
+                  tooltip={open ? undefined : item.label}
+                  className="justify-start"
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span className={cn("truncate", !open && "sr-only")}>{item.label}</span>
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}

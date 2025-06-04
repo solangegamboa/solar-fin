@@ -10,8 +10,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['Inter', 'sans-serif'],
-        headline: ['Inter', 'sans-serif'],
+        body: ['PT Sans', 'sans-serif'],
+        headline: ['PT Sans', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
@@ -44,6 +44,14 @@ export default {
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
+        },
+        positive: {
+          DEFAULT: 'hsl(var(--positive))',
+          foreground: 'hsl(var(--positive-foreground))',
+        },
+        negative: {
+          DEFAULT: 'hsl(var(--negative))',
+          foreground: 'hsl(var(--negative-foreground))',
         },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
