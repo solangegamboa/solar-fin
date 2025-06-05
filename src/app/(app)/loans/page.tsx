@@ -27,7 +27,7 @@ import { LoanForm } from "@/components/loans/LoanForm";
 import type { Loan } from "@/types";
 import { getLoansForUser, deleteLoan } from "@/lib/databaseService";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils"; // Added cn import
 import { format, parseISO, isPast, isFuture, differenceInMonths, addMonths, getDaysInMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
@@ -269,7 +269,7 @@ export default function LoansPage() {
                 <div className="font-medium text-orange-600 text-right">{formatCurrency(remainingAmount)}</div>
             </div>
              <Separator className="my-2" />
-             <div className_name="space-y-1 text-xs text-muted-foreground">
+             <div className="space-y-1 text-xs text-muted-foreground">
                 <div className="flex items-center">
                     <CalendarDays className="mr-1.5 h-3.5 w-3.5 text-muted-foreground/70" />
                     <span>Início: {formattedStartDate}</span>

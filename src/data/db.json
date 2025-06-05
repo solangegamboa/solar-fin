@@ -32,7 +32,19 @@
           "createdAt": 1749090843659
         }
       ],
-      "loans": [],
+      "loans": [
+        {
+          "id": "ae6e61ef-4b16-4afb-9d09-45dc08e94290",
+          "userId": "default_user",
+          "bankName": "Bradesco ",
+          "description": "Ultimo prometo",
+          "installmentAmount": 899.06,
+          "installmentsCount": 24,
+          "startDate": "2025-06-04",
+          "endDate": "2027-05-04",
+          "createdAt": 1749091558478
+        }
+      ],
       "creditCards": [
         {
           "id": "63ba4d48-4fb7-4132-977d-a4c285369259",
