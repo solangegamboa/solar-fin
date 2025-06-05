@@ -61,7 +61,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const data: AuthApiResponse = await res.json();
       if (data.success && data.user) {
         setUser(data.user);
-        toast({ title: 'Login bem-sucedido!', description: `Bem-vindo de volta, ${data.user.displayName || data.user.email}!` });
+        toast({ title: 'Login bem-sucedido!', description: `Bem-vindo de volta, ${data.user.displayName || data.user.email}!`, duration: 300 });
       } else {
          toast({ variant: 'destructive', title: 'Falha no Login', description: data.message || 'Credenciais inválidas.' });
       }
@@ -85,7 +85,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const data: AuthApiResponse = await res.json();
       if (data.success && data.user) {
         setUser(data.user);
-        toast({ title: 'Cadastro realizado!', description: `Bem-vindo, ${data.user.displayName || data.user.email}!`});
+        toast({ title: 'Cadastro realizado!', description: `Bem-vindo, ${data.user.displayName || data.user.email}!`, duration: 300 });
       } else {
         toast({ variant: 'destructive', title: 'Falha no Cadastro', description: data.message || 'Não foi possível criar a conta.' });
       }
