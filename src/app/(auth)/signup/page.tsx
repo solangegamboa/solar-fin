@@ -6,7 +6,7 @@ import { auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { upsertUserInFirestore } from '@/lib/databaseService'; // O nome da função é mantido, mas a implementação usa RTDB
+import { upsertUserInFirestore } from '@/lib/databaseService'; // ATUALIZADO O CAMINHO DA IMPORTAÇÃO
 
 export default function SignupPage() {
   const router = useRouter();

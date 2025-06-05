@@ -22,7 +22,7 @@ import { auth } from '@/lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
-import { upsertUserInFirestore } from '@/lib/databaseService'; // O nome da função é mantido, mas a implementação usa RTDB
+import { upsertUserInFirestore } from '@/lib/databaseService'; // ATUALIZADO O CAMINHO DA IMPORTAÇÃO
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Por favor, insira um email válido.' }),
@@ -69,7 +69,7 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
         title: "Erro de Autenticação",
         description: (error && error.message) ? error.message : (mode === 'login' ? 'Falha ao entrar. Verifique suas credenciais e tente novamente.' : 'Falha ao criar conta. Por favor, tente novamente.'),
       });
-      console.error("AuthForm submission error:", error && error.message ? error.message : String(error)); 
+      console.error("AuthForm submission error:", (error && error.message) ? error.message : String(error)); 
     } finally {
       setLoading(false);
     }

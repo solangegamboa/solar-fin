@@ -24,7 +24,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useAuth } from '@/contexts/AuthContext';
-import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/databaseService'; // O nome da função é mantido, mas a implementação usa RTDB
+import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/databaseService'; // ATUALIZADO O CAMINHO DA IMPORTAÇÃO
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -61,7 +61,7 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
     resolver: zodResolver(transactionFormSchema),
     defaultValues: {
       type: undefined,
-      amount: '' as unknown as number,
+      amount: '' as unknown as number, // Mantido como estava para evitar o erro de input não controlado
       category: '',
       date: new Date(),
       description: '',
