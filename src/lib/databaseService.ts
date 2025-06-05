@@ -15,8 +15,8 @@ interface LocalDB {
     [uid: string]: {
       profile: UserProfile;
       transactions: Transaction[];
-      loans?: any[];
-      creditCards?: any[];
+      loans?: any[]; // Kept for structural consistency, not fully implemented
+      creditCards?: any[]; // Kept for structural consistency, not fully implemented
     };
   };
 }
@@ -28,8 +28,26 @@ async function readDB(): Promise<LocalDB> {
     return JSON.parse(data) as LocalDB;
   } catch (error: any) {
     if (error.code === 'ENOENT') {
-      const initialDb: LocalDB = { users: {} };
+      // If db.json doesn't exist, create it with a default structure
+      const initialDb: LocalDB = {
+        users: {
+          [DEFAULT_USER_ID]: {
+            profile: {
+              uid: DEFAULT_USER_ID,
+              email: 'user@example.local',
+              displayName: 'Local User',
+              photoURL: null,
+              createdAt: Date.now(),
+              lastLoginAt: Date.now(),
+            },
+            transactions: [],
+            loans: [],
+            creditCards: [],
+          },
+        },
+      };
       await writeDB(initialDb);
+      console.log('Created db.json with default user structure.');
       return initialDb;
     }
     console.error('Error reading database file:', error.message, error);
@@ -73,26 +91,18 @@ async function ensureDefaultUserStructure(db: LocalDB): Promise<LocalDB> {
   return db;
 }
 
-
 /**
- * (No longer upserts based on FirebaseUser)
- * This function is effectively a no-op now or could be used to update the default user's static profile if needed.
- * For now, its primary role of creating user profiles is handled by ensureDefaultUserStructure.
+ * Ensures the default user profile exists and updates last login time.
  */
 export const upsertUser = async (): Promise<void> => {
-  // This function is largely a no-op now as the default user is static
-  // and its structure is ensured by other functions.
-  // We can call ensureDefaultUserStructure here if we want to be explicit on some trigger.
   let db = await readDB();
   db = await ensureDefaultUserStructure(db);
-  // Update lastLoginAt for the default user if desired
   if (db.users[DEFAULT_USER_ID]) {
     db.users[DEFAULT_USER_ID].profile.lastLoginAt = Date.now();
   }
   await writeDB(db);
   console.log(`Checked/Updated default user profile in local DB.`);
 };
-export const upsertUserInFirestore = upsertUser;
 
 
 export interface AddTransactionResult {
@@ -104,11 +114,11 @@ export interface AddTransactionResult {
 export const addTransaction = async (transactionData: NewTransactionData): Promise<AddTransactionResult> => {
   try {
     let db = await readDB();
-    db = await ensureDefaultUserStructure(db); // Ensure default user structure exists
+    db = await ensureDefaultUserStructure(db);
 
     const newTransaction: Transaction = {
       id: randomUUID(),
-      userId: DEFAULT_USER_ID,
+      userId: DEFAULT_USER_ID, // Always use default user
       ...transactionData,
       createdAt: Date.now(),
     };
@@ -125,22 +135,44 @@ export const addTransaction = async (transactionData: NewTransactionData): Promi
   }
 };
 
+export async function getTransactionsForUser(): Promise<Transaction[]> {
+  try {
+    let db = await readDB();
+    db = await ensureDefaultUserStructure(db);
+    const transactions = db.users[DEFAULT_USER_ID]?.transactions || [];
+    // Sort by date (string YYYY-MM-DD) descending, then by createdAt descending as a tie-breaker
+    return transactions.sort((a, b) => {
+      if (b.date < a.date) return -1;
+      if (b.date > a.date) return 1;
+      return b.createdAt - a.createdAt;
+    });
+  } catch (error: any) {
+    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+    console.error(`Error fetching transactions for default user from local DB:`, errorMessage, error);
+    return []; // Return empty array on error
+  }
+}
+
+
 export async function getFinancialDataForUser(): Promise<FinancialDataInput | null> {
   try {
     let db = await readDB();
-    db = await ensureDefaultUserStructure(db); // Ensure default user structure exists
+    db = await ensureDefaultUserStructure(db);
 
     const userData = db.users[DEFAULT_USER_ID];
 
-    if (!userData) { // Should not happen if ensureDefaultUserStructure works
+    if (!userData) {
       console.log(`Default user ${DEFAULT_USER_ID} not found in local DB for financial data.`);
       return null;
     }
 
     const expensesByCategory: { [category: string]: number } = {};
-    let totalIncomeThisMonth = 0;
+    let totalIncomeThisMonth = 0; // This might need more sophisticated date filtering if truly "this month"
 
+    // For simplicity, we'll sum all income transactions for the AI.
+    // And all expenses.
     (userData.transactions || []).forEach(tx => {
+      // Consider filtering by month if this data is meant to be monthly
       if (tx.type === 'expense') {
         expensesByCategory[tx.category] = (expensesByCategory[tx.category] || 0) + tx.amount;
       } else if (tx.type === 'income') {
@@ -153,11 +185,13 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
       amount,
     }));
 
-    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000;
+    // Provide a default income if none found, so AI flow has something to work with
+    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000; // Default to 5000 if no income found
 
     return {
-      income: incomeForAI,
+      income: incomeForAI, // Using a simplified total income
       expenses: expensesArray,
+      // Using placeholder/empty arrays for loans and credit cards as per previous scope
       loans: userData.loans || [],
       creditCards: userData.creditCards || [],
     };
