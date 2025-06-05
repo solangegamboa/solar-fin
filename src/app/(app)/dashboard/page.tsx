@@ -22,7 +22,7 @@ import {
   format as formatDateFns, // Renamed to avoid conflict
   isSameMonth,
   isSameYear,
-  isSameDay,
+  // isSameDay, // No longer explicitly used here, but fine to keep if other logic might need it
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -30,7 +30,7 @@ import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/compone
 import { useAuth } from '@/contexts/AuthContext';
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { DayPicker, type DayProps } from "react-day-picker"; // Import DayPicker and DayProps
+import type { DayProps } from "react-day-picker";
 
 interface DashboardSummary {
   balance: number; 
@@ -128,9 +128,11 @@ export default function DashboardPage() {
   function CustomDay(props: DayProps) {
     const dayKey = formatDateFns(props.date, 'yyyy-MM-dd');
     const daySummary = dailyTransactionSummaries.get(dayKey);
+    const dayNumberNode = <>{formatDateFns(props.date, "d")}</>;
 
-    if (!daySummary || !isSameMonth(props.date, props.displayMonth) ) {
-      return <DayPicker.Day {...props} />;
+    // Render only the day number if it's not in the current display month or has no summary
+    if (!isSameMonth(props.date, props.displayMonth) || !daySummary) {
+      return dayNumberNode;
     }
     
     let indicatorColorClass = "";
@@ -138,15 +140,15 @@ export default function DashboardPage() {
     else if (daySummary.net < 0) indicatorColorClass = "bg-negative";
     else if (daySummary.income > 0 || daySummary.expense > 0) indicatorColorClass = "bg-muted-foreground";
 
-
     return (
       <Popover>
         <PopoverTrigger asChild disabled={!daySummary}>
-          <div className="relative">
-            <DayPicker.Day {...props} className="cursor-pointer" />
-             {indicatorColorClass && (
-                <span className={`absolute bottom-1 left-1/2 transform -translate-x-1/2 h-1.5 w-1.5 rounded-full ${indicatorColorClass}`}></span>
-              )}
+          {/* This div becomes the interactive day cell styled by Calendar */}
+          <div className="relative h-full w-full flex items-center justify-center cursor-pointer">
+            {dayNumberNode}
+            {indicatorColorClass && (
+              <span className={`absolute bottom-1 left-1/2 transform -translate-x-1/2 h-1.5 w-1.5 rounded-full ${indicatorColorClass}`}></span>
+            )}
           </div>
         </PopoverTrigger>
         {daySummary && (
@@ -480,18 +482,16 @@ export default function DashboardPage() {
             {allTransactions ? (
                <Calendar
                 mode="single"
-                selected={selectedDate} // Can be used to highlight, but we use onDayClick for interaction
+                selected={selectedDate} 
                 onSelect={(day) => {
                   if (day) {
-                    // Check if the clicked day is in a different month than current selectedDate
                     if (!isSameMonth(day, selectedDate)) {
-                      setSelectedDate(day); // This will trigger re-fetch and re-render for new month
+                      setSelectedDate(day); 
                     }
-                    // Popover is handled by CustomDay component
                   }
                 }}
                 month={selectedDate}
-                onMonthChange={setSelectedDate} // Sync calendar month with dashboard month
+                onMonthChange={setSelectedDate} 
                 locale={ptBR}
                 modifiers={calendarModifiers}
                 modifiersStyles={calendarModifiersStyles}
