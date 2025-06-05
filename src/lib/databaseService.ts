@@ -3,8 +3,10 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData } from '@/types';
+import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData } from '@/types';
 import { randomUUID } from 'crypto';
+import { parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
+
 
 const DB_PATH = path.join(process.cwd(), 'src', 'data', 'db.json');
 const DEFAULT_USER_ID = 'default_user'; 
@@ -14,7 +16,7 @@ interface LocalDB {
     [uid: string]: {
       profile: UserProfile;
       transactions: Transaction[];
-      loans?: any[]; 
+      loans: Loan[]; 
       creditCards?: CreditCard[];
       creditCardPurchases?: CreditCardPurchase[];
     };
@@ -46,7 +48,7 @@ async function readDB(): Promise<LocalDB> {
         },
       };
       await writeDB(initialDb);
-      console.log('Created db.json with default user structure including creditCardPurchases.');
+      console.log('Created db.json with default user structure including loans, creditCardPurchases.');
       return initialDb;
     }
     console.error('Error reading database file:', error.message, error);
@@ -196,6 +198,7 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
     let totalIncomeThisMonth = 0; 
 
     (userData.transactions || []).forEach(tx => {
+      // For simplicity, AI data will focus on a general period rather than specific month for income/expenses
       if (tx.type === 'expense') {
         expensesByCategory[tx.category] = (expensesByCategory[tx.category] || 0) + tx.amount;
       } else if (tx.type === 'income') {
@@ -210,10 +213,19 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
 
     const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000; 
 
+    // Map loans for AI (simple version)
+    const loansForAI = (userData.loans || []).map(loan => ({
+      description: `${loan.bankName} - ${loan.description}`,
+      amount: loan.installmentAmount * 12, // Estimate total for a year for AI context
+      interestRate: 0, // Placeholder
+      monthlyPayment: loan.installmentAmount,
+    }));
+
+
     return {
       income: incomeForAI, 
       expenses: expensesArray,
-      loans: userData.loans || [],
+      loans: loansForAI,
       creditCards: (userData.creditCards || []).map(cc => ({
         name: cc.name,
         limit: cc.limit,
@@ -229,6 +241,7 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
   }
 }
 
+// Credit Card Specific Functions
 export interface AddCreditCardResult {
   success: boolean;
   creditCardId?: string;
@@ -359,4 +372,83 @@ export const deleteCreditCardPurchase = async (purchaseId: string): Promise<Dele
   }
 };
 
-    
+// Loan Specific Functions
+export interface AddLoanResult {
+  success: boolean;
+  loanId?: string;
+  error?: string;
+}
+
+export const addLoan = async (loanData: NewLoanData): Promise<AddLoanResult> => {
+  try {
+    let db = await readDB();
+    db = await ensureDefaultUserStructure(db);
+
+    const newLoan: Loan = {
+      id: randomUUID(),
+      userId: DEFAULT_USER_ID,
+      ...loanData,
+      installmentAmount: Number(loanData.installmentAmount),
+      createdAt: Date.now(),
+    };
+
+    if (!db.users[DEFAULT_USER_ID].loans) {
+      db.users[DEFAULT_USER_ID].loans = [];
+    }
+    db.users[DEFAULT_USER_ID].loans.push(newLoan);
+    await writeDB(db);
+
+    console.log(`Loan ${newLoan.id} added for default user in local DB.`);
+    return { success: true, loanId: newLoan.id };
+  } catch (error: any) {
+    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+    console.error("Error adding loan to local DB:", errorMessage, error);
+    return { success: false, error: "An error occurred while adding the loan." };
+  }
+};
+
+export async function getLoansForUser(): Promise<Loan[]> {
+  try {
+    let db = await readDB();
+    db = await ensureDefaultUserStructure(db);
+    const loans = db.users[DEFAULT_USER_ID]?.loans || [];
+    // Sort by start date, then by creation date for tie-breaking
+    return loans.sort((a, b) => {
+      const startDateComparison = parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime();
+      if (startDateComparison !== 0) {
+        return startDateComparison;
+      }
+      return b.createdAt - a.createdAt;
+    });
+  } catch (error: any) {
+    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+    console.error(`Error fetching loans for default user from local DB:`, errorMessage, error);
+    return [];
+  }
+}
+
+export const deleteLoan = async (loanId: string): Promise<DeleteResult> => {
+  try {
+    let db = await readDB();
+    db = await ensureDefaultUserStructure(db);
+
+    const loansArray = db.users[DEFAULT_USER_ID].loans || [];
+    const initialLength = loansArray.length;
+    db.users[DEFAULT_USER_ID].loans = loansArray.filter(
+      (l) => l.id !== loanId
+    );
+
+    if (db.users[DEFAULT_USER_ID].loans!.length === initialLength) {
+      console.log(`Loan ${loanId} not found for default user.`);
+      return { success: false, error: "Loan not found." };
+    }
+
+    await writeDB(db);
+    console.log(`Loan ${loanId} deleted for default user in local DB.`);
+    return { success: true };
+  } catch (error: any) {
+    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+    console.error("Error deleting loan from local DB:", errorMessage, error);
+    return { success: false, error: "An error occurred while deleting the loan." };
+  }
+};

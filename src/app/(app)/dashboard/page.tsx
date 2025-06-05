@@ -5,9 +5,9 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
-import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Loader2, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock } from "lucide-react";
-import { getTransactionsForUser, getCreditCardsForUser, getCreditCardPurchasesForUser } from '@/lib/databaseService';
-import type { Transaction, CreditCard, CreditCardPurchase } from '@/types';
+import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Loader2, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock, Landmark } from "lucide-react";
+import { getTransactionsForUser, getCreditCardsForUser, getCreditCardPurchasesForUser, getLoansForUser } from '@/lib/databaseService';
+import type { Transaction, CreditCard, CreditCardPurchase, Loan } from '@/types';
 import { formatCurrency } from "@/lib/utils";
 import {
   startOfMonth,
@@ -29,10 +29,10 @@ import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/compone
 
 
 interface DashboardSummary {
-  balance: number; // Lifetime balance
+  balance: number; 
   selectedMonthIncome: number;
   selectedMonthExpenses: number;
-  selectedMonthCardSpending: number; // Bills closing in the selected month
+  selectedMonthCardSpending: number; 
 }
 
 interface CategoryExpense {
@@ -96,13 +96,13 @@ export default function DashboardPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [transactions, creditCards, creditCardPurchases] = await Promise.all([
+      const [transactions, creditCards, creditCardPurchases, loans] = await Promise.all([
         getTransactionsForUser(),
         getCreditCardsForUser(),
         getCreditCardPurchasesForUser(),
+        getLoansForUser(),
       ]);
 
-      // Lifetime balance (not affected by selectedDate)
       let lifetimeBalance = 0;
       transactions.forEach(tx => {
         if (tx.type === 'income') lifetimeBalance += tx.amount;
@@ -119,7 +119,6 @@ export default function DashboardPage() {
         }
       });
 
-      // Direct expenses for the selected month
       let directMonthlyExpenses = 0;
       const selectedMonthExpensesByCategory: { [key: string]: number } = {};
       transactions.forEach(tx => {
@@ -134,7 +133,6 @@ export default function DashboardPage() {
         .sort((a, b) => b.total - a.total);
       setExpensesByCategory(formattedExpensesByCategory);
       
-      // Credit card bills that closed in the month *before* the selected month
       const monthBeforeSelected = subMonths(selectedDate, 1);
       const targetPrevMonthClosingMonth = getMonth(monthBeforeSelected);
       const targetPrevMonthClosingYear = getYear(monthBeforeSelected);
@@ -147,10 +145,18 @@ export default function DashboardPage() {
           targetPrevMonthClosingYear
         );
       });
-      
-      const totalSelectedMonthExpenses = directMonthlyExpenses + ccBillsClosedLastMonth;
 
-      // Credit card spending for bills closing in the selected month
+      let loanPaymentsThisMonth = 0;
+      loans.forEach(loan => {
+        const loanStartDate = parseISO(loan.startDate);
+        const loanEndDate = parseISO(loan.endDate);
+        if (isWithinInterval(selectedDate, { start: loanStartDate, end: loanEndDate })) {
+          loanPaymentsThisMonth += loan.installmentAmount;
+        }
+      });
+      
+      const totalSelectedMonthExpenses = directMonthlyExpenses + ccBillsClosedLastMonth + loanPaymentsThisMonth;
+
       let cardSpendingForSelectedMonthBills = 0;
       const targetSelectedMonthClosingMonth = getMonth(selectedDate);
       const targetSelectedMonthClosingYear = getYear(selectedDate);
@@ -176,11 +182,11 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [calculateInvoiceTotalForCardAndMonth, selectedDate]); // Added selectedDate dependency
+  }, [calculateInvoiceTotalForCardAndMonth, selectedDate]); 
 
   useEffect(() => {
     fetchDashboardData();
-  }, [fetchDashboardData]); // fetchDashboardData will change if selectedDate changes
+  }, [fetchDashboardData]); 
 
   const handlePreviousMonth = () => {
     setSelectedDate(prev => subMonths(prev, 1));
@@ -298,7 +304,7 @@ export default function DashboardPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="font-headline">Despesas por Categoria ({selectedMonthNameCapitalized})</CardTitle>
-            <CardDescription>Distribuição dos seus gastos mensais diretos (sem cartão).</CardDescription>
+            <CardDescription>Distribuição dos seus gastos mensais diretos (sem cartão, sem empréstimos).</CardDescription>
           </CardHeader>
           <CardContent>
             {expensesByCategory.length > 0 ? (

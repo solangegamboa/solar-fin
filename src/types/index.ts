@@ -18,22 +18,18 @@ export interface Transaction {
   category: string;
   date: string; 
   description?: string;
-  isRecurring?: boolean; // Novo campo para transação recorrente
+  isRecurring?: boolean; 
   createdAt: number; 
 }
 
 export interface Loan {
   id: string;
   userId: string;
-  name: string;
-  totalAmount: number;
-  interestRate: number; 
-  installments: number; 
-  paidAmount: number;
-  remainingAmount: number;
-  monthlyPayment: number;
-  startDate: string; 
-  endDate?: string; 
+  bankName: string;
+  description: string;
+  installmentAmount: number;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
   createdAt: number; 
 }
 
@@ -47,34 +43,32 @@ export interface CreditCard {
   createdAt: number; 
 }
 
-// Representa uma compra individual feita com cartão de crédito
 export interface CreditCardPurchase {
   id: string;
   userId: string;
-  cardId: string; // ID do cartão usado na compra
-  date: string; // Data da compra (YYYY-MM-DD)
+  cardId: string; 
+  date: string; 
   description: string;
   category: string;
-  totalAmount: number; // Valor total da compra
-  installments: number; // Número de parcelas (1 para compra à vista)
+  totalAmount: number; 
+  installments: number; 
   createdAt: number;
 }
 
 export interface FinancialDataInput {
   income: number;
   expenses: Array<{ category: string; amount: number }>;
-  loans: Array<{ description: string; amount: number; interestRate: number; monthlyPayment: number }>;
+  loans: Array<{ description: string; amount: number; interestRate: number; monthlyPayment: number }>; // This might need adjustment if AI uses it
   creditCards: Array<{ name: string; limit: number; balance: number; dueDate: string }>;
 }
 
-// New type for data submitted from the form
 export interface NewTransactionData {
   type: TransactionType;
   amount: number;
   category: string;
-  date: string; // ISO string e.g., "2024-07-15"
+  date: string; 
   description?: string;
-  isRecurring?: boolean; // Novo campo para transação recorrente
+  isRecurring?: boolean;
 }
 
 export interface NewCreditCardData {
@@ -84,12 +78,19 @@ export interface NewCreditCardData {
   closingDateDay: number;
 }
 
-// Para o formulário de nova compra no cartão
 export interface NewCreditCardPurchaseData {
   cardId: string;
-  date: string; // YYYY-MM-DD
+  date: string; 
   description: string;
   category: string;
   totalAmount: number;
   installments: number;
+}
+
+export interface NewLoanData {
+  bankName: string;
+  description: string;
+  installmentAmount: number;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
 }
