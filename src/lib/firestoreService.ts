@@ -83,15 +83,14 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
     });
     return { success: true, transactionId: docRef.id };
   } catch (error: any) {
-    console.error("Error adding transaction to Firestore:", error);
-    let errorMessage = "Failed to add transaction due to an unknown error.";
-    if (error instanceof Error) {
+    console.error("Error adding transaction to Firestore:", error); // Server-side log
+    let errorMessage = "An unknown error occurred while adding the transaction.";
+    if (error instanceof Error && error.message) {
       errorMessage = `Failed to add transaction: ${error.message}`;
-    } else if (typeof error === 'string') {
+    } else if (typeof error === 'string' && error) {
       errorMessage = error;
-    } else if (error && typeof error.message === 'string') {
-      errorMessage = `Failed to add transaction: ${error.message}`;
     }
+    // Fallback to a very generic message if specific details can't be extracted
     return { success: false, error: errorMessage };
   }
 };
