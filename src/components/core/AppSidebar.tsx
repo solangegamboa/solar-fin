@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -10,8 +11,6 @@ import {
   Repeat,
   Sparkles,
   Settings,
-  Home,
-  Users
 } from 'lucide-react';
 import Logo from './Logo';
 import {
@@ -22,16 +21,11 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarMenuBadge,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
-  SidebarMenuSubButton,
   useSidebar,
   SidebarSeparator,
-  SidebarGroup,
-  SidebarGroupLabel
 } from '@/components/ui/sidebar';
-import { SheetTitle } from '@/components/ui/sheet'; // Import SheetTitle
+import { SheetTitle } from '@/components/ui/sheet';
+import * as React from "react"; // Import React for useState and useEffect
 
 const navItems = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -48,22 +42,36 @@ const secondaryNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { open, isMobile } = useSidebar(); // Get sidebar state and isMobile
+  const { open, isMobile: contextIsMobile } = useSidebar(); // Renamed to avoid conflict
+  const [clientIsMobile, setClientIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    // Set the clientIsMobile state after the component has mounted,
+    // ensuring contextIsMobile reflects the actual client environment.
+    setClientIsMobile(contextIsMobile);
+  }, [contextIsMobile]);
+
+  const titleClassName = cn(
+    "font-bold text-2xl font-headline whitespace-nowrap transition-opacity duration-300 ease-in-out",
+    // For desktop, apply opacity transition based on 'open' state
+    // For mobile (clientIsMobile is true), this part of the logic won't apply opacity-0
+    (!clientIsMobile && !open) ? "opacity-0 pointer-events-none" : "opacity-100"
+  );
 
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
         <Link href="/dashboard" className="flex items-center gap-2">
           <Logo className={cn("transition-all duration-300 ease-in-out", open ? "h-10 w-10" : "h-8 w-8")} />
-          <SheetTitle
-            className={cn(
-              "font-bold text-2xl font-headline whitespace-nowrap transition-opacity duration-300 ease-in-out",
-              // If not mobile and desktop sidebar is collapsed, hide it. Otherwise, show it.
-              (!isMobile && !open) ? "opacity-0 pointer-events-none" : "opacity-100"
-            )}
-          >
-            Solar Fin
-          </SheetTitle>
+          {clientIsMobile ? (
+            <SheetTitle className={titleClassName}>
+              Solar Fin
+            </SheetTitle>
+          ) : (
+            <div className={titleClassName}>
+              Solar Fin
+            </div>
+          )}
         </Link>
       </SidebarHeader>
       
