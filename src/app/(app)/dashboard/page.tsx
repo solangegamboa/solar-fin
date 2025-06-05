@@ -32,8 +32,6 @@ import {
   isSameYear,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { useAuth } from '@/contexts/AuthContext';
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -58,13 +56,6 @@ interface DailyTransactionSummary {
   expense: number;
   net: number;
 }
-
-const chartConfig = {
-  total: {
-    label: "Total Gasto (R$)",
-    color: "hsl(var(--chart-1))", 
-  },
-} satisfies ChartConfig;
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
@@ -389,7 +380,7 @@ export default function DashboardPage() {
     { title: "Saldo Atual (Total)", value: summary.balance, icon: DollarSign, currency: true, color: "text-primary" },
     { title: `Receitas de ${selectedMonthNameCapitalized}`, value: summary.selectedMonthIncome, icon: TrendingUp, currency: true, color: "text-positive" },
     { title: `Despesas de ${selectedMonthNameCapitalized}`, value: summary.selectedMonthExpenses, icon: TrendingDown, currency: true, color: "text-negative" },
-    { title: `Cartões (Fatura ${selectedMonthNameCapitalized})`, value: summary.selectedMonthCardSpending, icon: CreditCardIcon, currency: true, color: "text-blue-500", link: "/credit-cards" },
+    { title: `Cartões ${selectedMonthNameCapitalized}`, value: summary.selectedMonthCardSpending, icon: CreditCardIcon, currency: true, color: "text-blue-500", link: "/credit-cards" },
   ];
 
 
@@ -409,12 +400,12 @@ export default function DashboardPage() {
       
        <div className="flex flex-row items-center justify-center sm:justify-end gap-2">
          <Button onClick={handleCurrentMonth} variant="secondary" size="icon" aria-label="Mês Atual" disabled={isCurrentMonthSelected()}>
-            <CalendarClock className="h-4 w-4" />
+            <CalendarClock />
           </Button>
           <Dialog open={isTransactionModalOpen} onOpenChange={setIsTransactionModalOpen}>
             <DialogTrigger asChild>
               <Button size="icon" aria-label="Nova Transação" disabled={!user}>
-                <PlusCircle className="h-4 w-4" />
+                <PlusCircle />
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
@@ -428,7 +419,7 @@ export default function DashboardPage() {
           <Dialog open={isCreditCardPurchaseModalOpen} onOpenChange={setIsCreditCardPurchaseModalOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" size="icon" aria-label="Nova Compra (Cartão)" disabled={!user || userCreditCards.length === 0}>
-                <ShoppingBag className="h-4 w-4" />
+                <ShoppingBag/>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
@@ -477,45 +468,18 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {expensesByCategory.length > 0 ? (
-              <ChartContainer config={chartConfig} className="min-h-[200px] w-full aspect-video">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart 
-                    data={expensesByCategory} 
-                    layout="vertical"
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis 
-                        type="number" 
-                        axisLine={false} 
-                        tickLine={false}
-                        tickFormatter={(value) => formatCurrency(value).replace(/\s?R\$\s?/,'')}
-                        />
-                    <YAxis 
-                        dataKey="category" 
-                        type="category" 
-                        tickLine={false} 
-                        axisLine={false} 
-                        tickMargin={5}
-                        width={100}
-                        />
-                    <ChartTooltipContent
-                      formatter={(value, name, props) => (
-                        <div className='p-1'>
-                          <p className="font-medium text-sm">{props.payload.category}</p>
-                          <p className='text-xs text-foreground'>{formatCurrency(value as number)}</p>
-                        </div>
-                      )}
-                      cursorClassName="fill-muted/50"
-                    />
-                    <Bar dataKey="total" fill="var(--color-total)" radius={4} barSize={20} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartContainer>
+              <ul className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                {expensesByCategory.map((expense) => (
+                  <li key={expense.category} className="flex justify-between items-center py-2 border-b last:border-b-0">
+                    <span className="text-sm text-foreground">{expense.category}</span>
+                    <span className="text-sm font-semibold text-negative">{formatCurrency(expense.total)}</span>
+                  </li>
+                ))}
+              </ul>
             ) : (
-              <div className="h-[300px] flex items-center justify-center bg-muted/50 rounded-md">
+              <div className="h-[auto] min-h-[150px] flex items-center justify-center bg-muted/50 rounded-md p-4">
                 <p className="text-muted-foreground text-center">
-                  Nenhuma despesa direta registrada em {selectedMonthName.toLowerCase()} para exibir no gráfico.
+                  Nenhuma despesa direta registrada em {selectedMonthName.toLowerCase()} para exibir.
                 </p>
               </div>
             )}
