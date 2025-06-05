@@ -395,13 +395,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight font-headline">Painel Financeiro</h1>
-          <p className="text-muted-foreground">
-            Resumo da sua saúde financeira.
-          </p>
-        </div>
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
          <div className="flex items-center justify-center gap-1">
             <Button onClick={handlePreviousMonth} variant="outline" size="icon" aria-label="Mês anterior">
                 <ChevronLeft className="h-5 w-5" />
@@ -572,4 +566,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
