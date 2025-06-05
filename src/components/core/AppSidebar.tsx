@@ -25,7 +25,7 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { SheetTitle } from '@/components/ui/sheet';
-import * as React from "react"; // Import React for useState and useEffect
+import * as React from "react"; 
 
 const navItems = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -42,26 +42,28 @@ const secondaryNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { open, isMobile: contextIsMobile } = useSidebar(); // Renamed to avoid conflict
+  const { open, isMobile: contextIsMobile, setOpenMobile } = useSidebar(); 
   const [clientIsMobile, setClientIsMobile] = React.useState(false);
 
   React.useEffect(() => {
-    // Set the clientIsMobile state after the component has mounted,
-    // ensuring contextIsMobile reflects the actual client environment.
     setClientIsMobile(contextIsMobile);
   }, [contextIsMobile]);
 
   const titleClassName = cn(
     "font-bold text-2xl font-headline whitespace-nowrap transition-opacity duration-300 ease-in-out",
-    // For desktop, apply opacity transition based on 'open' state
-    // For mobile (clientIsMobile is true), this part of the logic won't apply opacity-0
     (!clientIsMobile && !open) ? "opacity-0 pointer-events-none" : "opacity-100"
   );
+
+  const handleMenuItemClick = () => {
+    if (clientIsMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2" onClick={handleMenuItemClick}>
           <Logo className={cn("transition-all duration-300 ease-in-out", open ? "h-10 w-10" : "h-8 w-8")} />
           {clientIsMobile ? (
             <SheetTitle className={titleClassName}>
@@ -81,9 +83,11 @@ export function AppSidebar() {
             <SidebarMenuItem key={item.href}>
               <Link href={item.href} passHref legacyBehavior>
                 <SidebarMenuButton
+                  as="a" 
                   isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
                   tooltip={open ? undefined : item.label}
                   className="justify-start"
+                  onClick={handleMenuItemClick}
                 >
                   <item.icon className="h-5 w-5" />
                   <span className={cn("truncate", !open && "sr-only")}>{item.label}</span>
@@ -102,9 +106,11 @@ export function AppSidebar() {
             <SidebarMenuItem key={item.href}>
                <Link href={item.href} passHref legacyBehavior>
                 <SidebarMenuButton
+                  as="a" 
                   isActive={pathname.startsWith(item.href)}
                   tooltip={open ? undefined : item.label}
                   className="justify-start"
+                  onClick={handleMenuItemClick}
                 >
                   <item.icon className="h-5 w-5" />
                   <span className={cn("truncate", !open && "sr-only")}>{item.label}</span>
