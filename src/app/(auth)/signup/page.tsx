@@ -1,3 +1,4 @@
+
 'use client';
 
 import { AuthForm } from '@/components/auth/AuthForm';
@@ -5,6 +6,7 @@ import { auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
+import { upsertUserInFirestore } from '@/lib/firestoreService';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -12,7 +14,10 @@ export default function SignupPage() {
 
   const handleSignup = async (values: { email: string; password: string }) => {
     try {
-      await createUserWithEmailAndPassword(auth, values.email, values.password);
+      const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+      if (userCredential.user) {
+        await upsertUserInFirestore(userCredential.user);
+      }
       toast({ title: "Conta criada com sucesso!", description: "Redirecionando para o painel..." });
       router.push('/dashboard');
     } catch (error: any) {

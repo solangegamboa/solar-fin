@@ -22,6 +22,7 @@ import { auth } from '@/lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
+import { upsertUserInFirestore } from '@/lib/firestoreService';
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Por favor, insira um email válido.' }),
@@ -62,6 +63,7 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
     setLoading(true);
     try {
       await onSubmit(values);
+      // upsertUserInFirestore será chamado dentro de onSubmit (nas páginas login/signup)
     } catch (error: any) {
        toast({
         variant: "destructive",
@@ -77,7 +79,10 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
     setLoading(true);
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      const userCredential = await signInWithPopup(auth, provider);
+      if (userCredential.user) {
+        await upsertUserInFirestore(userCredential.user);
+      }
       toast({ title: "Login com Google bem-sucedido!", description: "Redirecionando para o painel..." });
       router.push('/dashboard');
     } catch (error: any) {

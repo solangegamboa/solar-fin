@@ -1,3 +1,4 @@
+
 'use client';
 
 import { AuthForm } from '@/components/auth/AuthForm';
@@ -5,6 +6,7 @@ import { auth } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
+import { upsertUserInFirestore } from '@/lib/firestoreService';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,7 +14,10 @@ export default function LoginPage() {
 
   const handleLogin = async (values: { email: string; password: string }) => {
     try {
-      await signInWithEmailAndPassword(auth, values.email, values.password);
+      const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
+      if (userCredential.user) {
+        await upsertUserInFirestore(userCredential.user);
+      }
       toast({ title: "Login bem-sucedido!", description: "Redirecionando para o painel..." });
       router.push('/dashboard');
     } catch (error: any) {
