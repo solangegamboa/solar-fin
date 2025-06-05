@@ -68,8 +68,9 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
        toast({
         variant: "destructive",
         title: "Erro de Autenticação",
-        description: error.message || (mode === 'login' ? 'Falha ao entrar.' : 'Falha ao criar conta.'),
+        description: (mode === 'login' ? 'Falha ao entrar. Verifique suas credenciais e tente novamente.' : 'Falha ao criar conta. Por favor, tente novamente.'),
       });
+      console.error("AuthForm submission error:", error); 
     } finally {
       setLoading(false);
     }
@@ -96,7 +97,7 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
       toast({
         variant: "destructive",
         title: "Erro de Autenticação com Google",
-        description: message,
+        description: message, 
       });
     } finally {
       setLoading(false);
