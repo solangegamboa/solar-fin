@@ -402,11 +402,11 @@ export default function DashboardPage() {
             Resumo da sua saúde financeira.
           </p>
         </div>
-         <div className="flex items-center justify-center gap-2 sm:gap-1">
+         <div className="flex items-center justify-center gap-1">
             <Button onClick={handlePreviousMonth} variant="outline" size="icon" aria-label="Mês anterior">
                 <ChevronLeft className="h-5 w-5" />
             </Button>
-            <h2 className="text-lg sm:text-xl font-semibold text-center whitespace-nowrap tabular-nums mx-2">
+            <h2 className="text-xl font-semibold text-center whitespace-nowrap tabular-nums mx-2">
                 {formatDateFns(selectedDate, 'MMMM/yyyy', { locale: ptBR })}
             </h2>
             <Button onClick={handleNextMonth} variant="outline" size="icon" aria-label="Próximo mês">
@@ -450,7 +450,7 @@ export default function DashboardPage() {
        </div>
 
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {summaryCardsData.map((cardItem) => {
           const cardComponentContent = (
             <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 h-full">
