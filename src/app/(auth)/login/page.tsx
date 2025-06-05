@@ -21,11 +21,32 @@ export default function LoginPage() {
       toast({ title: "Login bem-sucedido!", description: "Redirecionando para o painel..." });
       router.push('/dashboard');
     } catch (error: any) {
-      let message = "Ocorreu um erro ao tentar fazer login.";
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        message = "Email ou senha inválidos.";
+      let message = "Ocorreu um erro ao tentar fazer login. Tente novamente.";
+      
+      switch (error.code) {
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential':
+          message = "Email ou senha inválidos.";
+          break;
+        case 'auth/user-disabled':
+          message = "Esta conta de usuário foi desabilitada.";
+          break;
+        case 'auth/too-many-requests':
+          message = "Acesso bloqueado temporariamente devido a muitas tentativas. Tente novamente mais tarde.";
+          break;
+        case 'auth/operation-not-allowed':
+          message = "Login com email e senha não está habilitado. Contate o suporte.";
+          break;
+        case 'auth/network-request-failed':
+          message = "Erro de rede. Verifique sua conexão e tente novamente.";
+          break;
+        default:
+          // message remains the generic one
+          break;
       }
-      console.error("Firebase login error:", error);
+      
+      console.error("Firebase login error:", error.code, error.message, error);
       throw new Error(message); // This will be caught by AuthForm
     }
   };
