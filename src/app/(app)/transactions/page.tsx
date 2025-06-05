@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -34,7 +34,7 @@ import { TransactionForm } from "@/components/transactions/TransactionForm";
 import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Sun, AlertTriangleIcon, SearchX, Copy, RefreshCw, Trash2 } from "lucide-react";
 import type { Transaction, NewTransactionData } from '@/types';
 import { getTransactionsForUser, addTransaction, deleteTransaction } from '@/lib/databaseService';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
@@ -168,22 +168,82 @@ export default function TransactionsPage() {
     return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
   }
 
-
-  const renderTransactionRows = () => {
-    if (transactions.length === 0 && !isLoading) {
-      return (
-        <TableRow>
-          <TableCell colSpan={7} className="h-24 text-center">
-            <div className="flex flex-col items-center justify-center space-y-2">
-              <SearchX className="h-8 w-8 text-muted-foreground" />
-              <p className="text-muted-foreground">Nenhuma transação encontrada.</p>
-              <p className="text-xs text-muted-foreground">Adicione uma nova transação para começar.</p>
+  const renderMobileTransactionCards = () => (
+    <div className="space-y-4 md:hidden">
+      {transactions.map((transaction) => (
+        <Card key={transaction.id} className="shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="text-base font-semibold">{transaction.description || 'Sem descrição'}</CardTitle>
+                <CardDescription className="text-xs">{format(parseISO(transaction.date), 'dd/MM/yyyy', { locale: ptBR })}</CardDescription>
+              </div>
+              <Badge 
+                variant={transaction.type === 'income' ? 'default' : 'destructive'} 
+                className={cn(
+                  "text-xs",
+                  transaction.type === 'income' ? 'bg-positive/20 text-positive-foreground border-positive/30' : 'bg-negative/20 text-negative-foreground border-negative/30'
+                )}
+              >
+                {transaction.type === 'income' ? <ArrowUpCircle className="mr-1 h-3 w-3"/> : <ArrowDownCircle className="mr-1 h-3 w-3"/>}
+                {transaction.type === 'income' ? 'Receita' : 'Despesa'}
+              </Badge>
             </div>
-          </TableCell>
-        </TableRow>
-      );
-    }
+          </CardHeader>
+          <CardContent className="space-y-1 pb-3 text-sm">
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Valor:</span>
+              <span className={`font-medium ${transaction.type === 'income' ? 'text-positive' : 'text-negative'}`}>
+                {formatCurrency(transaction.amount)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Categoria:</span>
+              <Badge variant={transaction.isRecurring ? "default" : "secondary"} className={cn("text-xs", transaction.isRecurring ? "bg-blue-100 text-blue-700 border-blue-300" : "")}>
+                {transaction.category}
+                {transaction.isRecurring && <RefreshCw className="ml-1.5 h-3 w-3" />}
+              </Badge>
+            </div>
+          </CardContent>
+          <CardFooter className="flex justify-end space-x-1 pt-2 pb-3">
+            {transaction.isRecurring && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleDuplicateTransaction(transaction)}
+                disabled={isDuplicatingId === transaction.id || !!isDeletingId || !user}
+                aria-label="Duplicar transação"
+                className="h-7 w-7"
+              >
+                {isDuplicatingId === transaction.id ? (
+                  <Sun className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </Button>
+            )}
+            <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleDeleteTransaction(transaction)}
+                disabled={isDeletingId === transaction.id || !!isDuplicatingId || !user}
+                aria-label="Excluir transação"
+                className="h-7 w-7 text-destructive hover:text-destructive/80"
+              >
+                {isDeletingId === transaction.id ? (
+                  <Sun className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+              </Button>
+          </CardFooter>
+        </Card>
+      ))}
+    </div>
+  );
+  
 
+  const renderTransactionTableRows = () => {
     return transactions.map((transaction) => (
       <TableRow key={transaction.id}>
         <TableCell>
@@ -268,7 +328,6 @@ export default function TransactionsPage() {
                 Preencha os detalhes da sua transação abaixo.
               </DialogDescription>
             </DialogHeader>
-            {/* Pass userId to TransactionForm */}
             {user && <TransactionForm onSuccess={handleTransactionAdded} setOpen={setIsModalOpen} userId={user.id} />}
           </DialogContent>
         </Dialog>
@@ -280,7 +339,7 @@ export default function TransactionsPage() {
           <CardDescription>Veja todas as suas movimentações financeiras.</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading && transactions.length === 0 ? ( // Show general loading if initial load
+          {isLoading && transactions.length === 0 ? ( 
             <div className="h-[300px] flex items-center justify-center">
               <Sun className="h-8 w-8 animate-spin text-primary" />
               <p className="ml-2 text-muted-foreground">Carregando transações...</p>
@@ -290,24 +349,33 @@ export default function TransactionsPage() {
               <AlertTriangleIcon className="h-8 w-8 mb-2" />
               <p>{error}</p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead className="text-right">Valor</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {renderTransactionRows()}
-                </TableBody>
-              </Table>
+          ) : transactions.length === 0 ? (
+             <div className="h-[200px] md:h-[300px] flex flex-col items-center justify-center space-y-2 text-center">
+                <SearchX className="h-10 w-10 text-muted-foreground" />
+                <p className="text-muted-foreground">Nenhuma transação encontrada.</p>
+                <p className="text-xs text-muted-foreground">Adicione uma nova transação para começar.</p>
             </div>
+          ) : (
+            <>
+              {renderMobileTransactionCards()}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {renderTransactionTableRows()}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -336,3 +404,5 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
+    

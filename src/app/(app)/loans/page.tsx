@@ -185,12 +185,12 @@ export default function LoansPage() {
     };
   };
 
-  if (authLoading || isLoading && !loans.length) { // Show loader if auth is loading OR data is loading initially
+  if (authLoading || isLoading && !loans.length) { 
     return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
   }
 
   const renderLoanList = () => {
-    if (isLoading && loans.length === 0 && !authLoading) { // specific loading state for loans after auth
+    if (isLoading && loans.length === 0 && !authLoading) { 
       return <div className="flex items-center justify-center h-64 col-span-full"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando empréstimos...</p></div>;
     }
     if (error) {
@@ -217,11 +217,11 @@ export default function LoansPage() {
 
       return (
         <Card key={loan.id} className="shadow-md hover:shadow-lg transition-shadow flex flex-col">
-          <CardHeader>
+          <CardHeader className="pb-3">
             <div className="flex items-start justify-between">
               <div>
-                <CardTitle className="flex items-center text-xl"><Landmark className="mr-2 h-6 w-6 text-primary" />{loan.bankName}</CardTitle>
-                <CardDescription>{loan.description}</CardDescription>
+                <CardTitle className="flex items-center text-lg font-semibold"><Landmark className="mr-2 h-5 w-5 text-primary" />{loan.bankName}</CardTitle>
+                <CardDescription className="text-sm">{loan.description}</CardDescription>
               </div>
               <div className="flex gap-1">
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive/90" onClick={() => handleDeleteLoan(loan)} disabled={isDeletingId === loan.id || !user}>
@@ -230,16 +230,17 @@ export default function LoansPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3 flex-grow">
+          <CardContent className="space-y-2 flex-grow text-sm pb-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground flex items-center"><ReceiptText className="mr-1.5 h-4 w-4 text-muted-foreground/70" />Valor da Parcela:</span>
-              <span className="font-semibold">{formatCurrency(loan.installmentAmount)}</span>
+              <span className="text-muted-foreground flex items-center"><ReceiptText className="mr-1.5 h-4 w-4 text-muted-foreground/70" />Valor Parcela:</span>
+              <span className="font-medium">{formatCurrency(loan.installmentAmount)}</span>
             </div>
              <div className="space-y-1 pt-1">
               <div className="flex justify-between items-center text-xs text-muted-foreground">
-                <span>Progresso ({monthsPassed}/{totalInstallments} parcelas)</span>
+                <span>Progresso ({monthsPassed}/{totalInstallments})</span>
                 <Badge variant={status === "Concluído" ? "default" : (status === "A iniciar" ? "outline" : "secondary")}
                        className={cn(
+                          "text-xs",
                           status === "Concluído" && "bg-green-100 text-green-700 border-green-300",
                           status === "Em andamento" && "bg-yellow-100 text-yellow-700 border-yellow-300",
                           status === "A iniciar" && "bg-blue-100 text-blue-700 border-blue-300"
@@ -248,7 +249,7 @@ export default function LoansPage() {
                   {status}
                 </Badge>
               </div>
-              <Progress value={progress} className="h-2" 
+              <Progress value={progress} className="h-1.5" 
                 indicatorClassName={cn(
                   status === "Concluído" && "bg-green-500",
                   status === "Em andamento" && "bg-yellow-500",
@@ -257,31 +258,31 @@ export default function LoansPage() {
               />
             </div>
             <Separator className="my-2" />
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                <div className="text-muted-foreground flex items-center"><CircleDollarSign className="mr-1.5 h-4 w-4 text-muted-foreground/70" />Total:</div>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+                <div className="text-muted-foreground flex items-center"><CircleDollarSign className="mr-1.5 h-3.5 w-3.5 text-muted-foreground/70" />Total:</div>
                 <div className="font-medium text-right">{formatCurrency(totalLoanAmount)}</div>
 
-                <div className="text-muted-foreground flex items-center"><TrendingUp className="mr-1.5 h-4 w-4 text-green-500" />Pago:</div>
+                <div className="text-muted-foreground flex items-center"><TrendingUp className="mr-1.5 h-3.5 w-3.5 text-green-500" />Pago:</div>
                 <div className="font-medium text-green-600 text-right">{formatCurrency(paidAmount)}</div>
 
-                <div className="text-muted-foreground flex items-center"><TrendingDown className="mr-1.5 h-4 w-4 text-orange-500" />Restante:</div>
+                <div className="text-muted-foreground flex items-center"><TrendingDown className="mr-1.5 h-3.5 w-3.5 text-orange-500" />Restante:</div>
                 <div className="font-medium text-orange-600 text-right">{formatCurrency(remainingAmount)}</div>
             </div>
              <Separator className="my-2" />
-             <div className="space-y-1 text-xs text-muted-foreground">
+             <div className="space-y-0.5 text-xs text-muted-foreground">
                 <div className="flex items-center">
-                    <CalendarDays className="mr-1.5 h-3.5 w-3.5 text-muted-foreground/70" />
+                    <CalendarDays className="mr-1.5 h-3 w-3.5 text-muted-foreground/70" />
                     <span>Início: {formattedStartDate}</span>
                 </div>
                 <div className="flex items-center">
-                    <CalendarDays className="mr-1.5 h-3.5 w-3.5 text-muted-foreground/70" />
-                    <span>Fim: {formattedEndDate} ({loan.installmentsCount}ª parcela)</span>
+                    <CalendarDays className="mr-1.5 h-3 w-3.5 text-muted-foreground/70" />
+                    <span>Fim: {formattedEndDate}</span>
                 </div>
             </div>
           </CardContent>
-           <CardFooter className="text-xs text-muted-foreground pt-3">
-            <Info className="mr-1.5 h-3.5 w-3.5 text-muted-foreground/70" />
-            {status !== "Concluído" && !isUpcoming && <span>{remainingMonths} parcelas restantes. </span>}
+           <CardFooter className="text-xs text-muted-foreground pt-2 pb-3">
+            <Info className="mr-1.5 h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+            {status !== "Concluído" && !isUpcoming && <span className="truncate">{remainingMonths} parcelas restantes. </span>}
             {isUpcoming && <span>Este empréstimo ainda não iniciou.</span>}
             {status === "Concluído" && <span>Este empréstimo foi totalmente pago.</span>}
           </CardFooter>
@@ -354,3 +355,5 @@ export default function LoansPage() {
     </TooltipProvider>
   );
 }
+
+    

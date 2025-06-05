@@ -332,8 +332,8 @@ export default function CreditCardsPage() {
                   <p className="font-medium">{p.description}</p>
                   <p className="text-xs text-muted-foreground">{p.category} - {cardName}</p>
                 </div>
-                <div className="text-right flex items-center">
-                 <div className="mr-2">
+                <div className="text-right flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                 <div>
                     <p className="font-semibold">{formatCurrency(p.totalAmount)}</p>
                     <p className="text-xs text-muted-foreground">{p.installments}x de {formatCurrency(p.totalAmount / p.installments)}</p>
                   </div>
@@ -343,7 +343,7 @@ export default function CreditCardsPage() {
                     onClick={() => handleDeleteCreditCardPurchase(p)}
                     disabled={isDeletingPurchaseId === p.id || !user}
                     aria-label="Excluir compra"
-                    className="h-8 w-8 text-destructive hover:text-destructive/80"
+                    className="h-8 w-8 text-destructive hover:text-destructive/80 shrink-0"
                   >
                     {isDeletingPurchaseId === p.id ? (
                       <Sun className="h-4 w-4 animate-spin" />
@@ -476,3 +476,5 @@ export default function CreditCardsPage() {
     </div>
   );
 }
+
+    
