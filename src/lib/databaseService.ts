@@ -45,9 +45,28 @@ const DEFAULT_USER_ID = 'default_user';
 //   created_at TIMESTAMPTZ DEFAULT NOW()
 // );
 
-// -- Other tables (credit_cards, credit_card_purchases) would follow a similar pattern.
-// -- For credit_cards, 'limit' might be 'limit_amount' to avoid SQL keyword clash.
-// -- For credit_card_purchases, 'date' might be 'purchase_date'.
+// CREATE TABLE credit_cards (
+//   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+//   user_id TEXT REFERENCES users(uid) ON DELETE CASCADE,
+//   name TEXT NOT NULL,
+//   limit_amount NUMERIC(12, 2) NOT NULL, -- "limit" can be a reserved keyword
+//   due_date_day INTEGER NOT NULL,
+//   closing_date_day INTEGER NOT NULL,
+//   created_at TIMESTAMPTZ DEFAULT NOW()
+// );
+
+// CREATE TABLE credit_card_purchases (
+//   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+//   user_id TEXT REFERENCES users(uid) ON DELETE CASCADE,
+//   card_id UUID REFERENCES credit_cards(id) ON DELETE CASCADE,
+//   purchase_date DATE NOT NULL, -- "date" can be ambiguous
+//   description TEXT NOT NULL,
+//   category TEXT NOT NULL,
+//   total_amount NUMERIC(12, 2) NOT NULL,
+//   installments INTEGER NOT NULL,
+//   created_at TIMESTAMPTZ DEFAULT NOW()
+// );
+
 
 interface LocalDB {
   users: {
@@ -192,7 +211,7 @@ export interface AddTransactionResult {
 }
 
 export const addTransaction = async (transactionData: NewTransactionData): Promise<AddTransactionResult> => {
-  await ensureDefaultUserInPostgres(); // Ensure user exists before adding transaction
+  await ensureDefaultUserInPostgres(); 
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       const newTransactionId = randomUUID();
@@ -217,7 +236,6 @@ export const addTransaction = async (transactionData: NewTransactionData): Promi
       return { success: false, error: "An error occurred while adding the transaction to PostgreSQL." };
     }
   } else {
-    // Local DB logic
     try {
       let db = await readDB();
       db = await ensureDefaultUserStructure(db);
@@ -251,18 +269,16 @@ export async function getTransactionsForUser(): Promise<Transaction[]> {
         'SELECT id, user_id as "userId", type, amount, category, date, description, is_recurring as "isRecurring", created_at as "createdAt" FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC',
         [DEFAULT_USER_ID]
       );
-      // Ensure date is formatted as YYYY-MM-DD string if it comes as Date object from DB
       return res.rows.map(tx => ({
         ...tx,
         date: formatDateFns(new Date(tx.date), 'yyyy-MM-dd'),
-        amount: Number(tx.amount) // Ensure amount is number
+        amount: Number(tx.amount) 
       }));
     } catch (error: any) {
       console.error(`Error fetching transactions for default user from PostgreSQL:`, error.message, error);
       return [];
     }
   } else {
-    // Local DB logic
     try {
       let db = await readDB();
       db = await ensureDefaultUserStructure(db);
@@ -302,7 +318,6 @@ export const deleteTransaction = async (transactionId: string): Promise<DeleteRe
       return { success: false, error: "An error occurred while deleting the transaction from PostgreSQL." };
     }
   } else {
-    // Local DB logic
     try {
       let db = await readDB();
       db = await ensureDefaultUserStructure(db);
@@ -333,6 +348,8 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
   await ensureDefaultUserInPostgres();
   const userTransactions = await getTransactionsForUser(); 
   const userLoans = await getLoansForUser(); 
+  const userCreditCards = await getCreditCardsForUser();
+
 
   try {
     const expensesByCategory: { [category: string]: number } = {};
@@ -360,8 +377,6 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
       monthlyPayment: loan.installmentAmount,
     }));
     
-    const userCreditCards = await getCreditCardsForUser(); // NOT PG-aware yet
-
     return {
       income: incomeForAI, 
       expenses: expensesArray,
@@ -369,7 +384,7 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
       creditCards: userCreditCards.map(cc => ({
         name: cc.name,
         limit: cc.limit,
-        balance: 0, 
+        balance: 0, // Placeholder, actual balance calculation would be complex
         dueDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(cc.dueDateDay).padStart(2, '0')}`
       })),
     };
@@ -388,50 +403,89 @@ export interface AddCreditCardResult {
   error?: string;
 }
 
-// TODO: Implement PostgreSQL logic for Credit Cards
 export const addCreditCard = async (creditCardData: NewCreditCardData): Promise<AddCreditCardResult> => {
-  // if (DATABASE_MODE === 'postgres' && pool) { /* ... PG logic ... */ }
-  try {
-    let db = await readDB();
-    db = await ensureDefaultUserStructure(db);
-
-    const newCreditCard: CreditCard = {
-      id: randomUUID(),
-      userId: DEFAULT_USER_ID,
-      ...creditCardData,
-      limit: Number(creditCardData.limit), 
-      dueDateDay: Number(creditCardData.dueDateDay),
-      closingDateDay: Number(creditCardData.closingDateDay),
-      createdAt: Date.now(),
-    };
-
-    if (!db.users[DEFAULT_USER_ID].creditCards) {
-      db.users[DEFAULT_USER_ID].creditCards = [];
+  await ensureDefaultUserInPostgres();
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const newCreditCardId = randomUUID();
+      const res = await pool.query(
+        'INSERT INTO credit_cards (id, user_id, name, limit_amount, due_date_day, closing_date_day, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+        [
+          newCreditCardId,
+          DEFAULT_USER_ID,
+          creditCardData.name,
+          creditCardData.limit,
+          creditCardData.dueDateDay,
+          creditCardData.closingDateDay,
+          new Date(),
+        ]
+      );
+      console.log(`Credit Card ${res.rows[0].id} added for default user in PostgreSQL.`);
+      return { success: true, creditCardId: res.rows[0].id };
+    } catch (error: any) {
+      console.error("Error adding credit card to PostgreSQL:", error.message, error);
+      return { success: false, error: "An error occurred while adding the credit card to PostgreSQL." };
     }
-    db.users[DEFAULT_USER_ID].creditCards!.push(newCreditCard);
-    await writeDB(db);
+  } else {
+    try {
+      let db = await readDB();
+      db = await ensureDefaultUserStructure(db);
 
-    console.log(`Credit Card ${newCreditCard.id} added for default user in local DB.`);
-    return { success: true, creditCardId: newCreditCard.id };
-  } catch (error: any) {
-    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
-    console.error("Error adding credit card to local DB:", errorMessage, error);
-    return { success: false, error: "An error occurred while adding the credit card." };
+      const newCreditCard: CreditCard = {
+        id: randomUUID(),
+        userId: DEFAULT_USER_ID,
+        ...creditCardData,
+        limit: Number(creditCardData.limit), 
+        dueDateDay: Number(creditCardData.dueDateDay),
+        closingDateDay: Number(creditCardData.closingDateDay),
+        createdAt: Date.now(),
+      };
+
+      if (!db.users[DEFAULT_USER_ID].creditCards) {
+        db.users[DEFAULT_USER_ID].creditCards = [];
+      }
+      db.users[DEFAULT_USER_ID].creditCards!.push(newCreditCard);
+      await writeDB(db);
+
+      console.log(`Credit Card ${newCreditCard.id} added for default user in local DB.`);
+      return { success: true, creditCardId: newCreditCard.id };
+    } catch (error: any) {
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+      console.error("Error adding credit card to local DB:", errorMessage, error);
+      return { success: false, error: "An error occurred while adding the credit card." };
+    }
   }
 };
 
-// TODO: Implement PostgreSQL logic for Credit Cards
 export async function getCreditCardsForUser(): Promise<CreditCard[]> {
-  // if (DATABASE_MODE === 'postgres' && pool) { /* ... PG logic ... */ }
-  try {
-    let db = await readDB();
-    db = await ensureDefaultUserStructure(db);
-    const creditCards = db.users[DEFAULT_USER_ID]?.creditCards || [];
-    return creditCards.sort((a, b) => b.createdAt - a.createdAt);
-  } catch (error: any) {
-    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
-    console.error(`Error fetching credit cards for default user from local DB:`, errorMessage, error);
-    return [];
+  await ensureDefaultUserInPostgres();
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const res: QueryResult<CreditCard> = await pool.query(
+        'SELECT id, user_id as "userId", name, limit_amount as "limit", due_date_day as "dueDateDay", closing_date_day as "closingDateDay", created_at as "createdAt" FROM credit_cards WHERE user_id = $1 ORDER BY created_at DESC',
+        [DEFAULT_USER_ID]
+      );
+      return res.rows.map(cc => ({
+        ...cc,
+        limit: Number(cc.limit),
+        dueDateDay: Number(cc.dueDateDay),
+        closingDateDay: Number(cc.closingDateDay),
+      }));
+    } catch (error: any) {
+      console.error(`Error fetching credit cards for default user from PostgreSQL:`, error.message, error);
+      return [];
+    }
+  } else {
+    try {
+      let db = await readDB();
+      db = await ensureDefaultUserStructure(db);
+      const creditCards = db.users[DEFAULT_USER_ID]?.creditCards || [];
+      return creditCards.sort((a, b) => b.createdAt - a.createdAt);
+    } catch (error: any) {
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+      console.error(`Error fetching credit cards for default user from local DB:`, errorMessage, error);
+      return [];
+    }
   }
 }
 
@@ -442,83 +496,137 @@ export interface AddCreditCardPurchaseResult {
   error?: string;
 }
 
-// TODO: Implement PostgreSQL logic for Credit Card Purchases
 export const addCreditCardPurchase = async (purchaseData: NewCreditCardPurchaseData): Promise<AddCreditCardPurchaseResult> => {
-  // if (DATABASE_MODE === 'postgres' && pool) { /* ... PG logic ... */ }
-  try {
-    let db = await readDB();
-    db = await ensureDefaultUserStructure(db);
-
-    const newPurchase: CreditCardPurchase = {
-      id: randomUUID(),
-      userId: DEFAULT_USER_ID,
-      ...purchaseData,
-      totalAmount: Number(purchaseData.totalAmount),
-      installments: Number(purchaseData.installments),
-      createdAt: Date.now(),
-    };
-
-    if (!db.users[DEFAULT_USER_ID].creditCardPurchases) {
-      db.users[DEFAULT_USER_ID].creditCardPurchases = [];
+  await ensureDefaultUserInPostgres();
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const newPurchaseId = randomUUID();
+      const res = await pool.query(
+        'INSERT INTO credit_card_purchases (id, user_id, card_id, purchase_date, description, category, total_amount, installments, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
+        [
+          newPurchaseId,
+          DEFAULT_USER_ID,
+          purchaseData.cardId,
+          purchaseData.date, // Assuming purchaseData.date is already 'YYYY-MM-DD'
+          purchaseData.description,
+          purchaseData.category,
+          purchaseData.totalAmount,
+          purchaseData.installments,
+          new Date(),
+        ]
+      );
+      console.log(`Credit Card Purchase ${res.rows[0].id} added for default user in PostgreSQL.`);
+      return { success: true, purchaseId: res.rows[0].id };
+    } catch (error: any) {
+      console.error("Error adding credit card purchase to PostgreSQL:", error.message, error);
+      return { success: false, error: "An error occurred while adding the credit card purchase to PostgreSQL." };
     }
-    db.users[DEFAULT_USER_ID].creditCardPurchases!.push(newPurchase);
-    await writeDB(db);
+  } else {
+    try {
+      let db = await readDB();
+      db = await ensureDefaultUserStructure(db);
 
-    console.log(`Credit Card Purchase ${newPurchase.id} added for default user.`);
-    return { success: true, purchaseId: newPurchase.id };
-  } catch (error: any) {
-    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
-    console.error("Error adding credit card purchase to local DB:", errorMessage, error);
-    return { success: false, error: "An error occurred while adding the credit card purchase." };
+      const newPurchase: CreditCardPurchase = {
+        id: randomUUID(),
+        userId: DEFAULT_USER_ID,
+        ...purchaseData,
+        totalAmount: Number(purchaseData.totalAmount),
+        installments: Number(purchaseData.installments),
+        createdAt: Date.now(),
+      };
+
+      if (!db.users[DEFAULT_USER_ID].creditCardPurchases) {
+        db.users[DEFAULT_USER_ID].creditCardPurchases = [];
+      }
+      db.users[DEFAULT_USER_ID].creditCardPurchases!.push(newPurchase);
+      await writeDB(db);
+
+      console.log(`Credit Card Purchase ${newPurchase.id} added for default user.`);
+      return { success: true, purchaseId: newPurchase.id };
+    } catch (error: any) {
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+      console.error("Error adding credit card purchase to local DB:", errorMessage, error);
+      return { success: false, error: "An error occurred while adding the credit card purchase." };
+    }
   }
 };
 
-// TODO: Implement PostgreSQL logic for Credit Card Purchases
 export async function getCreditCardPurchasesForUser(): Promise<CreditCardPurchase[]> {
-  // if (DATABASE_MODE === 'postgres' && pool) { /* ... PG logic ... */ }
-  try {
-    let db = await readDB();
-    db = await ensureDefaultUserStructure(db);
-    const purchases = db.users[DEFAULT_USER_ID]?.creditCardPurchases || [];
-    return purchases.sort((a, b) => {
-      const dateComparison = new Date(b.date).getTime() - new Date(a.date).getTime();
-      if (dateComparison !== 0) {
-        return dateComparison;
-      }
-      return b.createdAt - a.createdAt;
-    });
-  } catch (error: any) {
-    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
-    console.error(`Error fetching credit card purchases for default user from local DB:`, errorMessage, error);
-    return [];
+  await ensureDefaultUserInPostgres();
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const res: QueryResult<CreditCardPurchase> = await pool.query(
+        'SELECT id, user_id as "userId", card_id as "cardId", purchase_date as "date", description, category, total_amount as "totalAmount", installments, created_at as "createdAt" FROM credit_card_purchases WHERE user_id = $1 ORDER BY purchase_date DESC, created_at DESC',
+        [DEFAULT_USER_ID]
+      );
+      return res.rows.map(p => ({
+        ...p,
+        date: formatDateFns(new Date(p.date), 'yyyy-MM-dd'), // Ensure date format
+        totalAmount: Number(p.totalAmount),
+        installments: Number(p.installments),
+      }));
+    } catch (error: any) {
+      console.error(`Error fetching credit card purchases for default user from PostgreSQL:`, error.message, error);
+      return [];
+    }
+  } else {
+    try {
+      let db = await readDB();
+      db = await ensureDefaultUserStructure(db);
+      const purchases = db.users[DEFAULT_USER_ID]?.creditCardPurchases || [];
+      return purchases.sort((a, b) => {
+        const dateComparison = new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (dateComparison !== 0) {
+          return dateComparison;
+        }
+        return b.createdAt - a.createdAt;
+      });
+    } catch (error: any) {
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+      console.error(`Error fetching credit card purchases for default user from local DB:`, errorMessage, error);
+      return [];
+    }
   }
 }
 
-// TODO: Implement PostgreSQL logic for Credit Card Purchases
 export const deleteCreditCardPurchase = async (purchaseId: string): Promise<DeleteResult> => {
-  // if (DATABASE_MODE === 'postgres' && pool) { /* ... PG logic ... */ }
-  try {
-    let db = await readDB();
-    db = await ensureDefaultUserStructure(db);
-
-    const purchasesArray = db.users[DEFAULT_USER_ID].creditCardPurchases || [];
-    const initialLength = purchasesArray.length;
-    db.users[DEFAULT_USER_ID].creditCardPurchases = purchasesArray.filter(
-      (p) => p.id !== purchaseId
-    );
-
-    if (db.users[DEFAULT_USER_ID].creditCardPurchases!.length === initialLength) {
-      console.log(`Credit Card Purchase ${purchaseId} not found for default user.`);
-      return { success: false, error: "Credit card purchase not found." };
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const res = await pool.query('DELETE FROM credit_card_purchases WHERE id = $1 AND user_id = $2', [purchaseId, DEFAULT_USER_ID]);
+      if (res.rowCount === 0) {
+        console.log(`Credit Card Purchase ${purchaseId} not found for default user in PostgreSQL.`);
+        return { success: false, error: "Credit card purchase not found." };
+      }
+      console.log(`Credit Card Purchase ${purchaseId} deleted for default user in PostgreSQL.`);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error deleting credit card purchase from PostgreSQL:", error.message, error);
+      return { success: false, error: "An error occurred while deleting the credit card purchase from PostgreSQL." };
     }
+  } else {
+    try {
+      let db = await readDB();
+      db = await ensureDefaultUserStructure(db);
 
-    await writeDB(db);
-    console.log(`Credit Card Purchase ${purchaseId} deleted for default user in local DB.`);
-    return { success: true };
-  } catch (error: any) {
-    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
-    console.error("Error deleting credit card purchase from local DB:", errorMessage, error);
-    return { success: false, error: "An error occurred while deleting the credit card purchase." };
+      const purchasesArray = db.users[DEFAULT_USER_ID].creditCardPurchases || [];
+      const initialLength = purchasesArray.length;
+      db.users[DEFAULT_USER_ID].creditCardPurchases = purchasesArray.filter(
+        (p) => p.id !== purchaseId
+      );
+
+      if (db.users[DEFAULT_USER_ID].creditCardPurchases!.length === initialLength) {
+        console.log(`Credit Card Purchase ${purchaseId} not found for default user.`);
+        return { success: false, error: "Credit card purchase not found." };
+      }
+
+      await writeDB(db);
+      console.log(`Credit Card Purchase ${purchaseId} deleted for default user in local DB.`);
+      return { success: true };
+    } catch (error: any) {
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+      console.error("Error deleting credit card purchase from local DB:", errorMessage, error);
+      return { success: false, error: "An error occurred while deleting the credit card purchase." };
+    }
   }
 };
 
@@ -559,7 +667,6 @@ export const addLoan = async (loanData: NewLoanData): Promise<AddLoanResult> => 
       return { success: false, error: "An error occurred while adding the loan to PostgreSQL." };
     }
   } else {
-    // Local DB logic
     try {
       let db = await readDB();
       db = await ensureDefaultUserStructure(db);
@@ -612,7 +719,6 @@ export async function getLoansForUser(): Promise<Loan[]> {
       return [];
     }
   } else {
-    // Local DB logic
     try {
       let db = await readDB();
       db = await ensureDefaultUserStructure(db);
@@ -647,7 +753,6 @@ export const deleteLoan = async (loanId: string): Promise<DeleteResult> => {
       return { success: false, error: "An error occurred while deleting the loan from PostgreSQL." };
     }
   } else {
-    // Local DB logic
     try {
       let db = await readDB();
       db = await ensureDefaultUserStructure(db);
@@ -673,6 +778,5 @@ export const deleteLoan = async (loanId: string): Promise<DeleteResult> => {
     }
   }
 };
-
-
+    
     
