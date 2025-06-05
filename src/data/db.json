@@ -41,6 +41,28 @@
           "dueDateDay": 3,
           "closingDateDay": 26,
           "createdAt": 1749089373252
+        },
+        {
+          "id": "37ae08e3-d2bf-430e-853f-3cbc51ace49d",
+          "userId": "default_user",
+          "name": "Bradesco",
+          "limit": 16000,
+          "dueDateDay": 1,
+          "closingDateDay": 23,
+          "createdAt": 1749090056961
+        }
+      ],
+      "creditCardPurchases": [
+        {
+          "id": "fd881ee4-e50c-40d5-8666-013fb654ed1b",
+          "userId": "default_user",
+          "cardId": "63ba4d48-4fb7-4132-977d-a4c285369259",
+          "date": "2025-05-14",
+          "description": "Cobasi",
+          "category": "Gatos",
+          "totalAmount": 340,
+          "installments": 4,
+          "createdAt": 1749090099953
         }
       ]
     }

@@ -22,16 +22,16 @@ import { addCreditCard, type NewCreditCardData, type AddCreditCardResult } from 
 const creditCardFormSchema = z.object({
   name: z.string().min(1, { message: 'O nome do cartão é obrigatório.' }).max(50, {message: 'O nome do cartão deve ter no máximo 50 caracteres.'}),
   limit: z.coerce
-    .number({ invalid_type_error: 'O limite deve ser um número.' })
+    .number({ invalid_type_error: 'O limite deve ser um número.', required_error: 'O limite é obrigatório.' })
     .positive({ message: 'O limite deve ser positivo.' })
     .min(1, { message: 'O limite deve ser maior que zero.' }),
   dueDateDay: z.coerce
-    .number({ invalid_type_error: 'O dia de vencimento deve ser um número.' })
+    .number({ invalid_type_error: 'O dia de vencimento deve ser um número.', required_error: 'O dia de vencimento é obrigatório.' })
     .int({ message: 'O dia de vencimento deve ser um número inteiro.' })
     .min(1, { message: 'O dia de vencimento deve ser entre 1 e 31.' })
     .max(31, { message: 'O dia de vencimento deve ser entre 1 e 31.' }),
   closingDateDay: z.coerce
-    .number({ invalid_type_error: 'O dia de fechamento deve ser um número.' })
+    .number({ invalid_type_error: 'O dia de fechamento deve ser um número.', required_error: 'O dia de fechamento é obrigatório.' })
     .int({ message: 'O dia de fechamento deve ser um número inteiro.' })
     .min(1, { message: 'O dia de fechamento deve ser entre 1 e 31.' })
     .max(31, { message: 'O dia de fechamento deve ser entre 1 e 31.' }),
@@ -52,20 +52,21 @@ export function CreditCardForm({ onSuccess, setOpen }: CreditCardFormProps) {
     resolver: zodResolver(creditCardFormSchema),
     defaultValues: {
       name: '',
-      limit: undefined, // Use undefined for coerce.number to work well with placeholder
-      dueDateDay: undefined,
-      closingDateDay: undefined,
+      // Initialize number fields with '' to make them controlled from the start.
+      // Zod's coerce.number will handle conversion.
+      // The 'as unknown as number' is a TypeScript workaround because CreditCardFormValues expects number here.
+      limit: '' as unknown as number,
+      dueDateDay: '' as unknown as number,
+      closingDateDay: '' as unknown as number,
     },
   });
 
   const onSubmit = async (values: CreditCardFormValues) => {
     setIsSubmitting(true);
 
+    // Values are already numbers due to Zod coercion
     const creditCardData: NewCreditCardData = {
       ...values,
-      limit: Number(values.limit),
-      dueDateDay: Number(values.dueDateDay),
-      closingDateDay: Number(values.closingDateDay),
     };
 
     try {

@@ -35,14 +35,14 @@ const purchaseSchema = z.object({
   description: z.string().min(1, { message: 'A descrição é obrigatória.' }).max(100, { message: 'Máximo de 100 caracteres.'}),
   category: z.string().min(1, { message: 'A categoria é obrigatória.' }).max(50, { message: 'Máximo de 50 caracteres.'}),
   totalAmount: z.coerce
-    .number({ invalid_type_error: 'O valor total deve ser um número.' })
+    .number({ invalid_type_error: 'O valor total deve ser um número.', required_error: 'O valor total é obrigatório.' })
     .positive({ message: 'O valor total deve ser positivo.' })
     .min(0.01, { message: 'O valor deve ser maior que zero.' }),
   installments: z.coerce
-    .number({ invalid_type_error: 'O número de parcelas deve ser um número.' })
+    .number({ invalid_type_error: 'O número de parcelas deve ser um número.', required_error: 'O número de parcelas é obrigatório.' })
     .int({ message: 'O número de parcelas deve ser inteiro.' })
     .min(1, { message: 'Mínimo de 1 parcela.' })
-    .max(24, { message: 'Máximo de 24 parcelas.' }), // Limite razoável
+    .max(24, { message: 'Máximo de 24 parcelas.' }),
 });
 
 type PurchaseFormValues = z.infer<typeof purchaseSchema>;
@@ -68,8 +68,10 @@ export function CreditCardTransactionForm({
       date: new Date(),
       description: '',
       category: '',
-      totalAmount: undefined,
-      installments: 1,
+      // Initialize number fields with '' to make them controlled from the start.
+      // Zod's coerce.number will handle conversion.
+      totalAmount: '' as unknown as number,
+      installments: 1, // Default to 1, already a number, so it's fine.
     },
   });
 
@@ -77,8 +79,8 @@ export function CreditCardTransactionForm({
     setIsSubmitting(true);
 
     const purchaseData: NewCreditCardPurchaseData = {
-      ...values,
-      date: format(values.date, 'yyyy-MM-dd'), // Formatar data para string
+      ...values, // Values are already numbers for totalAmount and installments due to Zod
+      date: format(values.date, 'yyyy-MM-dd'), 
     };
 
     try {
