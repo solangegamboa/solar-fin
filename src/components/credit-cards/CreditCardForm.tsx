@@ -46,7 +46,7 @@ interface CreditCardFormProps {
 }
 
 export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormProps) {
-  const { toast } } = useToast();
+  const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<CreditCardFormValues>({

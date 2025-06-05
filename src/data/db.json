@@ -1,4 +1,3 @@
-
 {
   "users": {
     "2a141a58-983f-4d63-83d5-605943ff7596": {
@@ -71,6 +70,20 @@
           "createdAt": 1749090099953
         }
       ]
+    },
+    "06f570fe-5f3b-42de-929c-ff426be76d93": {
+      "profile": {
+        "id": "06f570fe-5f3b-42de-929c-ff426be76d93",
+        "email": "solange.gamboa@gmail.com",
+        "displayName": "Solange",
+        "createdAt": 1749158998992,
+        "lastLoginAt": 1749158998992
+      },
+      "hashedPassword": "$2a$10$ier/9cAQKer3To/JsvRq2uc9wq12HkBP.BgQZrFbYQwo7lFsUbyMG",
+      "transactions": [],
+      "loans": [],
+      "creditCards": [],
+      "creditCardPurchases": []
     }
   }
 }

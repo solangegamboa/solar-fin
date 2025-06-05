@@ -1,11 +1,11 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
-import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Loader2, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock } from "lucide-react";
+import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Loader2, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock, MoreHorizontal } from "lucide-react";
 import { getTransactionsForUser, getCreditCardsForUser, getCreditCardPurchasesForUser, getLoansForUser } from '@/lib/databaseService';
 import type { Transaction, CreditCard, CreditCardPurchase, Loan } from '@/types';
 import { formatCurrency } from "@/lib/utils";
@@ -19,14 +19,18 @@ import {
   getDate,
   addMonths,
   subMonths,
-  format,
+  format as formatDateFns, // Renamed to avoid conflict
   isSameMonth,
   isSameYear,
+  isSameDay,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { useAuth } from '@/contexts/AuthContext';
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DayPicker, type DayProps } from "react-day-picker"; // Import DayPicker and DayProps
 
 interface DashboardSummary {
   balance: number; 
@@ -38,6 +42,12 @@ interface DashboardSummary {
 interface CategoryExpense {
   category: string;
   total: number;
+}
+
+interface DailyTransactionSummary {
+  income: number;
+  expense: number;
+  net: number;
 }
 
 const chartConfig = {
@@ -54,6 +64,103 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [expensesByCategory, setExpensesByCategory] = useState<CategoryExpense[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+
+
+  const dailyTransactionSummaries = useMemo(() => {
+    const summaries: Map<string, DailyTransactionSummary> = new Map();
+    if (!allTransactions.length) return summaries;
+
+    allTransactions.forEach(tx => {
+      const dateKey = formatDateFns(parseISO(tx.date), 'yyyy-MM-dd');
+      const daySummary = summaries.get(dateKey) || { income: 0, expense: 0, net: 0 };
+      if (tx.type === 'income') {
+        daySummary.income += tx.amount;
+      } else {
+        daySummary.expense += tx.amount;
+      }
+      daySummary.net = daySummary.income - daySummary.expense;
+      summaries.set(dateKey, daySummary);
+    });
+    return summaries;
+  }, [allTransactions]);
+
+  const calendarModifiers = useMemo(() => {
+    const daysWithNetIncome: Date[] = [];
+    const daysWithNetExpense: Date[] = [];
+    const daysWithNetZeroAndTransactions: Date[] = [];
+
+    dailyTransactionSummaries.forEach((summary, dateKey) => {
+      const date = parseISO(dateKey);
+      if (summary.net > 0) {
+        daysWithNetIncome.push(date);
+      } else if (summary.net < 0) {
+        daysWithNetExpense.push(date);
+      } else if (summary.income > 0 || summary.expense > 0) { // Net zero but had transactions
+        daysWithNetZeroAndTransactions.push(date);
+      }
+    });
+
+    return {
+      netIncome: daysWithNetIncome,
+      netExpense: daysWithNetExpense,
+      netZeroTransactions: daysWithNetZeroAndTransactions,
+    };
+  }, [dailyTransactionSummaries]);
+
+  const calendarModifiersStyles = {
+    netIncome: { 
+      backgroundColor: 'hsla(var(--positive)/ 0.2)', 
+      color: 'hsl(var(--positive-foreground))',
+      fontWeight: 'bold',
+    },
+    netExpense: { 
+      backgroundColor: 'hsla(var(--negative)/ 0.2)',
+      color: 'hsl(var(--negative-foreground))',
+      fontWeight: 'bold',
+     },
+    netZeroTransactions: { 
+      backgroundColor: 'hsla(var(--muted)/ 0.5)',
+      fontWeight: 'bold',
+    },
+  };
+
+  function CustomDay(props: DayProps) {
+    const dayKey = formatDateFns(props.date, 'yyyy-MM-dd');
+    const daySummary = dailyTransactionSummaries.get(dayKey);
+
+    if (!daySummary || !isSameMonth(props.date, props.displayMonth) ) {
+      return <DayPicker.Day {...props} />;
+    }
+    
+    let indicatorColorClass = "";
+    if (daySummary.net > 0) indicatorColorClass = "bg-positive";
+    else if (daySummary.net < 0) indicatorColorClass = "bg-negative";
+    else if (daySummary.income > 0 || daySummary.expense > 0) indicatorColorClass = "bg-muted-foreground";
+
+
+    return (
+      <Popover>
+        <PopoverTrigger asChild disabled={!daySummary}>
+          <div className="relative">
+            <DayPicker.Day {...props} className="cursor-pointer" />
+             {indicatorColorClass && (
+                <span className={`absolute bottom-1 left-1/2 transform -translate-x-1/2 h-1.5 w-1.5 rounded-full ${indicatorColorClass}`}></span>
+              )}
+          </div>
+        </PopoverTrigger>
+        {daySummary && (
+          <PopoverContent className="w-auto text-sm p-3 space-y-1 shadow-lg rounded-md border bg-popover text-popover-foreground">
+            <p className="font-semibold text-center border-b pb-1 mb-1">{formatDateFns(props.date, 'PPP', { locale: ptBR })}</p>
+            {daySummary.income > 0 && <p className="flex justify-between items-center"><TrendingUp className="h-4 w-4 mr-1 text-positive" /> Receitas: <span className="font-medium text-positive">{formatCurrency(daySummary.income)}</span></p>}
+            {daySummary.expense > 0 && <p className="flex justify-between items-center"><TrendingDown className="h-4 w-4 mr-1 text-negative" /> Despesas: <span className="font-medium text-negative">{formatCurrency(daySummary.expense)}</span></p>}
+            <p className="flex justify-between items-center pt-1 border-t mt-1"><DollarSign className="h-4 w-4 mr-1 text-primary"/> Saldo do Dia: <span className={`font-bold ${daySummary.net > 0 ? 'text-positive' : daySummary.net < 0 ? 'text-negative' : 'text-foreground'}`}>{formatCurrency(daySummary.net)}</span></p>
+          </PopoverContent>
+        )}
+      </Popover>
+    );
+  }
+
 
   const calculateInvoiceTotalForCardAndMonth = useCallback(
     (
@@ -95,7 +202,7 @@ export default function DashboardPage() {
 
   const fetchDashboardData = useCallback(async () => {
     if (!user) {
-      setIsLoading(false); // Stop loading if no user
+      setIsLoading(false); 
       return;
     }
     setIsLoading(true);
@@ -107,6 +214,7 @@ export default function DashboardPage() {
         getCreditCardPurchasesForUser(user.id),
         getLoansForUser(user.id),
       ]);
+      setAllTransactions(transactions); // Store all transactions for calendar
 
       let lifetimeBalance = 0;
       transactions.forEach(tx => {
@@ -193,7 +301,6 @@ export default function DashboardPage() {
     if (user && !authLoading) {
       fetchDashboardData();
     } else if (!authLoading && !user) {
-      // Handle case where user is definitively not logged in after auth check
       setIsLoading(false);
       setError("Usuário não autenticado.");
     }
@@ -245,7 +352,7 @@ export default function DashboardPage() {
     );
   }
 
-  const selectedMonthName = format(selectedDate, 'MMMM', { locale: ptBR });
+  const selectedMonthName = formatDateFns(selectedDate, 'MMMM', { locale: ptBR });
   const selectedMonthNameCapitalized = selectedMonthName.charAt(0).toUpperCase() + selectedMonthName.slice(1);
 
 
@@ -271,7 +378,7 @@ export default function DashboardPage() {
                 <ChevronLeft className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Anterior</span>
             </Button>
             <h2 className="text-lg sm:text-xl font-semibold text-center whitespace-nowrap tabular-nums">
-                {format(selectedDate, 'MMMM/yyyy', { locale: ptBR })}
+                {formatDateFns(selectedDate, 'MMMM/yyyy', { locale: ptBR })}
             </h2>
             <Button onClick={handleNextMonth} variant="outline" size="sm">
                 <span className="hidden sm:inline">Próximo</span> <ChevronRight className="h-4 w-4 sm:ml-1" />
@@ -366,13 +473,42 @@ export default function DashboardPage() {
         </Card>
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle className="font-headline">Próximas Contas (Mês Selecionado)</CardTitle>
-            <CardDescription>Fique de olho nos seus próximos pagamentos para {selectedMonthName.toLowerCase()}.</CardDescription>
+            <CardTitle className="font-headline">Calendário Financeiro ({selectedMonthNameCapitalized})</CardTitle>
+            <CardDescription>Visão geral das suas transações no mês. Clique em um dia para ver detalhes.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="h-[300px] flex items-center justify-center bg-muted/50 rounded-md">
-              <p className="text-muted-foreground">Lista de Próximas Contas em breve</p>
-            </div>
+          <CardContent className="flex justify-center">
+            {allTransactions ? (
+               <Calendar
+                mode="single"
+                selected={selectedDate} // Can be used to highlight, but we use onDayClick for interaction
+                onSelect={(day) => {
+                  if (day) {
+                    // Check if the clicked day is in a different month than current selectedDate
+                    if (!isSameMonth(day, selectedDate)) {
+                      setSelectedDate(day); // This will trigger re-fetch and re-render for new month
+                    }
+                    // Popover is handled by CustomDay component
+                  }
+                }}
+                month={selectedDate}
+                onMonthChange={setSelectedDate} // Sync calendar month with dashboard month
+                locale={ptBR}
+                modifiers={calendarModifiers}
+                modifiersStyles={calendarModifiersStyles}
+                components={{ Day: CustomDay }}
+                className="rounded-md border p-0 sm:p-2"
+                classNames={{
+                    caption_label: "text-lg font-medium",
+                    head_cell: "w-10 sm:w-12",
+                    day: "h-10 w-10 sm:h-12 sm:w-12",
+                    day_selected: "bg-primary text-primary-foreground hover:bg-primary focus:bg-primary",
+                }}
+              />
+            ) : (
+               <div className="h-[300px] flex items-center justify-center bg-muted/50 rounded-md">
+                 <p className="text-muted-foreground">Carregando transações para o calendário...</p>
+               </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -380,3 +516,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
