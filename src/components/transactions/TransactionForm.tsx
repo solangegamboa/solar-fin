@@ -26,12 +26,15 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Checkbox } from '@/components/ui/checkbox';
 import { addTransaction, type NewTransactionData, type AddTransactionResult, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
 import { useToast } from '@/hooks/use-toast';
-import { Sun } from 'lucide-react';
+import { Sun, Camera, Paperclip, ScanLine, Trash2, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { UserCategory } from '@/types';
 import { Combobox } from '@/components/ui/combobox';
 import { useAuth } from '@/contexts/AuthContext';
+import { extractTransactionDetailsFromImage } from '@/ai/flows/extract-transaction-details-flow';
+import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 
 const transactionFormSchema = z.object({
@@ -48,6 +51,7 @@ const transactionFormSchema = z.object({
   }),
   description: z.string().max(200, { message: 'A descrição deve ter no máximo 200 caracteres.'}).optional(),
   isRecurring: z.boolean().optional(),
+  receiptImageUri: z.string().nullable().optional(),
 });
 
 type TransactionFormValues = z.infer<typeof transactionFormSchema>;
@@ -65,6 +69,16 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
   const [categories, setCategories] = useState<UserCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
 
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [isCameraMode, setIsCameraMode] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+
   const fetchCategories = useCallback(async () => {
     if (!userId) return;
     setIsLoadingCategories(true);
@@ -81,7 +95,107 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
 
   useEffect(() => {
     fetchCategories();
+    // Cleanup camera stream on unmount
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
   }, [fetchCategories]);
+  
+  const startCamera = async () => {
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      streamRef.current = stream;
+      setHasCameraPermission(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setIsCameraMode(true);
+      setImagePreviewUrl(null); // Clear any existing uploaded image
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      setHasCameraPermission(false);
+      toast({
+        variant: 'destructive',
+        title: 'Câmera Não Acessível',
+        description: 'Por favor, habilite a permissão da câmera nas configurações do seu navegador.',
+      });
+      setIsCameraMode(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsCameraMode(false);
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    stopCamera();
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreviewUrl(reader.result as string);
+        form.setValue('receiptImageUri', reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCaptureFromCamera = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const dataUri = canvas.toDataURL('image/png');
+        setImagePreviewUrl(dataUri);
+        form.setValue('receiptImageUri', dataUri);
+      }
+      stopCamera();
+    }
+  };
+  
+  const handleClearImage = () => {
+    setImagePreviewUrl(null);
+    form.setValue('receiptImageUri', null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""; // Reset file input
+    }
+    stopCamera();
+  };
+
+  const handleExtractAmount = async () => {
+    if (!imagePreviewUrl) {
+      toast({ variant: 'destructive', title: 'Nenhuma Imagem', description: 'Capture ou carregue uma imagem primeiro.' });
+      return;
+    }
+    setIsProcessingImage(true);
+    try {
+      const result = await extractTransactionDetailsFromImage({ imageDataUri: imagePreviewUrl });
+      if (result.extractedAmount !== null && typeof result.extractedAmount === 'number') {
+        form.setValue('amount', result.extractedAmount);
+        toast({ title: 'Valor Extraído!', description: `Valor R$ ${result.extractedAmount.toFixed(2)} preenchido.` });
+      } else {
+        toast({ variant: 'destructive', title: 'Valor Não Encontrado', description: 'Não foi possível extrair um valor da imagem.' });
+      }
+    } catch (e: any) {
+      console.error('Erro ao extrair valor:', e);
+      toast({ variant: 'destructive', title: 'Erro na Extração', description: 'Ocorreu um erro ao processar a imagem.' });
+    } finally {
+      setIsProcessingImage(false);
+    }
+  };
+
 
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema),
@@ -92,6 +206,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
       date: new Date(),
       description: '',
       isRecurring: false,
+      receiptImageUri: null,
     },
   });
 
@@ -102,7 +217,6 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
     }
     const result = await addCategoryForUser(userId, categoryName);
     if (result.success && result.category) {
-      // Add to local state to update Combobox immediately
       setCategories(prev => [...prev, result.category!].sort((a, b) => a.name.localeCompare(b.name)));
       return result.category;
     } else {
@@ -119,6 +233,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
       date: format(values.date, 'yyyy-MM-dd'),
       amount: Number(values.amount),
       isRecurring: values.isRecurring || false,
+      receiptImageUri: imagePreviewUrl, // Send the image URI
     };
 
     try {
@@ -135,8 +250,10 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
             category: '', 
             date: new Date(), 
             description: '', 
-            isRecurring: false 
+            isRecurring: false,
+            receiptImageUri: null,
         });
+        handleClearImage(); // Clear image after successful submission
         if (onSuccess) onSuccess();
         setOpen(false);
       } else {
@@ -162,14 +279,14 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
           name="type"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Tipo</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting || isProcessingImage}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o tipo da transação" />
@@ -185,6 +302,61 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
           )}
         />
 
+        <Separator className="my-4" />
+        <FormLabel>Anexar Comprovante (Opcional)</FormLabel>
+        <div className="space-y-3 p-3 border rounded-md">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={startCamera} disabled={isSubmitting || isProcessingImage || isCameraMode}>
+              <Camera className="mr-2 h-4 w-4" /> Abrir Câmera
+            </Button>
+            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isProcessingImage || isCameraMode}>
+              <Paperclip className="mr-2 h-4 w-4" /> Carregar Arquivo
+            </Button>
+            <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} />
+          </div>
+
+          {isCameraMode && (
+            <div className="space-y-2">
+              <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
+              <Button type="button" onClick={handleCaptureFromCamera} className="w-full" disabled={!hasCameraPermission}>
+                <Camera className="mr-2 h-4 w-4" /> Capturar Foto
+              </Button>
+            </div>
+          )}
+
+          {hasCameraPermission === false && !isCameraMode && (
+             <Alert variant="destructive" className="mt-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Permissão da Câmera Negada</AlertTitle>
+              <AlertDescription>
+                Para usar a câmera, você precisa conceder permissão nas configurações do seu navegador. Como alternativa, você pode carregar um arquivo.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {imagePreviewUrl && !isCameraMode && (
+            <div className="space-y-2 mt-2">
+              <img src={imagePreviewUrl} alt="Prévia do comprovante" className="w-full max-h-60 object-contain rounded-md border" />
+            </div>
+          )}
+          
+          {(imagePreviewUrl || isCameraMode) && (
+             <div className="flex flex-wrap gap-2 mt-2">
+                {imagePreviewUrl && !isCameraMode && (
+                    <Button type="button" variant="secondary" onClick={handleExtractAmount} disabled={isProcessingImage || isSubmitting} className="flex-grow">
+                        {isProcessingImage ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : <ScanLine className="mr-2 h-4 w-4" />}
+                        Extrair Valor do Comprovante
+                    </Button>
+                )}
+                <Button type="button" variant="destructive" onClick={handleClearImage} disabled={isProcessingImage || isSubmitting} className={imagePreviewUrl && !isCameraMode ? "" : "w-full"}>
+                    <Trash2 className="mr-2 h-4 w-4" /> Limpar Imagem
+                </Button>
+             </div>
+          )}
+        </div>
+        <Separator className="my-4" />
+
+
         <FormField
           control={form.control}
           name="amount"
@@ -192,7 +364,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
             <FormItem>
               <FormLabel>Valor (R$)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="0.00" {...field} step="0.01" disabled={isSubmitting} />
+                <Input type="number" placeholder="0.00" {...field} step="0.01" disabled={isSubmitting || isProcessingImage} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -213,7 +385,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
                     placeholder="Selecione ou crie uma categoria"
                     searchPlaceholder="Buscar ou criar nova..."
                     emptyMessage={isLoadingCategories ? "Carregando categorias..." : "Nenhuma categoria. Digite para criar."}
-                    disabled={isSubmitting || isLoadingCategories || !user}
+                    disabled={isSubmitting || isLoadingCategories || !user || isProcessingImage}
                 />
               <FormMessage />
             </FormItem>
@@ -226,7 +398,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
           render={({ field }) => (
             <FormItem className="flex flex-col">
               <FormLabel>Data</FormLabel>
-                <DatePicker value={field.value} onChange={field.onChange} disabled={isSubmitting} />
+                <DatePicker value={field.value} onChange={field.onChange} disabled={isSubmitting || isProcessingImage} />
               <FormMessage />
             </FormItem>
           )}
@@ -243,7 +415,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
                   placeholder="Adicione uma breve descrição..."
                   className="resize-none"
                   {...field}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isProcessingImage}
                 />
               </FormControl>
               <FormMessage />
@@ -260,7 +432,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
                 <Checkbox
                   checked={field.value}
                   onCheckedChange={field.onChange}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isProcessingImage}
                 />
               </FormControl>
               <div className="space-y-1 leading-none">
@@ -274,14 +446,14 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
 
 
         <div className="flex justify-end space-x-2 pt-2">
-          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
+          <Button type="button" variant="outline" onClick={() => { stopCamera(); setOpen(false); }} disabled={isSubmitting || isProcessingImage}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isSubmitting || isLoadingCategories || !user}>
-            {isSubmitting || isLoadingCategories ? (
+          <Button type="submit" disabled={isSubmitting || isLoadingCategories || !user || isProcessingImage}>
+            {isSubmitting || isLoadingCategories || isProcessingImage ? (
               <>
                 <Sun className="mr-2 h-4 w-4 animate-spin" />
-                {isLoadingCategories ? 'Carregando...' : 'Salvando...'}
+                {isLoadingCategories ? 'Carregando...' : (isProcessingImage ? 'Processando...' : 'Salvando...')}
               </>
             ) : (
               'Salvar Transação'

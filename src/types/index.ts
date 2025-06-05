@@ -81,6 +81,7 @@ export interface NewTransactionData {
   date: string;
   description?: string;
   isRecurring?: boolean;
+  receiptImageUri?: string | null; // Added for new feature
 }
 
 export interface NewCreditCardData {
@@ -119,4 +120,14 @@ export interface AuthApiResponse {
   message?: string;
   user?: UserProfile; // For login/signup/me
   token?: string; // Optionally return token if not only using cookies
+}
+
+// Genkit Flow for extracting transaction details from image
+export interface ExtractTransactionDetailsInput {
+  imageDataUri: string;
+}
+
+export interface ExtractTransactionDetailsOutput {
+  extractedAmount: number | null;
+  // could add more fields here in the future e.g. date, merchant
 }

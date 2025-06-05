@@ -229,12 +229,13 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       const newTransactionId = randomUUID();
+      // For PG, receipt_image_uri might be a TEXT column that can be null.
       const res = await pool.query(
-        'INSERT INTO transactions (id, user_id, type, amount, category, date, description, is_recurring, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
+        'INSERT INTO transactions (id, user_id, type, amount, category, date, description, is_recurring, created_at, receipt_image_uri) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id',
         [
           newTransactionId, userId, transactionData.type, transactionData.amount,
           transactionData.category, transactionData.date, transactionData.description || null,
-          transactionData.isRecurring || false, new Date(),
+          transactionData.isRecurring || false, new Date(), transactionData.receiptImageUri || null,
         ]
       );
       return { success: true, transactionId: res.rows[0].id };
@@ -252,6 +253,7 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
     const newTransaction: Transaction = {
       id: randomUUID(), userId, ...transactionData,
       isRecurring: transactionData.isRecurring || false, createdAt: Date.now(),
+      // receiptImageUri is part of transactionData now
     };
     db.users[userId].transactions.push(newTransaction);
     await writeDB(db);
@@ -265,7 +267,7 @@ export async function getTransactionsForUser(userId: string): Promise<Transactio
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       const res: QueryResult<Transaction> = await pool.query(
-        'SELECT id, user_id as "userId", type, amount, category, date, description, is_recurring as "isRecurring", created_at as "createdAt" FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC',
+        'SELECT id, user_id as "userId", type, amount, category, date, description, is_recurring as "isRecurring", created_at as "createdAt", receipt_image_uri as "receiptImageUri" FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC',
         [userId]
       );
       return res.rows.map(tx => ({
