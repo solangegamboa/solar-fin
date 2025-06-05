@@ -9,21 +9,34 @@ services:
     ports:
       - "9002:3000"
     container_name: solar-fin-app
-    # If you had environment variables to pass, you could use:
-    # environment:
-    #   - NODE_ENV=production
-    # Or an env_file:
-    # env_file:
-    #   - .env.production
-    # For local development where you want live code changes reflected
-    # and data to persist outside the container, you might add volumes.
-    # However, for running the production build from the Dockerfile,
-    # volumes for code are generally not mounted.
-    # If you want db.json to persist across container restarts and rebuilds
-    # during development with docker-compose, you could add:
-    # volumes:
-    #   - ./src/data:/app/src/data
+    env_file:
+      - .env
+    environment:
+      - DATABASE_MODE=postgres
+      - DATABASE_URL=postgresql://solaruser:solarpass@db:5432/solar_fin_db
+      # JWT_SECRET should be defined in your .env file
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: postgres:15
+    container_name: solar-fin-db
+    environment:
+      POSTGRES_USER: solaruser
+      POSTGRES_PASSWORD: solarpass
+      POSTGRES_DB: solar_fin_db
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
     restart: unless-stopped
 
 # To run: docker-compose up --build
 # To stop: docker-compose down
+# Note: The first time you run 'docker-compose up', the init.sql script will execute.
+# If you modify init.sql later, you may need to remove the 'pgdata' volume 
+# (e.g., 'docker-compose down -v' and then 'docker-compose up --build') for the script to re-run.
+# Ensure your .env file contains the JWT_SECRET.
+# Ensure 'sql/init.sql' exists in your project root and contains the correct DDL for your tables.
