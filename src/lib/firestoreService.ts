@@ -1,9 +1,10 @@
 
 'use server';
 
-import { doc, setDoc, serverTimestamp, getDoc, type Timestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, type Timestamp, collection, addDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import type { User as FirebaseUser } from 'firebase/auth';
+import type { TransactionType } from '@/types';
 
 export interface UserDocument {
   uid: string;
@@ -53,5 +54,31 @@ export const upsertUserInFirestore = async (firebaseUser: FirebaseUser): Promise
     console.error("Erro ao salvar/atualizar usuário no Firestore:", error);
     // Considerar relançar o erro ou tratar de forma mais específica se necessário
     // throw error; 
+  }
+};
+
+export interface NewTransactionData {
+  type: TransactionType;
+  amount: number;
+  category: string;
+  date: string; // YYYY-MM-DD
+  description?: string;
+}
+
+export const addTransaction = async (userId: string, transactionData: NewTransactionData): Promise<string> => {
+  if (!userId) {
+    throw new Error("User ID is required to add a transaction.");
+  }
+  try {
+    const docRef = await addDoc(collection(db, 'users', userId, 'transactions'), {
+      ...transactionData,
+      // userId is already part of the path, but can be stored for easier querying if needed
+      // userId: userId, 
+      createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error("Error adding transaction to Firestore:", error);
+    throw new Error("Failed to add transaction.");
   }
 };
