@@ -21,6 +21,7 @@ export interface Transaction {
   description?: string;
   isRecurring?: boolean;
   createdAt: number;
+  receiptImageUri?: string | null; 
 }
 
 export interface Loan {
@@ -130,4 +131,16 @@ export interface ExtractTransactionDetailsInput {
 export interface ExtractTransactionDetailsOutput {
   extractedAmount: number | null;
   // could add more fields here in the future e.g. date, merchant
+}
+
+// Genkit Flow for extracting credit card info from image
+export interface ExtractCardInfoInput {
+  imageDataUri: string;
+}
+
+export interface ExtractCardInfoOutput {
+  issuerName: string | null;      // e.g., "Nubank", "Bradesco"
+  cardNetwork: string | null;     // e.g., "Visa", "Mastercard"
+  cardProductName: string | null; // e.g., "Platinum", "Ultravioleta", "Black"
+  suggestedCardName: string | null; // A combined suggestion
 }

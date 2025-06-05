@@ -15,9 +15,12 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Sun } from 'lucide-react';
-import { useState } from 'react';
+import { Sun, Camera, Paperclip, ScanLine, Trash2, AlertTriangle, CreditCard as CreditCardIconLucide } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { addCreditCard, type NewCreditCardData, type AddCreditCardResult } from '@/lib/databaseService';
+import { extractCardInfoFromImage } from '@/ai/flows/extract-card-info-flow';
+import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const creditCardFormSchema = z.object({
   name: z.string().min(1, { message: 'O nome do cartão é obrigatório.' }).max(50, {message: 'O nome do cartão deve ter no máximo 50 caracteres.'}),
@@ -35,6 +38,7 @@ const creditCardFormSchema = z.object({
     .int({ message: 'O dia de fechamento deve ser um número inteiro.' })
     .min(1, { message: 'O dia de fechamento deve ser entre 1 e 31.' })
     .max(31, { message: 'O dia de fechamento deve ser entre 1 e 31.' }),
+  cardImageUri: z.string().nullable().optional(), // For storing image data if needed, not directly used by AI for all fields
 });
 
 type CreditCardFormValues = z.infer<typeof creditCardFormSchema>;
@@ -42,12 +46,29 @@ type CreditCardFormValues = z.infer<typeof creditCardFormSchema>;
 interface CreditCardFormProps {
   onSuccess?: () => void;
   setOpen: (open: boolean) => void;
-  userId: string; // Added userId prop
+  userId: string;
 }
 
 export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [isCameraMode, setIsCameraMode] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    // Cleanup camera stream on unmount
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   const form = useForm<CreditCardFormValues>({
     resolver: zodResolver(creditCardFormSchema),
@@ -56,18 +77,128 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
       limit: '' as unknown as number,
       dueDateDay: '' as unknown as number,
       closingDateDay: '' as unknown as number,
+      cardImageUri: null,
     },
   });
+  
+  const startCamera = async () => {
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      streamRef.current = stream;
+      setHasCameraPermission(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setIsCameraMode(true);
+      setImagePreviewUrl(null); 
+      form.setValue('cardImageUri', null);
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      setHasCameraPermission(false);
+      toast({
+        variant: 'destructive',
+        title: 'Câmera Não Acessível',
+        description: 'Por favor, habilite a permissão da câmera nas configurações do seu navegador.',
+      });
+      setIsCameraMode(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsCameraMode(false);
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    stopCamera();
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        setImagePreviewUrl(result);
+        form.setValue('cardImageUri', result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCaptureFromCamera = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const dataUri = canvas.toDataURL('image/png');
+        setImagePreviewUrl(dataUri);
+        form.setValue('cardImageUri', dataUri);
+      }
+      stopCamera();
+    }
+  };
+  
+  const handleClearImage = () => {
+    setImagePreviewUrl(null);
+    form.setValue('cardImageUri', null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""; 
+    }
+    stopCamera();
+  };
+
+  const handleExtractCardInfo = async () => {
+    if (!imagePreviewUrl) {
+      toast({ variant: 'destructive', title: 'Nenhuma Imagem', description: 'Capture ou carregue uma imagem do cartão primeiro.' });
+      return;
+    }
+    setIsProcessingImage(true);
+    try {
+      const result = await extractCardInfoFromImage({ imageDataUri: imagePreviewUrl });
+      let infoExtracted = false;
+      if (result.suggestedCardName) {
+        form.setValue('name', result.suggestedCardName);
+        toast({ title: 'Informações Extraídas!', description: `Nome do cartão sugerido: "${result.suggestedCardName}". Verifique e complete os outros campos.` });
+        infoExtracted = true;
+      } else {
+         toast({ title: 'Extração Parcial', description: 'Não foi possível sugerir um nome completo. Verifique as informações abaixo.' });
+      }
+      
+      if (result.issuerName) form.setValue('name', form.getValues('name') || result.issuerName, { shouldValidate: true });
+      // Note: The AI won't reliably get limit, due date, or closing date from a card image.
+      // These will still need manual input.
+
+      if (!infoExtracted && !result.issuerName && !result.cardNetwork && !result.cardProductName) {
+         toast({ variant: 'destructive', title: 'Nenhuma Informação Encontrada', description: 'Não foi possível extrair detalhes do cartão da imagem. Por favor, preencha manualmente.' });
+      }
+
+    } catch (e: any) {
+      console.error('Erro ao extrair informações do cartão:', e);
+      toast({ variant: 'destructive', title: 'Erro na Extração', description: 'Ocorreu um erro ao processar a imagem do cartão.' });
+    } finally {
+      setIsProcessingImage(false);
+    }
+  };
+
 
   const onSubmit = async (values: CreditCardFormValues) => {
     setIsSubmitting(true);
 
     const creditCardData: NewCreditCardData = {
-      ...values,
+      name: values.name,
+      limit: values.limit,
+      dueDateDay: values.dueDateDay,
+      closingDateDay: values.closingDateDay,
     };
 
     try {
-      // Pass userId to addCreditCard
       const result: AddCreditCardResult = await addCreditCard(userId, creditCardData);
 
       if (result.success && result.creditCardId) {
@@ -76,6 +207,7 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
           description: 'Cartão de crédito adicionado com sucesso.',
         });
         form.reset();
+        handleClearImage();
         if (onSuccess) onSuccess();
         setOpen(false);
       } else {
@@ -100,7 +232,62 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        
+        <Separator className="my-4" />
+        <FormLabel>Ler Dados do Cartão via Imagem (Opcional)</FormLabel>
+        <div className="space-y-3 p-3 border rounded-md">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={startCamera} disabled={isSubmitting || isProcessingImage || isCameraMode}>
+              <Camera className="mr-2 h-4 w-4" /> Abrir Câmera
+            </Button>
+            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isProcessingImage || isCameraMode}>
+              <Paperclip className="mr-2 h-4 w-4" /> Carregar Imagem
+            </Button>
+            <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} />
+          </div>
+
+          {isCameraMode && (
+            <div className="space-y-2">
+              <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
+              <Button type="button" onClick={handleCaptureFromCamera} className="w-full" disabled={!hasCameraPermission}>
+                <Camera className="mr-2 h-4 w-4" /> Capturar Foto
+              </Button>
+            </div>
+          )}
+
+          {hasCameraPermission === false && !isCameraMode && (
+             <Alert variant="destructive" className="mt-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Permissão da Câmera Negada</AlertTitle>
+              <AlertDescription>
+                Para usar a câmera, conceda permissão no seu navegador ou carregue um arquivo.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {imagePreviewUrl && !isCameraMode && (
+            <div className="space-y-2 mt-2">
+              <img src={imagePreviewUrl} alt="Prévia do cartão" className="w-full max-h-48 object-contain rounded-md border" />
+            </div>
+          )}
+          
+          {(imagePreviewUrl || isCameraMode) && (
+             <div className="flex flex-wrap gap-2 mt-2">
+                {imagePreviewUrl && !isCameraMode && (
+                    <Button type="button" variant="secondary" onClick={handleExtractCardInfo} disabled={isProcessingImage || isSubmitting} className="flex-grow">
+                        {isProcessingImage ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : <CreditCardIconLucide className="mr-2 h-4 w-4" />}
+                        Extrair Dados do Cartão
+                    </Button>
+                )}
+                <Button type="button" variant="destructive" onClick={handleClearImage} disabled={isProcessingImage || isSubmitting} className={imagePreviewUrl && !isCameraMode ? "" : "w-full"}>
+                    <Trash2 className="mr-2 h-4 w-4" /> Limpar Imagem
+                </Button>
+             </div>
+          )}
+        </div>
+        <Separator className="my-4" />
+
         <FormField
           control={form.control}
           name="name"
@@ -108,7 +295,7 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
             <FormItem>
               <FormLabel>Nome do Cartão</FormLabel>
               <FormControl>
-                <Input placeholder="Ex: Nubank Ultravioleta" {...field} />
+                <Input placeholder="Ex: Nubank Ultravioleta" {...field} disabled={isSubmitting || isProcessingImage} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -122,7 +309,7 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
             <FormItem>
               <FormLabel>Limite (R$)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="5000.00" {...field} step="0.01" />
+                <Input type="number" placeholder="5000.00" {...field} step="0.01" disabled={isSubmitting || isProcessingImage} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -137,7 +324,7 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
               <FormItem>
                 <FormLabel>Dia do Vencimento</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="Ex: 10" {...field} min="1" max="31" />
+                  <Input type="number" placeholder="Ex: 10" {...field} min="1" max="31" disabled={isSubmitting || isProcessingImage} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -151,7 +338,7 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
               <FormItem>
                 <FormLabel>Dia do Fechamento</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="Ex: 1" {...field} min="1" max="31"/>
+                  <Input type="number" placeholder="Ex: 1" {...field} min="1" max="31" disabled={isSubmitting || isProcessingImage} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -161,14 +348,14 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
 
 
         <div className="flex justify-end space-x-2 pt-4">
-          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
+          <Button type="button" variant="outline" onClick={() => {stopCamera(); setOpen(false);}} disabled={isSubmitting || isProcessingImage}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? (
+          <Button type="submit" disabled={isSubmitting || isProcessingImage}>
+            {isSubmitting || isProcessingImage ? (
               <>
                 <Sun className="mr-2 h-4 w-4 animate-spin" />
-                Salvando...
+                {isProcessingImage ? 'Processando...' : 'Salvando...'}
               </>
             ) : (
               'Salvar Cartão'
