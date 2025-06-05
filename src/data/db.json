@@ -50,6 +50,15 @@
           "dueDateDay": 1,
           "closingDateDay": 23,
           "createdAt": 1749090056961
+        },
+        {
+          "id": "357b0289-0108-4864-a0ce-74f62324fa82",
+          "userId": "default_user",
+          "name": "Banco do Brasil",
+          "limit": 50000,
+          "dueDateDay": 5,
+          "closingDateDay": 29,
+          "createdAt": 1749090408812
         }
       ],
       "creditCardPurchases": [

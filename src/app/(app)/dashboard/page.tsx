@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, Landmark, CreditCardIcon, TrendingUp, TrendingDown, Loader2, AlertTriangleIcon, SearchX } from "lucide-react";
+import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Loader2, AlertTriangleIcon, SearchX } from "lucide-react";
 import { getTransactionsForUser, getCreditCardsForUser, getCreditCardPurchasesForUser } from '@/lib/databaseService';
 import type { Transaction, CreditCard, CreditCardPurchase } from '@/types';
 import { formatCurrency } from "@/lib/utils";
@@ -15,11 +15,13 @@ import {
   parseISO,
   getMonth,
   getYear,
-  setDate,
+  getDate,
   addMonths,
   subMonths,
-  getDate,
 } from 'date-fns';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+
 
 interface DashboardSummary {
   balance: number;
@@ -28,16 +30,29 @@ interface DashboardSummary {
   currentMonthCardSpending: number;
 }
 
+interface CategoryExpense {
+  category: string;
+  total: number;
+}
+
+const chartConfig = {
+  total: {
+    label: "Total Gasto (R$)",
+    color: "hsl(var(--chart-1))", 
+  },
+} satisfies ChartConfig;
+
 export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expensesByCategory, setExpensesByCategory] = useState<CategoryExpense[]>([]);
 
   const calculateInvoiceTotalForCardAndMonth = useCallback(
     (
       card: CreditCard,
       allPurchases: CreditCardPurchase[],
-      targetInvoiceClosingMonth: number, // 0-indexed month
+      targetInvoiceClosingMonth: number, 
       targetInvoiceClosingYear: number
     ): number => {
       let invoiceTotal = 0;
@@ -48,14 +63,11 @@ export default function DashboardPage() {
         const installmentAmount = purchase.totalAmount / purchase.installments;
 
         for (let i = 0; i < purchase.installments; i++) {
-          // Determine the actual month/year this installment contributes to an invoice
           let installmentPaymentDate = purchaseDate;
           
-          // If purchase is made after closing day of purchase month, first installment is on next month's bill
           if (getDate(purchaseDate) > card.closingDateDay) {
             installmentPaymentDate = addMonths(installmentPaymentDate, 1);
           }
-          // Add subsequent installment months
           installmentPaymentDate = addMonths(installmentPaymentDate, i);
           
           const installmentInvoiceClosingMonth = getMonth(installmentPaymentDate);
@@ -88,14 +100,12 @@ export default function DashboardPage() {
       const currentMonthStart = startOfMonth(currentDate);
       const currentMonthEnd = endOfMonth(currentDate);
 
-      // 1. Saldo Atual (Lifetime)
       let lifetimeBalance = 0;
       transactions.forEach(tx => {
         if (tx.type === 'income') lifetimeBalance += tx.amount;
         else lifetimeBalance -= tx.amount;
       });
 
-      // 2. Receitas do Mês
       let monthlyIncome = 0;
       transactions.forEach(tx => {
         if (tx.type === 'income' && isWithinInterval(parseISO(tx.date), { start: currentMonthStart, end: currentMonthEnd })) {
@@ -103,15 +113,20 @@ export default function DashboardPage() {
         }
       });
 
-      // 3. Despesas do Mês (Direct Expenses + Credit Card Bills closed last month)
       let monthlyExpenses = 0;
+      const currentMonthExpensesByCategory: { [key: string]: number } = {};
       transactions.forEach(tx => {
         if (tx.type === 'expense' && isWithinInterval(parseISO(tx.date), { start: currentMonthStart, end: currentMonthEnd })) {
           monthlyExpenses += tx.amount;
+          currentMonthExpensesByCategory[tx.category] = (currentMonthExpensesByCategory[tx.category] || 0) + tx.amount;
         }
       });
       
-      // Calculate CC bills closed last month
+      const formattedExpensesByCategory: CategoryExpense[] = Object.entries(currentMonthExpensesByCategory)
+        .map(([category, total]) => ({ category, total }))
+        .sort((a, b) => b.total - a.total);
+      setExpensesByCategory(formattedExpensesByCategory);
+      
       const prevMonthDate = subMonths(currentDate, 1);
       const targetPrevMonthClosingMonth = getMonth(prevMonthDate);
       const targetPrevMonthClosingYear = getYear(prevMonthDate);
@@ -126,7 +141,6 @@ export default function DashboardPage() {
       });
       monthlyExpenses += ccBillsClosedLastMonth;
 
-      // 4. Gastos nos Cartões (Mês Atual) - Bills closing this month
       let currentMonthCardSpending = 0;
       const targetCurrentMonthClosingMonth = getMonth(currentDate);
       const targetCurrentMonthClosingYear = getYear(currentDate);
@@ -139,7 +153,6 @@ export default function DashboardPage() {
         );
       });
       
-
       setSummary({
         balance: lifetimeBalance,
         monthlyIncome,
@@ -204,27 +217,27 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {summaryCardsData.map((card) => {
-          const cardContent = (
+        {summaryCardsData.map((cardItem) => { // Renamed card to cardItem to avoid conflict with Card component
+          const cardComponentContent = ( // Renamed cardContent to avoid conflict
             <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 h-full">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
-                <card.icon className={`h-5 w-5 ${card.color || 'text-muted-foreground'}`} />
+                <CardTitle className="text-sm font-medium">{cardItem.title}</CardTitle>
+                <cardItem.icon className={`h-5 w-5 ${cardItem.color || 'text-muted-foreground'}`} />
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${card.color || ''}`}>
-                  {card.currency ? formatCurrency(card.value) : `${card.value.toFixed(2)}${card.unit || ''}`}
+                <div className={`text-2xl font-bold ${cardItem.color || ''}`}>
+                  {cardItem.currency ? formatCurrency(cardItem.value) : `${cardItem.value.toFixed(2)}${cardItem.unit || ''}`}
                 </div>
               </CardContent>
             </Card>
           );
-          return card.link ? (
-            <Link href={card.link} key={card.title} className="flex">
-              {cardContent}
+          return cardItem.link ? (
+            <Link href={cardItem.link} key={cardItem.title} className="flex">
+              {cardComponentContent}
             </Link>
           ) : (
-            <div key={card.title} className="flex">
-             {cardContent}
+            <div key={cardItem.title} className="flex">
+             {cardComponentContent}
             </div>
           );
         })}
@@ -233,13 +246,53 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle className="font-headline">Despesas por Categoria</CardTitle>
+            <CardTitle className="font-headline">Despesas por Categoria (Mês Atual)</CardTitle>
             <CardDescription>Distribuição dos seus gastos mensais diretos.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px] flex items-center justify-center bg-muted/50 rounded-md">
-              <p className="text-muted-foreground">Gráfico de Despesas em breve</p>
-            </div>
+            {expensesByCategory.length > 0 ? (
+              <ChartContainer config={chartConfig} className="min-h-[200px] w-full aspect-video">
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart 
+                    data={expensesByCategory} 
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis 
+                        type="number" 
+                        axisLine={false} 
+                        tickLine={false}
+                        tickFormatter={(value) => formatCurrency(value).replace(/\s?R\$\s?/,'')} // Compact currency
+                        />
+                    <YAxis 
+                        dataKey="category" 
+                        type="category" 
+                        tickLine={false} 
+                        axisLine={false} 
+                        tickMargin={5}
+                        width={100}
+                        />
+                    <ChartTooltipContent
+                      formatter={(value, name, props) => (
+                        <div className='p-1'>
+                          <p className="font-medium text-sm">{props.payload.category}</p>
+                          <p className='text-xs text-foreground'>{formatCurrency(value as number)}</p>
+                        </div>
+                      )}
+                      cursorClassName="fill-muted/50"
+                    />
+                    <Bar dataKey="total" fill="var(--color-total)" radius={4} barSize={20} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center bg-muted/50 rounded-md">
+                <p className="text-muted-foreground text-center">
+                  Nenhuma despesa (sem ser de cartão) registrada este mês para exibir no gráfico.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card className="shadow-lg">
@@ -258,3 +311,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
