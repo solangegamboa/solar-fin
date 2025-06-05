@@ -395,28 +395,26 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-         <div className="flex items-center justify-center gap-1">
-            <Button onClick={handlePreviousMonth} variant="outline" size="icon" aria-label="Mês anterior">
-                <ChevronLeft className="h-5 w-5" />
-            </Button>
-            <h2 className="text-xl font-semibold text-center whitespace-nowrap tabular-nums mx-2">
-                {formatDateFns(selectedDate, 'MMMM/yyyy', { locale: ptBR })}
-            </h2>
-            <Button onClick={handleNextMonth} variant="outline" size="icon" aria-label="Próximo mês">
-                <ChevronRight className="h-5 w-5" />
-            </Button>
-         </div>
+      <div className="flex items-center justify-center gap-1">
+          <Button onClick={handlePreviousMonth} variant="outline" size="icon" aria-label="Mês anterior">
+              <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <h2 className="text-xl font-semibold text-center whitespace-nowrap tabular-nums mx-2">
+              {formatDateFns(selectedDate, 'MMMM/yyyy', { locale: ptBR })}
+          </h2>
+          <Button onClick={handleNextMonth} variant="outline" size="icon" aria-label="Próximo mês">
+              <ChevronRight className="h-5 w-5" />
+          </Button>
       </div>
       
-       <div className="flex flex-col sm:flex-row items-center justify-end gap-2 mt-4 sm:mt-0">
-         <Button onClick={handleCurrentMonth} variant="secondary" size="sm" disabled={isCurrentMonthSelected()}>
-            <CalendarClock className="h-4 w-4 mr-2" /> Mês Atual
+       <div className="flex flex-row items-center justify-center sm:justify-end gap-2 mt-4 sm:mt-0">
+         <Button onClick={handleCurrentMonth} variant="secondary" size="icon" aria-label="Mês Atual" disabled={isCurrentMonthSelected()}>
+            <CalendarClock className="h-4 w-4" />
           </Button>
           <Dialog open={isTransactionModalOpen} onOpenChange={setIsTransactionModalOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" disabled={!user}>
-                <PlusCircle className="mr-2 h-4 w-4" /> Nova Transação
+              <Button size="icon" aria-label="Nova Transação" disabled={!user}>
+                <PlusCircle className="h-4 w-4" />
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
@@ -429,8 +427,8 @@ export default function DashboardPage() {
           </Dialog>
           <Dialog open={isCreditCardPurchaseModalOpen} onOpenChange={setIsCreditCardPurchaseModalOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm" disabled={!user || userCreditCards.length === 0}>
-                <ShoppingBag className="mr-2 h-4 w-4" /> Nova Compra (Cartão)
+              <Button variant="outline" size="icon" aria-label="Nova Compra (Cartão)" disabled={!user || userCreditCards.length === 0}>
+                <ShoppingBag className="h-4 w-4" />
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
@@ -566,3 +564,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
