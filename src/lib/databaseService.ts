@@ -33,7 +33,19 @@ const DEFAULT_USER_ID = 'default_user';
 //   created_at TIMESTAMPTZ DEFAULT NOW()
 // );
 
-// -- Other tables (loans, credit_cards, credit_card_purchases) would follow a similar pattern.
+// CREATE TABLE loans (
+//   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+//   user_id TEXT REFERENCES users(uid) ON DELETE CASCADE,
+//   bank_name TEXT NOT NULL,
+//   description TEXT,
+//   installment_amount NUMERIC(12, 2) NOT NULL,
+//   installments_count INTEGER NOT NULL,
+//   start_date DATE NOT NULL,
+//   end_date DATE NOT NULL, -- Calculated
+//   created_at TIMESTAMPTZ DEFAULT NOW()
+// );
+
+// -- Other tables (credit_cards, credit_card_purchases) would follow a similar pattern.
 // -- For credit_cards, 'limit' might be 'limit_amount' to avoid SQL keyword clash.
 // -- For credit_card_purchases, 'date' might be 'purchase_date'.
 
@@ -316,15 +328,11 @@ export const deleteTransaction = async (transactionId: string): Promise<DeleteRe
   }
 };
 
-// --- Functions below still use local DB logic. TODO: Implement for PostgreSQL ---
 
 export async function getFinancialDataForUser(): Promise<FinancialDataInput | null> {
-  // This function primarily reads data. If in postgres mode, it should use postgres transactions and loans.
-  // For simplicity in this step, it will still rely on the local getTransactionsForUser and getLoansForUser
-  // which are now postgres-aware for transactions. Loans part needs PG update.
   await ensureDefaultUserInPostgres();
-  const userTransactions = await getTransactionsForUser(); // This is PG-aware
-  const userLoans = await getLoansForUser(); // This is NOT PG-aware yet
+  const userTransactions = await getTransactionsForUser(); 
+  const userLoans = await getLoansForUser(); 
 
   try {
     const expensesByCategory: { [category: string]: number } = {};
@@ -352,7 +360,6 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
       monthlyPayment: loan.installmentAmount,
     }));
     
-    // Credit cards also need to be fetched from their respective source (local or PG)
     const userCreditCards = await getCreditCardsForUser(); // NOT PG-aware yet
 
     return {
@@ -522,89 +529,150 @@ export interface AddLoanResult {
   error?: string;
 }
 
-// TODO: Implement PostgreSQL logic for Loans
 export const addLoan = async (loanData: NewLoanData): Promise<AddLoanResult> => {
-  // if (DATABASE_MODE === 'postgres' && pool) { /* ... PG logic ... */ }
-  try {
-    let db = await readDB();
-    db = await ensureDefaultUserStructure(db);
+  await ensureDefaultUserInPostgres();
+  const startDateObj = parseISO(loanData.startDate);
+  const endDateObj = addMonths(startDateObj, loanData.installmentsCount -1); 
+  const calculatedEndDate = formatDateFns(endDateObj, 'yyyy-MM-dd');
 
-    const startDateObj = parseISO(loanData.startDate);
-    const endDateObj = addMonths(startDateObj, loanData.installmentsCount -1); 
-    const calculatedEndDate = formatDateFns(endDateObj, 'yyyy-MM-dd');
-
-    const newLoan: Loan = {
-      id: randomUUID(),
-      userId: DEFAULT_USER_ID,
-      bankName: loanData.bankName,
-      description: loanData.description,
-      installmentAmount: Number(loanData.installmentAmount),
-      installmentsCount: Number(loanData.installmentsCount),
-      startDate: loanData.startDate,
-      endDate: calculatedEndDate, 
-      createdAt: Date.now(),
-    };
-
-    if (!db.users[DEFAULT_USER_ID].loans) {
-      db.users[DEFAULT_USER_ID].loans = [];
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const newLoanId = randomUUID();
+      const res = await pool.query(
+        'INSERT INTO loans (id, user_id, bank_name, description, installment_amount, installments_count, start_date, end_date, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
+        [
+          newLoanId,
+          DEFAULT_USER_ID,
+          loanData.bankName,
+          loanData.description,
+          loanData.installmentAmount,
+          loanData.installmentsCount,
+          loanData.startDate,
+          calculatedEndDate,
+          new Date(),
+        ]
+      );
+      console.log(`Loan ${res.rows[0].id} added for default user in PostgreSQL. End date: ${calculatedEndDate}`);
+      return { success: true, loanId: res.rows[0].id };
+    } catch (error: any) {
+      console.error("Error adding loan to PostgreSQL:", error.message, error);
+      return { success: false, error: "An error occurred while adding the loan to PostgreSQL." };
     }
-    db.users[DEFAULT_USER_ID].loans.push(newLoan);
-    await writeDB(db);
+  } else {
+    // Local DB logic
+    try {
+      let db = await readDB();
+      db = await ensureDefaultUserStructure(db);
 
-    console.log(`Loan ${newLoan.id} added for default user in local DB. End date: ${calculatedEndDate}`);
-    return { success: true, loanId: newLoan.id };
-  } catch (error: any) {
-    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
-    console.error("Error adding loan to local DB:", errorMessage, error);
-    return { success: false, error: "An error occurred while adding the loan." };
+      const newLoan: Loan = {
+        id: randomUUID(),
+        userId: DEFAULT_USER_ID,
+        bankName: loanData.bankName,
+        description: loanData.description,
+        installmentAmount: Number(loanData.installmentAmount),
+        installmentsCount: Number(loanData.installmentsCount),
+        startDate: loanData.startDate,
+        endDate: calculatedEndDate, 
+        createdAt: Date.now(),
+      };
+
+      if (!db.users[DEFAULT_USER_ID].loans) {
+        db.users[DEFAULT_USER_ID].loans = [];
+      }
+      db.users[DEFAULT_USER_ID].loans.push(newLoan);
+      await writeDB(db);
+
+      console.log(`Loan ${newLoan.id} added for default user in local DB. End date: ${calculatedEndDate}`);
+      return { success: true, loanId: newLoan.id };
+    } catch (error: any) {
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+      console.error("Error adding loan to local DB:", errorMessage, error);
+      return { success: false, error: "An error occurred while adding the loan." };
+    }
   }
 };
 
-// TODO: Implement PostgreSQL logic for Loans
 export async function getLoansForUser(): Promise<Loan[]> {
-  // if (DATABASE_MODE === 'postgres' && pool) { /* ... PG logic ... */ }
-  try {
-    let db = await readDB();
-    db = await ensureDefaultUserStructure(db);
-    const loans = db.users[DEFAULT_USER_ID]?.loans || [];
-    return loans.sort((a, b) => {
-      const startDateComparison = parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime();
-      if (startDateComparison !== 0) {
-        return startDateComparison;
-      }
-      return b.createdAt - a.createdAt;
-    });
-  } catch (error: any) {
-    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
-    console.error(`Error fetching loans for default user from local DB:`, errorMessage, error);
-    return [];
+  await ensureDefaultUserInPostgres();
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const res: QueryResult<Loan> = await pool.query(
+        'SELECT id, user_id as "userId", bank_name as "bankName", description, installment_amount as "installmentAmount", installments_count as "installmentsCount", start_date as "startDate", end_date as "endDate", created_at as "createdAt" FROM loans WHERE user_id = $1 ORDER BY start_date ASC, created_at DESC',
+        [DEFAULT_USER_ID]
+      );
+      return res.rows.map(loan => ({
+        ...loan,
+        startDate: formatDateFns(new Date(loan.startDate), 'yyyy-MM-dd'),
+        endDate: formatDateFns(new Date(loan.endDate), 'yyyy-MM-dd'),
+        installmentAmount: Number(loan.installmentAmount),
+        installmentsCount: Number(loan.installmentsCount)
+      }));
+    } catch (error: any) {
+      console.error(`Error fetching loans for default user from PostgreSQL:`, error.message, error);
+      return [];
+    }
+  } else {
+    // Local DB logic
+    try {
+      let db = await readDB();
+      db = await ensureDefaultUserStructure(db);
+      const loans = db.users[DEFAULT_USER_ID]?.loans || [];
+      return loans.sort((a, b) => {
+        const startDateComparison = parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime();
+        if (startDateComparison !== 0) {
+          return startDateComparison;
+        }
+        return b.createdAt - a.createdAt;
+      });
+    } catch (error: any) {
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+      console.error(`Error fetching loans for default user from local DB:`, errorMessage, error);
+      return [];
+    }
   }
 }
 
-// TODO: Implement PostgreSQL logic for Loans
 export const deleteLoan = async (loanId: string): Promise<DeleteResult> => {
-  // if (DATABASE_MODE === 'postgres' && pool) { /* ... PG logic ... */ }
-  try {
-    let db = await readDB();
-    db = await ensureDefaultUserStructure(db);
-
-    const loansArray = db.users[DEFAULT_USER_ID].loans || [];
-    const initialLength = loansArray.length;
-    db.users[DEFAULT_USER_ID].loans = loansArray.filter(
-      (l) => l.id !== loanId
-    );
-
-    if (db.users[DEFAULT_USER_ID].loans!.length === initialLength) {
-      console.log(`Loan ${loanId} not found for default user.`);
-      return { success: false, error: "Loan not found." };
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const res = await pool.query('DELETE FROM loans WHERE id = $1 AND user_id = $2', [loanId, DEFAULT_USER_ID]);
+      if (res.rowCount === 0) {
+        console.log(`Loan ${loanId} not found for default user in PostgreSQL.`);
+        return { success: false, error: "Loan not found." };
+      }
+      console.log(`Loan ${loanId} deleted for default user in PostgreSQL.`);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error deleting loan from PostgreSQL:", error.message, error);
+      return { success: false, error: "An error occurred while deleting the loan from PostgreSQL." };
     }
+  } else {
+    // Local DB logic
+    try {
+      let db = await readDB();
+      db = await ensureDefaultUserStructure(db);
 
-    await writeDB(db);
-    console.log(`Loan ${loanId} deleted for default user in local DB.`);
-    return { success: true };
-  } catch (error: any) {
-    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
-    console.error("Error deleting loan from local DB:", errorMessage, error);
-    return { success: false, error: "An error occurred while deleting the loan." };
+      const loansArray = db.users[DEFAULT_USER_ID].loans || [];
+      const initialLength = loansArray.length;
+      db.users[DEFAULT_USER_ID].loans = loansArray.filter(
+        (l) => l.id !== loanId
+      );
+
+      if (db.users[DEFAULT_USER_ID].loans!.length === initialLength) {
+        console.log(`Loan ${loanId} not found for default user.`);
+        return { success: false, error: "Loan not found." };
+      }
+
+      await writeDB(db);
+      console.log(`Loan ${loanId} deleted for default user in local DB.`);
+      return { success: true };
+    } catch (error: any) {
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+      console.error("Error deleting loan from local DB:", errorMessage, error);
+      return { success: false, error: "An error occurred while deleting the loan." };
+    }
   }
 };
+
+
+    
