@@ -1,6 +1,6 @@
 
 # Stage 1: Builder
-FROM node:20-slim AS builder
+FROM node:20 AS builder
 
 # Set working directory
 WORKDIR /app
@@ -24,12 +24,14 @@ FROM node:20-slim AS runner
 
 WORKDIR /app
 
+RUN mkdir -p src/data
+
 # Set environment to production
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 # Create a non-root user and group for security
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# RUN addgroup --system --gid 1000 nodejs
+# RUN adduser --system --uid 1000 nextjs
 
 # Copy built assets from the builder stage
 # .next e public são os mais importantes para a execução
@@ -44,13 +46,13 @@ COPY --from=builder /app/package.json ./package.json
 # COPY --from=builder /app/next.config.ts ./next.config.ts
 
 # Switch to the non-root user
-USER nextjs
+USER solange
 
 # Expose port 3000 (padrão do Next.js para 'next start')
 EXPOSE 3000
 
 # Set the PORT environment variable
-ENV PORT 3000
+ENV PORT=3000
 
 # Command to run the application
 # Usa 'npm run start' que por sua vez executa 'next start'
