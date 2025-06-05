@@ -3,15 +3,22 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react'; // Keep loader for visual consistency during quick redirect
+import { useAuth } from '@/contexts/AuthContext';
+import { Loader2 } from 'lucide-react'; 
 
 export default function HomePage() {
   const router = useRouter();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    // No auth check needed, redirect directly to dashboard
-    router.replace('/dashboard');
-  }, [router]);
+    if (!loading) {
+      if (user) {
+        router.replace('/dashboard');
+      } else {
+        router.replace('/login');
+      }
+    }
+  }, [user, loading, router]);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">

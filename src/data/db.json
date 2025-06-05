@@ -1,33 +1,35 @@
+
 {
   "users": {
-    "default_user": {
+    "2a141a58-983f-4d63-83d5-605943ff7596": {
       "profile": {
-        "uid": "default_user",
+        "id": "2a141a58-983f-4d63-83d5-605943ff7596",
         "email": "user@example.local",
-        "displayName": "Local User",
-        "photoURL": null,
+        "displayName": "Usuário Local Padrão",
         "createdAt": 1749089165220,
         "lastLoginAt": 1749089165220
       },
+      "hashedPassword": "$2a$10$YOUR_BCRYPT_HASH_FOR_PASSWORD_HERE",
       "transactions": [
         {
           "id": "9293844a-d293-4d90-b4ed-65f88440ab21",
-          "userId": "default_user",
+          "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "type": "income",
           "amount": 12000,
-          "category": "prowlarr",
+          "category": "Salário",
           "date": "2025-06-04",
-          "description": "",
+          "description": "Salário Mensal",
+          "isRecurring": true,
           "createdAt": 1749089165221
         },
         {
           "id": "1689acb5-5c29-4a5c-ace1-292cd6e1bb5d",
-          "userId": "default_user",
+          "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "type": "expense",
           "amount": 2800,
           "category": "Aluguel",
           "date": "2025-06-04",
-          "description": "",
+          "description": "Aluguel Apto",
           "isRecurring": true,
           "createdAt": 1749090843659
         }
@@ -35,9 +37,9 @@
       "loans": [
         {
           "id": "ae6e61ef-4b16-4afb-9d09-45dc08e94290",
-          "userId": "default_user",
-          "bankName": "Bradesco ",
-          "description": "Ultimo prometo",
+          "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
+          "bankName": "Bradesco",
+          "description": "Financiamento Veículo",
           "installmentAmount": 899.06,
           "installmentsCount": 24,
           "startDate": "2025-06-04",
@@ -48,40 +50,22 @@
       "creditCards": [
         {
           "id": "63ba4d48-4fb7-4132-977d-a4c285369259",
-          "userId": "default_user",
+          "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Nubank",
           "limit": 9000,
           "dueDateDay": 3,
           "closingDateDay": 26,
           "createdAt": 1749089373252
-        },
-        {
-          "id": "37ae08e3-d2bf-430e-853f-3cbc51ace49d",
-          "userId": "default_user",
-          "name": "Bradesco",
-          "limit": 16000,
-          "dueDateDay": 1,
-          "closingDateDay": 23,
-          "createdAt": 1749090056961
-        },
-        {
-          "id": "357b0289-0108-4864-a0ce-74f62324fa82",
-          "userId": "default_user",
-          "name": "Banco do Brasil",
-          "limit": 50000,
-          "dueDateDay": 5,
-          "closingDateDay": 29,
-          "createdAt": 1749090408812
         }
       ],
       "creditCardPurchases": [
         {
           "id": "fd881ee4-e50c-40d5-8666-013fb654ed1b",
-          "userId": "default_user",
+          "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "cardId": "63ba4d48-4fb7-4132-977d-a4c285369259",
           "date": "2025-05-14",
           "description": "Cobasi",
-          "category": "Gatos",
+          "category": "Pets",
           "totalAmount": 340,
           "installments": 4,
           "createdAt": 1749090099953

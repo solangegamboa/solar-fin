@@ -1,25 +1,26 @@
 
 export interface UserProfile {
-  uid: string;
-  email: string | null;
+  id: string; // Changed from uid to id for general DB consistency
+  email: string; // Email is now mandatory
   displayName?: string | null;
-  photoURL?: string | null;
-  createdAt?: number; 
-  lastLoginAt?: number; 
+  photoURL?: string | null; // Keep for potential future use
+  createdAt?: number;
+  lastLoginAt?: number;
+  // hashedPassword should not be part of UserProfile sent to client
 }
 
 export type TransactionType = 'income' | 'expense';
 
 export interface Transaction {
   id: string;
-  userId: string; 
+  userId: string;
   type: TransactionType;
   amount: number;
   category: string;
-  date: string; 
+  date: string;
   description?: string;
-  isRecurring?: boolean; 
-  createdAt: number; 
+  isRecurring?: boolean;
+  createdAt: number;
 }
 
 export interface Loan {
@@ -28,10 +29,10 @@ export interface Loan {
   bankName: string;
   description: string;
   installmentAmount: number;
-  installmentsCount: number; // Added
-  startDate: string; // YYYY-MM-DD
-  endDate: string;   // YYYY-MM-DD (Calculated and stored)
-  createdAt: number; 
+  installmentsCount: number;
+  startDate: string; 
+  endDate: string;   
+  createdAt: number;
 }
 
 export interface CreditCard {
@@ -39,35 +40,37 @@ export interface CreditCard {
   userId: string;
   name: string;
   limit: number;
-  dueDateDay: number; 
-  closingDateDay: number; 
-  createdAt: number; 
+  dueDateDay: number;
+  closingDateDay: number;
+  createdAt: number;
 }
 
 export interface CreditCardPurchase {
   id: string;
   userId: string;
-  cardId: string; 
-  date: string; 
+  cardId: string;
+  date: string;
   description: string;
   category: string;
-  totalAmount: number; 
-  installments: number; 
+  totalAmount: number;
+  installments: number;
   createdAt: number;
 }
 
+// For AI Flow - this might need adjustment if AI needs password or other auth details (it shouldn't)
 export interface FinancialDataInput {
   income: number;
   expenses: Array<{ category: string; amount: number }>;
-  loans: Array<{ description: string; amount: number; interestRate: number; monthlyPayment: number }>; 
+  loans: Array<{ description: string; amount: number; interestRate: number; monthlyPayment: number }>;
   creditCards: Array<{ name: string; limit: number; balance: number; dueDate: string }>;
 }
 
+// Data for creating new entities
 export interface NewTransactionData {
   type: TransactionType;
   amount: number;
   category: string;
-  date: string; 
+  date: string;
   description?: string;
   isRecurring?: boolean;
 }
@@ -81,7 +84,7 @@ export interface NewCreditCardData {
 
 export interface NewCreditCardPurchaseData {
   cardId: string;
-  date: string; 
+  date: string;
   description: string;
   category: string;
   totalAmount: number;
@@ -92,7 +95,14 @@ export interface NewLoanData {
   bankName: string;
   description: string;
   installmentAmount: number;
-  installmentsCount: number; // Changed from endDate
-  startDate: string; // YYYY-MM-DD
+  installmentsCount: number;
+  startDate: string;
 }
 
+// API response types
+export interface AuthApiResponse {
+  success: boolean;
+  message?: string;
+  user?: UserProfile; // For login/signup/me
+  token?: string; // Optionally return token if not only using cookies
+}

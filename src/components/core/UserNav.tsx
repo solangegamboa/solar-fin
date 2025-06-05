@@ -1,7 +1,7 @@
 
 'use client';
 
-import { User as UserIcon, Settings } from 'lucide-react';
+import { User as UserIcon, Settings, LogOut } from 'lucide-react'; // Added LogOut
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,26 +15,41 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast'; // Keep for potential other uses, though logout toast is in AuthContext
 
 export function UserNav() {
-  const { user } = useAuth(); // Will get the mock user
+  const { user, logout, loading } = useAuth(); 
   const router = useRouter();
-  const { toast } = useToast();
+  // const { toast } = useToast(); // Logout toast now handled in AuthContext
 
+  const handleLogout = async () => {
+    await logout();
+    // Redirect is handled in AuthContext or AppLayout
+  };
 
-  // Logout is no longer relevant in a no-auth setup
-  // const handleLogout = async () => { ... }
+  if (loading) {
+     return (
+      <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+        <Avatar className="h-8 w-8 animate-pulse bg-muted" />
+      </Button>
+    );
+  }
+
 
   if (!user) {
-    // This should not happen with the new AuthContext that always provides a user
-    return null;
+    // This case should ideally be handled by route protection in AppLayout
+    // For safety, can return a login button or null
+    return (
+        <Button onClick={() => router.push('/login')} variant="outline" size="sm">
+            Login
+        </Button>
+    );
   }
 
   const getInitials = (email?: string | null, displayName?: string | null) => {
     if (displayName) {
       const nameParts = displayName.split(' ');
-      if (nameParts.length > 1) {
+      if (nameParts.length > 1 && nameParts[0] && nameParts[nameParts.length -1]) {
         return (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
       }
       return displayName.substring(0, 2).toUpperCase();
@@ -50,7 +65,6 @@ export function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
           <Avatar className="h-8 w-8">
-            {/* photoURL will likely be null for mock user */}
             {user.photoURL && <AvatarImage src={user.photoURL} alt={user.displayName || user.email || 'User'} />}
             <AvatarFallback>{getInitials(user.email, user.displayName)}</AvatarFallback>
           </Avatar>
@@ -69,7 +83,6 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          {/* "Perfil" can link to settings page as before */}
           <DropdownMenuItem onClick={() => router.push('/settings')}>
             <UserIcon className="mr-2 h-4 w-4" />
             <span>Perfil</span>
@@ -79,7 +92,11 @@ export function UserNav() {
             <span>Configurações</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        {/* No Logout option needed without authentication */}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleLogout}>
+            <LogOut className="mr-2 h-4 w-4" />
+            <span>Sair</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
