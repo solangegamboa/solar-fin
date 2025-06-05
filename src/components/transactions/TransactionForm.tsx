@@ -61,7 +61,7 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
     resolver: zodResolver(transactionFormSchema),
     defaultValues: {
       type: undefined, // User must select
-      amount: undefined,
+      amount: '' as unknown as number, // Initialize as empty string to avoid uncontrolled input error
       category: '',
       date: new Date(),
       description: '',
