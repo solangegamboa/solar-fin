@@ -1,8 +1,10 @@
 
+// ATENÇÃO: Este arquivo foi modificado para usar o Firebase Realtime Database.
+// Considere renomeá-lo para algo como 'databaseService.ts' para maior clareza.
 'use server';
 
-import { doc, setDoc, serverTimestamp, getDoc, type Timestamp, collection, addDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { ref, set, get, update, push, child, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
+import { rtdb } from './firebase'; // Importa rtdb em vez de db
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { TransactionType } from '@/types';
 
@@ -11,63 +13,53 @@ export interface UserDocument {
   email: string | null;
   displayName: string | null;
   photoURL?: string | null;
-  createdAt: Timestamp | any; // serverTimestamp() para criação
-  lastLoginAt: Timestamp | any; // serverTimestamp() para atualização
-  // Outros campos específicos do app podem ser adicionados aqui no futuro
+  createdAt: number | object; // Para rtdbServerTimestamp, será um objeto antes de ser resolvido
+  lastLoginAt: number | object; // Para rtdbServerTimestamp
 }
 
 /**
- * Salva ou atualiza os dados do usuário no Firestore.
- * Se o usuário não existir no Firestore, cria um novo documento com createdAt e lastLoginAt.
- * Se existir, atualiza displayName, photoURL (se houver) e lastLoginAt.
+ * Salva ou atualiza os dados do usuário no Firebase Realtime Database.
  */
-export const upsertUserInFirestore = async (firebaseUser: FirebaseUser): Promise<void> => {
+export const upsertUserInFirestore = async (firebaseUser: FirebaseUser): Promise<void> => { // Nome da função mantido para minimizar alterações de interface, mas opera no RTDB
   if (!firebaseUser) {
-    console.error("upsertUserInFirestore: firebaseUser não fornecido.");
+    console.error("upsertUserInRealtimeDB: firebaseUser não fornecido.");
     return;
   }
 
-  const userRef = doc(db, 'users', firebaseUser.uid);
+  const userRef = ref(rtdb, `users/${firebaseUser.uid}`);
   
-  // Dados que são comuns para criação e atualização.
-  // lastLoginAt é sempre atualizado.
   const commonData = {
     uid: firebaseUser.uid,
     email: firebaseUser.email,
     displayName: firebaseUser.displayName,
-    photoURL: firebaseUser.photoURL, // Pode ser null, o que é ok.
-    lastLoginAt: serverTimestamp(),
+    photoURL: firebaseUser.photoURL,
+    lastLoginAt: rtdbServerTimestamp(),
   };
 
   try {
-    const userSnap = await getDoc(userRef);
+    const snapshot = await get(userRef);
 
-    if (!userSnap.exists()) {
-      // Novo usuário no Firestore: adiciona createdAt e cria o documento.
-      // Este é o ponto onde o "path" do documento do usuário é criado se não existir.
+    if (!snapshot.exists()) {
       const dataToCreate: UserDocument = {
         ...commonData,
-        createdAt: serverTimestamp(),
+        createdAt: rtdbServerTimestamp(),
       };
-      await setDoc(userRef, dataToCreate);
-      console.log(`Novo usuário ${firebaseUser.uid} salvo no Firestore.`);
+      await set(userRef, dataToCreate);
+      console.log(`Novo usuário ${firebaseUser.uid} salvo no Realtime Database.`);
     } else {
-      // Usuário existente: atualiza com commonData.
-      // A opção { merge: true } garante que outros campos (como createdAt) sejam preservados.
-      await setDoc(userRef, commonData, { merge: true });
-      console.log(`Dados do usuário ${firebaseUser.uid} atualizados no Firestore.`);
+      await update(userRef, commonData);
+      console.log(`Dados do usuário ${firebaseUser.uid} atualizados no Realtime Database.`);
     }
   } catch (error) {
-    console.error("Erro ao salvar/atualizar usuário no Firestore:", error);
-    // Considerar relançar o erro ou tratar de forma mais específica se necessário
-    // throw error; 
+    console.error("Erro ao salvar/atualizar usuário no Realtime Database:", error);
+    // throw error; // Considere relançar ou tratar de forma mais específica
   }
 };
 
 export interface NewTransactionData {
   type: TransactionType;
   amount: number;
-  category: string;
+  category:string;
   date: string; // YYYY-MM-DD
   description?: string;
 }
@@ -83,25 +75,24 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
     return { success: false, error: "User ID is required to add a transaction." };
   }
   try {
-    // Verifica se o documento do usuário pai existe antes de adicionar uma transação na subcoleção.
-    // A função upsertUserInFirestore deve garantir que o documento do usuário seja criado no login/signup.
-    const userDocRef = doc(db, 'users', userId);
-    const userDocSnap = await getDoc(userDocRef);
+    const userRef = ref(rtdb, `users/${userId}`);
+    const userSnapshot = await get(userRef);
 
-    if (!userDocSnap.exists()) {
-      console.error(`Documento do usuário ${userId} não existe. Não é possível adicionar transação.`);
+    if (!userSnapshot.exists()) {
+      console.error(`Documento do usuário ${userId} não existe no RTDB. Não é possível adicionar transação.`);
       return { success: false, error: "Perfil de usuário não encontrado. Não é possível adicionar transação." };
     }
 
-    const transactionsCollectionRef = collection(db, 'users', userId, 'transactions');
-    const docRef = await addDoc(transactionsCollectionRef, {
+    const transactionsRef = ref(rtdb, `users/${userId}/transactions`);
+    const newTransactionRef = push(transactionsRef); // Gera um ID único
+    
+    await set(newTransactionRef, {
       ...transactionData,
-      createdAt: serverTimestamp(),
+      createdAt: rtdbServerTimestamp(),
     });
-    return { success: true, transactionId: docRef.id };
+    return { success: true, transactionId: newTransactionRef.key || undefined };
   } catch (error: any) { 
-    console.error("Error adding transaction to Firestore:", error); // Server-side log
-    // Retorna uma mensagem de erro genérica e segura para o cliente.
+    console.error("Error adding transaction to Realtime Database:", error);
     return { success: false, error: "Ocorreu um erro ao adicionar a transação. Por favor, tente novamente." };
   }
 };

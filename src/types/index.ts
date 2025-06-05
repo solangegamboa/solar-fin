@@ -1,3 +1,4 @@
+
 export interface UserProfile {
   uid: string;
   email: string | null;
@@ -15,7 +16,7 @@ export interface Transaction {
   category: string;
   date: string; // ISO string e.g., "2024-07-15"
   description?: string;
-  createdAt: number; // timestamp
+  createdAt: number; // timestamp (será um número após ser resolvido pelo RTDB)
 }
 
 export interface Loan {

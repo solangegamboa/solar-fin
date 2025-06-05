@@ -22,7 +22,7 @@ import { auth } from '@/lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
-import { upsertUserInFirestore } from '@/lib/firestoreService';
+import { upsertUserInFirestore } from '@/lib/firestoreService'; // O nome da função é mantido, mas a implementação usa RTDB
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Por favor, insira um email válido.' }),
@@ -63,14 +63,13 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
     setLoading(true);
     try {
       await onSubmit(values);
-      // upsertUserInFirestore será chamado dentro de onSubmit (nas páginas login/signup)
     } catch (error: any) {
        toast({
         variant: "destructive",
         title: "Erro de Autenticação",
-        description: (mode === 'login' ? 'Falha ao entrar. Verifique suas credenciais e tente novamente.' : 'Falha ao criar conta. Por favor, tente novamente.'),
+        description: (error && error.message) ? error.message : (mode === 'login' ? 'Falha ao entrar. Verifique suas credenciais e tente novamente.' : 'Falha ao criar conta. Por favor, tente novamente.'),
       });
-      console.error("AuthForm submission error:", error.message ? error.message : String(error)); 
+      console.error("AuthForm submission error:", error && error.message ? error.message : String(error)); 
     } finally {
       setLoading(false);
     }
@@ -82,7 +81,7 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
     try {
       const userCredential = await signInWithPopup(auth, provider);
       if (userCredential.user) {
-        await upsertUserInFirestore(userCredential.user);
+        await upsertUserInFirestore(userCredential.user); // Salva/Atualiza no RTDB
       }
       toast({ title: "Login com Google bem-sucedido!", description: "Redirecionando para o painel..." });
       router.push('/dashboard');
@@ -93,7 +92,6 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
       } else if (error.code === 'auth/popup-closed-by-user') {
         message = "Login com Google cancelado.";
       }
-      // Log only safe properties for Google sign-in errors as well
       console.error("Firebase Google sign-in error:", error.code, error.message);
       toast({
         variant: "destructive",

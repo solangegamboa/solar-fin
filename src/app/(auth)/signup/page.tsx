@@ -6,7 +6,7 @@ import { auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { upsertUserInFirestore } from '@/lib/firestoreService';
+import { upsertUserInFirestore } from '@/lib/firestoreService'; // O nome da função é mantido, mas a implementação usa RTDB
 
 export default function SignupPage() {
   const router = useRouter();
@@ -16,7 +16,7 @@ export default function SignupPage() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
       if (userCredential.user) {
-        await upsertUserInFirestore(userCredential.user);
+        await upsertUserInFirestore(userCredential.user); // Salva/Atualiza no RTDB
       }
       toast({ title: "Conta criada com sucesso!", description: "Redirecionando para o painel..." });
       router.push('/dashboard');
@@ -40,19 +40,16 @@ export default function SignupPage() {
           message = "Erro de rede. Verifique sua conexão e tente novamente.";
           break;
         default:
-          // message remains the generic one for the user
-          // Log the specific Firebase error for debugging, if available
           if (error.code && error.message) {
             console.error("Firebase signup error (unhandled code):", error.code, error.message);
           } else {
-            console.error("Firebase signup error (generic):", error); // Fallback if code/message are not present
+            console.error("Firebase signup error (generic):", error); 
           }
           break;
       }
 
-      // Log only safe properties to avoid call stack errors from complex error objects
       console.error("Firebase signup error details:", error.code, error.message);
-      throw new Error(message); // This will be caught by AuthForm
+      throw new Error(message); 
     }
   };
 

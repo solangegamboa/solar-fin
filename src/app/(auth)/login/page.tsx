@@ -6,7 +6,7 @@ import { auth } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { upsertUserInFirestore } from '@/lib/firestoreService';
+import { upsertUserInFirestore } from '@/lib/firestoreService'; // O nome da função é mantido, mas a implementação usa RTDB
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,7 +16,7 @@ export default function LoginPage() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
       if (userCredential.user) {
-        await upsertUserInFirestore(userCredential.user);
+        await upsertUserInFirestore(userCredential.user); // Salva/Atualiza no RTDB
       }
       toast({ title: "Login bem-sucedido!", description: "Redirecionando para o painel..." });
       router.push('/dashboard');
@@ -42,19 +42,16 @@ export default function LoginPage() {
           message = "Erro de rede. Verifique sua conexão e tente novamente.";
           break;
         default:
-          // message remains the generic one for the user
-          // Log the specific Firebase error for debugging, if available
           if (error.code && error.message) {
             console.error("Firebase login error (unhandled code):", error.code, error.message);
           } else {
-            console.error("Firebase login error (generic):", error); // Fallback if code/message are not present
+            console.error("Firebase login error (generic):", error); 
           }
           break;
       }
       
-      // Log only safe properties to avoid call stack errors from complex error objects
       console.error("Firebase login error details:", error.code, error.message);
-      throw new Error(message); // This will be caught by AuthForm
+      throw new Error(message); 
     }
   };
 

@@ -24,7 +24,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useAuth } from '@/contexts/AuthContext';
-import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/firestoreService';
+import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/firestoreService'; // O nome da função é mantido, mas a implementação usa RTDB
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -48,8 +48,8 @@ const transactionFormSchema = z.object({
 type TransactionFormValues = z.infer<typeof transactionFormSchema>;
 
 interface TransactionFormProps {
-  onSuccess?: () => void; // Callback after successful submission
-  setOpen: (open: boolean) => void; // To close dialog
+  onSuccess?: () => void; 
+  setOpen: (open: boolean) => void; 
 }
 
 export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
@@ -60,8 +60,8 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema),
     defaultValues: {
-      type: undefined, // User must select
-      amount: '' as unknown as number, // Initialize as empty string to avoid uncontrolled input error
+      type: undefined, 
+      amount: '' as unknown as number, 
       category: '',
       date: new Date(),
       description: '',
@@ -82,12 +82,12 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
 
     const transactionData: NewTransactionData = {
       ...values,
-      date: format(values.date, 'yyyy-MM-dd'), // Format date to string
-      amount: Number(values.amount) // Ensure amount is a number
+      date: format(values.date, 'yyyy-MM-dd'), 
+      amount: Number(values.amount) 
     };
 
     try {
-      const result: AddTransactionResult = await addTransaction(user.uid, transactionData);
+      const result: AddTransactionResult = await addTransaction(user.uid, transactionData); // Salva no RTDB
 
       if (result.success && result.transactionId) {
         toast({
@@ -96,7 +96,7 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
         });
         form.reset();
         if (onSuccess) onSuccess();
-        setOpen(false); // Close dialog on success
+        setOpen(false); 
       } else {
         toast({
           variant: 'destructive',
@@ -104,14 +104,9 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
           description: result.error || 'Ocorreu um erro desconhecido.',
         });
       }
-    } catch (error: any) { // This catch is for network errors or if the action truly crashes in an unrecoverable way
-      console.error('Client-side error calling addTransaction:', error); // Log the original error for debugging
-      // For the toast, use a very generic message or a string extracted safely
-      // to prevent issues if 'error' is a complex/circular object.
+    } catch (error: any) { 
+      console.error('Client-side error calling addTransaction:', error); 
       const displayMessage = 'Ocorreu um erro ao salvar a transação. Tente novamente.';
-      // We are intentionally not trying to pull `error.message` here for the toast
-      // to avoid potential circular reference issues if 'error' is complex.
-      // The detailed error is logged above.
       toast({
         variant: 'destructive',
         title: 'Erro de Comunicação',
