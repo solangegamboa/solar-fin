@@ -1,6 +1,4 @@
 
-// ATENÇÃO: Este arquivo foi modificado para usar o Firebase Realtime Database.
-// Considere renomeá-lo para algo como 'databaseService.ts' para maior clareza.
 'use server';
 
 import { ref, set, get, update, push, child, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
