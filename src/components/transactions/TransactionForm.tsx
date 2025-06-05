@@ -104,12 +104,18 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
           description: result.error || 'Ocorreu um erro desconhecido.',
         });
       }
-    } catch (error) { // This catch is for network errors or if the action truly crashes in an unrecoverable way
-      console.error('Erro na chamada da action de transação:', error);
+    } catch (error: any) { // This catch is for network errors or if the action truly crashes in an unrecoverable way
+      console.error('Client-side error calling addTransaction:', error); // Log the original error for debugging
+      // For the toast, use a very generic message or a string extracted safely
+      // to prevent issues if 'error' is a complex/circular object.
+      const displayMessage = 'Ocorreu um erro ao salvar a transação. Tente novamente.';
+      // We are intentionally not trying to pull `error.message` here for the toast
+      // to avoid potential circular reference issues if 'error' is complex.
+      // The detailed error is logged above.
       toast({
         variant: 'destructive',
         title: 'Erro de Comunicação',
-        description: 'Não foi possível conectar ao servidor para adicionar a transação.',
+        description: displayMessage,
       });
     } finally {
       setIsSubmitting(false);
@@ -218,4 +224,3 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
     </Form>
   );
 }
-
