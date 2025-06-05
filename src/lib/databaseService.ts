@@ -177,11 +177,11 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
       income: incomeForAI, 
       expenses: expensesArray,
       loans: userData.loans || [],
-      creditCards: (userData.creditCards || []).map(cc => ({ // Map to format expected by AI
+      creditCards: (userData.creditCards || []).map(cc => ({
         name: cc.name,
         limit: cc.limit,
-        balance: 0, // Placeholder, balance calculation is complex
-        dueDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(cc.dueDateDay).padStart(2, '0')}` // Approximate
+        balance: 0, 
+        dueDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(cc.dueDateDay).padStart(2, '0')}`
       })),
     };
 
@@ -207,7 +207,7 @@ export const addCreditCard = async (creditCardData: NewCreditCardData): Promise<
       id: randomUUID(),
       userId: DEFAULT_USER_ID,
       ...creditCardData,
-      limit: Number(creditCardData.limit), // Ensure limit is a number
+      limit: Number(creditCardData.limit), 
       dueDateDay: Number(creditCardData.dueDateDay),
       closingDateDay: Number(creditCardData.closingDateDay),
       createdAt: Date.now(),
@@ -227,3 +227,17 @@ export const addCreditCard = async (creditCardData: NewCreditCardData): Promise<
     return { success: false, error: "An error occurred while adding the credit card." };
   }
 };
+
+export async function getCreditCardsForUser(): Promise<CreditCard[]> {
+  try {
+    let db = await readDB();
+    db = await ensureDefaultUserStructure(db);
+    const creditCards = db.users[DEFAULT_USER_ID]?.creditCards || [];
+    // Sort by creation date, newest first
+    return creditCards.sort((a, b) => b.createdAt - a.createdAt);
+  } catch (error: any) {
+    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+    console.error(`Error fetching credit cards for default user from local DB:`, errorMessage, error);
+    return [];
+  }
+}

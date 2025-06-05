@@ -32,7 +32,17 @@
         }
       ],
       "loans": [],
-      "creditCards": []
+      "creditCards": [
+        {
+          "id": "63ba4d48-4fb7-4132-977d-a4c285369259",
+          "userId": "default_user",
+          "name": "Nubank",
+          "limit": 9000,
+          "dueDateDay": 3,
+          "closingDateDay": 26,
+          "createdAt": 1749089373252
+        }
+      ]
     }
   }
 }
