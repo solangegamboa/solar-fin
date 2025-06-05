@@ -126,15 +126,21 @@ export default function DashboardPage() {
   };
 
   function CustomDay(props: DayProps) {
-    const dayKey = formatDateFns(props.date, 'yyyy-MM-dd');
-    const daySummary = dailyTransactionSummaries.get(dayKey);
     const dayNumberNode = <>{formatDateFns(props.date, "d")}</>;
 
-    // Render only the day number if it's not in the current display month or has no summary
-    if (!isSameMonth(props.date, props.displayMonth) || !daySummary) {
+    // Render only the day number if it's not in the current display month
+    if (!isSameMonth(props.date, props.displayMonth) ) {
       return dayNumberNode;
     }
     
+    const dayKey = formatDateFns(props.date, 'yyyy-MM-dd');
+    const daySummary = dailyTransactionSummaries.get(dayKey);
+
+    // Render only the day number if it has no summary
+    if (!daySummary) {
+        return dayNumberNode;
+    }
+
     let indicatorColorClass = "";
     if (daySummary.net > 0) indicatorColorClass = "bg-positive";
     else if (daySummary.net < 0) indicatorColorClass = "bg-negative";
@@ -376,14 +382,14 @@ export default function DashboardPage() {
           </p>
         </div>
          <div className="flex items-center justify-center gap-2 sm:gap-4">
-            <Button onClick={handlePreviousMonth} variant="outline" size="sm">
-                <ChevronLeft className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Anterior</span>
+            <Button onClick={handlePreviousMonth} variant="outline" size="icon" aria-label="Mês anterior">
+                <ChevronLeft className="h-5 w-5" />
             </Button>
             <h2 className="text-lg sm:text-xl font-semibold text-center whitespace-nowrap tabular-nums">
                 {formatDateFns(selectedDate, 'MMMM/yyyy', { locale: ptBR })}
             </h2>
-            <Button onClick={handleNextMonth} variant="outline" size="sm">
-                <span className="hidden sm:inline">Próximo</span> <ChevronRight className="h-4 w-4 sm:ml-1" />
+            <Button onClick={handleNextMonth} variant="outline" size="icon" aria-label="Próximo mês">
+                <ChevronRight className="h-5 w-5" />
             </Button>
          </div>
       </div>
