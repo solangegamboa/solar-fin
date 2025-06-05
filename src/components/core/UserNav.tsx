@@ -1,3 +1,4 @@
+
 'use client';
 
 import { LogOut, User as UserIcon } from 'lucide-react';
@@ -16,18 +17,25 @@ import { useAuth } from '@/contexts/AuthContext';
 import { auth } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 
 export function UserNav() {
   const { user } = useAuth();
   const router = useRouter();
+  const { toast } = useToast(); // Initialize useToast
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
       router.push('/login');
-    } catch (error) {
-      console.error('Erro ao fazer logout:', error);
-      // Handle error, maybe show a toast
+    } catch (error: any) {
+      console.error('Erro ao fazer logout:', error?.message || String(error));
+      // Optionally, show a toast to the user
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao Sair',
+        description: 'Não foi possível fazer logout. Tente novamente.',
+      });
     }
   };
 
@@ -64,7 +72,7 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push('/settings')}>
             <UserIcon className="mr-2 h-4 w-4" />
             <span>Perfil</span>
             {/* <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut> */}

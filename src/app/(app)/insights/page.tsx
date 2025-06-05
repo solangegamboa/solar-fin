@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -9,7 +10,7 @@ import { Sparkles, Loader2, AlertTriangle } from 'lucide-react';
 import { generateFinancialInsights, type FinancialDataInput, type FinancialInsightsOutput } from '@/ai/flows/generate-financial-insights';
 import { useToast } from '@/hooks/use-toast';
 // TODO: Import functions to fetch user financial data from Firestore
-// e.g., import { getAllUserFinancialData } from '@/lib/firestore'; 
+// e.g., import { getAllUserFinancialData } from '@/lib/databaseService'; 
 import { useAuth } from '@/contexts/AuthContext';
 
 
@@ -71,7 +72,7 @@ export default function InsightsPage() {
         description: 'Suas dicas financeiras personalizadas estão prontas.',
       });
     } catch (e: any) {
-      console.error('Erro ao gerar insights:', e);
+      console.error('Erro ao gerar insights:', e?.message || String(e));
       setError('Falha ao gerar insights. Tente novamente mais tarde.');
       toast({
         variant: 'destructive',
