@@ -30,8 +30,8 @@ RUN mkdir -p src/data
 ENV NODE_ENV=production
 
 # Create a non-root user and group for security
-RUN addgroup --system --gid 1000 nodejs
-RUN adduser --system --uid 1000 nextjs
+# RUN addgroup --system --gid 1000 nodejs
+# RUN adduser --system --uid 1000 nextjs
 
 # Copy built assets from the builder stage
 # .next e public são os mais importantes para a execução
@@ -46,7 +46,7 @@ COPY --from=builder /app/package.json ./package.json
 # COPY --from=builder /app/next.config.ts ./next.config.ts
 
 # Switch to the non-root user
-USER nodejs
+USER solange
 
 # Expose port 3000 (padrão do Next.js para 'next start')
 EXPOSE 3000
