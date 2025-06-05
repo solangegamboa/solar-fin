@@ -3,7 +3,9 @@ export interface UserProfile {
   uid: string;
   email: string | null;
   displayName?: string | null;
-  // Add other profile fields as needed
+  photoURL?: string | null;
+  createdAt?: number; // Timestamp (Date.now())
+  lastLoginAt?: number; // Timestamp (Date.now())
 }
 
 export type TransactionType = 'income' | 'expense';
@@ -16,7 +18,7 @@ export interface Transaction {
   category: string;
   date: string; // ISO string e.g., "2024-07-15"
   description?: string;
-  createdAt: number; // timestamp (será um número após ser resolvido pelo RTDB)
+  createdAt: number; // Timestamp (Date.now())
 }
 
 export interface Loan {
@@ -55,4 +57,12 @@ export interface CreditCardPurchase {
   purchaseDate: string; // ISO string
   firstPaymentDate: string; // ISO string
   createdAt: number; // timestamp
+}
+
+// This type is used by the AI flow, ensure it's compatible with local data
+export interface FinancialDataInput {
+  income: number;
+  expenses: Array<{ category: string; amount: number }>;
+  loans: Array<{ description: string; amount: number; interestRate: number; monthlyPayment: number }>;
+  creditCards: Array<{ name: string; limit: number; balance: number; dueDate: string }>;
 }

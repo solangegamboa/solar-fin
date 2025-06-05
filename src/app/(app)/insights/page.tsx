@@ -7,47 +7,57 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Sparkles, Loader2, AlertTriangle } from 'lucide-react';
-import { generateFinancialInsights, type FinancialDataInput, type FinancialInsightsOutput } from '@/ai/flows/generate-financial-insights';
+import { generateFinancialInsights, type FinancialInsightsOutput } from '@/ai/flows/generate-financial-insights';
+import type { FinancialDataInput } from '@/types'; // Updated import for FinancialDataInput
 import { useToast } from '@/hooks/use-toast';
-// TODO: Import functions to fetch user financial data from Firestore
-// e.g., import { getAllUserFinancialData } from '@/lib/databaseService'; 
 import { useAuth } from '@/contexts/AuthContext';
+import { getFinancialDataForUser } from '@/lib/databaseService'; // New server action to fetch local data
 
 
 export default function InsightsPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [fetchingData, setFetchingData] = useState(true);
   const [insights, setInsights] = useState<FinancialInsightsOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-
-  // Placeholder for fetching actual financial data
-  // In a real app, this would fetch from Firestore based on the logged-in user
   const [financialData, setFinancialData] = useState<FinancialDataInput | null>(null);
 
   useEffect(() => {
-    // Simulate fetching data when component mounts or user changes
-    if (user) {
-      // This is where you would call your Firestore fetching function
-      // For now, using placeholder data:
-      const placeholderData: FinancialDataInput = {
-        income: 5000, // BRL
-        expenses: [
-          { category: 'Alimentação', amount: 1200 },
-          { category: 'Moradia', amount: 1500 },
-          { category: 'Transporte', amount: 300 },
-          { category: 'Lazer', amount: 500 },
-        ],
-        loans: [
-          { description: 'Empréstimo Pessoal', amount: 10000, interestRate: 0.05, monthlyPayment: 500 },
-        ],
-        creditCards: [
-          { name: 'Cartão Principal', limit: 5000, balance: 1500, dueDate: '2024-08-10' },
-        ],
-      };
-      setFinancialData(placeholderData);
+    async function loadFinancialData() {
+      if (user?.uid) {
+        setFetchingData(true);
+        try {
+          const data = await getFinancialDataForUser(user.uid);
+          if (data) {
+            setFinancialData(data);
+          } else {
+            toast({
+              variant: 'destructive',
+              title: 'Dados Não Encontrados',
+              description: 'Não foi possível carregar seus dados financeiros do arquivo local.',
+            });
+            setFinancialData(null); // Explicitly set to null if not found or error
+          }
+        } catch (e: any) {
+          const errorMessage = (e && typeof e.message === 'string') ? e.message : 'An unknown error occurred while fetching financial data.';
+          console.error('Erro ao buscar dados financeiros locais:', errorMessage);
+          toast({
+            variant: 'destructive',
+            title: 'Erro ao Carregar Dados',
+            description: 'Falha ao buscar seus dados financeiros.',
+          });
+          setFinancialData(null);
+        } finally {
+          setFetchingData(false);
+        }
+      } else {
+        setFetchingData(false);
+        setFinancialData(null); // Clear data if no user
+      }
     }
-  }, [user]);
+    loadFinancialData();
+  }, [user, toast]);
 
 
   const handleGenerateInsights = async () => {
@@ -99,13 +109,18 @@ export default function InsightsPage() {
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>Seus Dados Financeiros (Exemplo)</CardTitle>
+          <CardTitle>Seus Dados Financeiros (do Arquivo Local)</CardTitle>
           <CardDescription>
-            Estes são os dados que serão usados para gerar seus insights. Em uma versão completa, estes dados seriam carregados automaticamente.
+            Estes são os dados que serão usados para gerar seus insights. Eles são carregados do seu arquivo local `db.json`.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {financialData ? (
+          {fetchingData ? (
+            <div className="flex items-center space-x-2">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <p className="text-muted-foreground">Carregando dados financeiros...</p>
+            </div>
+          ) : financialData ? (
             <div className="space-y-2">
               <Label htmlFor="financialDataPreview">Dados para Análise (JSON)</Label>
               <Textarea
@@ -116,9 +131,9 @@ export default function InsightsPage() {
               />
             </div>
           ) : (
-             <p className="text-muted-foreground">Carregando dados financeiros...</p>
+             <p className="text-muted-foreground">Não foi possível carregar os dados financeiros. Verifique se você está logado ou se os dados existem.</p>
           )}
-          <Button onClick={handleGenerateInsights} disabled={loading || !financialData} className="mt-4 w-full md:w-auto">
+          <Button onClick={handleGenerateInsights} disabled={loading || fetchingData || !financialData} className="mt-4 w-full md:w-auto">
             {loading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (

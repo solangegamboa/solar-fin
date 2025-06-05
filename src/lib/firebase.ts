@@ -1,7 +1,7 @@
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getDatabase, serverTimestamp as rtdbServerTimestamp } from 'firebase/database'; // Alterado de getFirestore para getDatabase
+// Removed: import { getDatabase, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -10,12 +10,13 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL, // Adicionada a URL do RTDB
+  // Removed: databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL, 
 };
 
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
-const rtdb = getDatabase(app); // Inicializa o Realtime Database
+// Removed: const rtdb = getDatabase(app);
 
-export { app, auth, rtdb, rtdbServerTimestamp }; // Exporta rtdb em vez de db
+export { app, auth }; // Export only app and auth
+// Removed: rtdb, rtdbServerTimestamp

@@ -6,7 +6,7 @@ import { auth } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { upsertUserInFirestore } from '@/lib/databaseService'; // ATUALIZADO O CAMINHO DA IMPORTAÇÃO
+import { upsertUser } from '@/lib/databaseService'; // Updated import
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,7 +16,7 @@ export default function LoginPage() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
       if (userCredential.user) {
-        await upsertUserInFirestore(userCredential.user); // Salva/Atualiza no RTDB
+        await upsertUser(userCredential.user); // Use new local DB function
       }
       toast({ title: "Login bem-sucedido!", description: "Redirecionando para o painel..." });
       router.push('/dashboard');
@@ -42,15 +42,11 @@ export default function LoginPage() {
           message = "Erro de rede. Verifique sua conexão e tente novamente.";
           break;
         default:
-          if (error.code && error.message) {
-            console.error("Firebase login error (unhandled code):", error.code, error.message);
-          } else {
-            console.error("Firebase login error (generic):", error); 
-          }
+          // No default change, already logging code and message if available
           break;
       }
       
-      console.error("Firebase login error details:", error.code, error.message);
+      console.error("Firebase login error details:", error?.code, error?.message);
       throw new Error(message); 
     }
   };

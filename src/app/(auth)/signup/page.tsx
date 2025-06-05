@@ -6,7 +6,7 @@ import { auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { upsertUserInFirestore } from '@/lib/databaseService'; // ATUALIZADO O CAMINHO DA IMPORTAÇÃO
+import { upsertUser } from '@/lib/databaseService'; // Updated import
 
 export default function SignupPage() {
   const router = useRouter();
@@ -16,7 +16,7 @@ export default function SignupPage() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
       if (userCredential.user) {
-        await upsertUserInFirestore(userCredential.user); // Salva/Atualiza no RTDB
+        await upsertUser(userCredential.user); // Use new local DB function
       }
       toast({ title: "Conta criada com sucesso!", description: "Redirecionando para o painel..." });
       router.push('/dashboard');
@@ -40,15 +40,11 @@ export default function SignupPage() {
           message = "Erro de rede. Verifique sua conexão e tente novamente.";
           break;
         default:
-          if (error.code && error.message) {
-            console.error("Firebase signup error (unhandled code):", error.code, error.message);
-          } else {
-            console.error("Firebase signup error (generic):", error); 
-          }
+          // No default change
           break;
       }
 
-      console.error("Firebase signup error details:", error.code, error.message);
+      console.error("Firebase signup error details:", error?.code, error?.message);
       throw new Error(message); 
     }
   };

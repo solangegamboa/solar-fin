@@ -22,7 +22,7 @@ import { auth } from '@/lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
-import { upsertUserInFirestore } from '@/lib/databaseService';
+import { upsertUser } from '@/lib/databaseService'; // Updated import
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Por favor, insira um email válido.' }),
@@ -82,7 +82,7 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
     try {
       const userCredential = await signInWithPopup(auth, provider);
       if (userCredential.user) {
-        await upsertUserInFirestore(userCredential.user);
+        await upsertUser(userCredential.user); // Use new local DB function
       }
       toast({ title: "Login com Google bem-sucedido!", description: "Redirecionando para o painel..." });
       router.push('/dashboard');
