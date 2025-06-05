@@ -42,19 +42,17 @@ type CreditCardFormValues = z.infer<typeof creditCardFormSchema>;
 interface CreditCardFormProps {
   onSuccess?: () => void;
   setOpen: (open: boolean) => void;
+  userId: string; // Added userId prop
 }
 
-export function CreditCardForm({ onSuccess, setOpen }: CreditCardFormProps) {
-  const { toast } = useToast();
+export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormProps) {
+  const { toast } } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<CreditCardFormValues>({
     resolver: zodResolver(creditCardFormSchema),
     defaultValues: {
       name: '',
-      // Initialize number fields with '' to make them controlled from the start.
-      // Zod's coerce.number will handle conversion.
-      // The 'as unknown as number' is a TypeScript workaround because CreditCardFormValues expects number here.
       limit: '' as unknown as number,
       dueDateDay: '' as unknown as number,
       closingDateDay: '' as unknown as number,
@@ -64,13 +62,13 @@ export function CreditCardForm({ onSuccess, setOpen }: CreditCardFormProps) {
   const onSubmit = async (values: CreditCardFormValues) => {
     setIsSubmitting(true);
 
-    // Values are already numbers due to Zod coercion
     const creditCardData: NewCreditCardData = {
       ...values,
     };
 
     try {
-      const result: AddCreditCardResult = await addCreditCard(creditCardData);
+      // Pass userId to addCreditCard
+      const result: AddCreditCardResult = await addCreditCard(userId, creditCardData);
 
       if (result.success && result.creditCardId) {
         toast({

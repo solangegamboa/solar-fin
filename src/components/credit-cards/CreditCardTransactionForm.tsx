@@ -51,12 +51,14 @@ interface CreditCardTransactionFormProps {
   userCreditCards: CreditCard[];
   onSuccess?: () => void;
   setOpen: (open: boolean) => void;
+  userId: string; // Added userId prop
 }
 
 export function CreditCardTransactionForm({
   userCreditCards,
   onSuccess,
   setOpen,
+  userId, // Destructure userId
 }: CreditCardTransactionFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,10 +70,8 @@ export function CreditCardTransactionForm({
       date: new Date(),
       description: '',
       category: '',
-      // Initialize number fields with '' to make them controlled from the start.
-      // Zod's coerce.number will handle conversion.
       totalAmount: '' as unknown as number,
-      installments: 1, // Default to 1, already a number, so it's fine.
+      installments: 1,
     },
   });
 
@@ -79,12 +79,13 @@ export function CreditCardTransactionForm({
     setIsSubmitting(true);
 
     const purchaseData: NewCreditCardPurchaseData = {
-      ...values, // Values are already numbers for totalAmount and installments due to Zod
+      ...values,
       date: format(values.date, 'yyyy-MM-dd'), 
     };
 
     try {
-      const result: AddCreditCardPurchaseResult = await addCreditCardPurchase(purchaseData);
+      // Pass userId to addCreditCardPurchase
+      const result: AddCreditCardPurchaseResult = await addCreditCardPurchase(userId, purchaseData);
 
       if (result.success && result.purchaseId) {
         toast({

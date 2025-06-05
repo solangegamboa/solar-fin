@@ -22,19 +22,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, Landmark, CalendarDays, Trash2, Loader2, AlertTriangleIcon, SearchX, Edit3, TrendingUp, TrendingDown, CircleDollarSign, ReceiptText, Info } from "lucide-react";
+import { PlusCircle, Landmark, CalendarDays, Trash2, Loader2, AlertTriangleIcon, SearchX, Info, TrendingUp, TrendingDown, CircleDollarSign, ReceiptText } from "lucide-react";
 import { LoanForm } from "@/components/loans/LoanForm";
 import type { Loan } from "@/types";
 import { getLoansForUser, deleteLoan } from "@/lib/databaseService";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency, cn } from "@/lib/utils"; // Added cn import
+import { formatCurrency, cn } from "@/lib/utils";
 import { format, parseISO, isPast, isFuture, differenceInMonths, addMonths, getDaysInMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
+import { useAuth } from "@/contexts/AuthContext";
 
 interface LoanProgressInfo {
   progress: number;
@@ -48,24 +48,25 @@ interface LoanProgressInfo {
   isUpcoming: boolean;
 }
 
-
 export default function LoansPage() {
+  const { user, loading: authLoading } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const [loanToEdit, setLoanToEdit] = useState<Loan | null>(null); // Editing not implemented yet
+  const [loanToEdit, setLoanToEdit] = useState<Loan | null>(null);
   const [loanToDelete, setLoanToDelete] = useState<Loan | null>(null);
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
 
   const fetchUserLoans = useCallback(async () => {
+    if (!user) return;
     setIsLoading(true);
     setError(null);
     try {
-      const userLoans = await getLoansForUser();
+      const userLoans = await getLoansForUser(user.id);
       setLoans(userLoans);
     } catch (e: any) {
       const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Falha ao carregar empréstimos.';
@@ -75,11 +76,13 @@ export default function LoansPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, user]);
 
   useEffect(() => {
-    fetchUserLoans();
-  }, [fetchUserLoans]);
+    if (user && !authLoading) {
+      fetchUserLoans();
+    }
+  }, [fetchUserLoans, user, authLoading]);
 
   const handleLoanAddedOrUpdated = () => {
     setIsModalOpen(false);
@@ -88,7 +91,7 @@ export default function LoansPage() {
   };
   
   const openAddModal = () => {
-    setLoanToEdit(null); // Ensure we are adding, not editing
+    setLoanToEdit(null);
     setIsModalOpen(true);
   };
 
@@ -98,12 +101,12 @@ export default function LoansPage() {
   };
 
   const confirmDeleteLoan = async () => {
-    if (!loanToDelete) return;
+    if (!loanToDelete || !user) return;
     setIsDeletingId(loanToDelete.id);
     setShowDeleteConfirmDialog(false);
 
     try {
-      const result = await deleteLoan(loanToDelete.id);
+      const result = await deleteLoan(user.id, loanToDelete.id);
       if (result.success) {
         toast({
           title: 'Empréstimo Excluído!',
@@ -133,7 +136,7 @@ export default function LoansPage() {
   
   const calculateLoanProgress = (loan: Loan): LoanProgressInfo => {
     const startDate = parseISO(loan.startDate);
-    const endDate = parseISO(loan.endDate); // This is now the calculated end date
+    const endDate = parseISO(loan.endDate);
     const today = new Date();
     
     const totalInstallments = loan.installmentsCount;
@@ -148,22 +151,19 @@ export default function LoansPage() {
       progress = 0;
       monthsPassed = 0;
       isUpcoming = true;
-    } else if (isPast(endDate)) {
+    } else if (isPast(endDate) || today > endDate) { // Consider concluded if today is past end date
       status = "Concluído";
       progress = 100;
       monthsPassed = totalInstallments;
     } else {
       status = "Em andamento";
-      // Calculate months passed since the start date up to today
-      // Ensure today's month is counted if the start date's day has passed or is today
       monthsPassed = differenceInMonths(today, startDate);
       const dayOfToday = today.getDate();
       const dayOfStartDate = startDate.getDate();
       
-      if (dayOfToday >= dayOfStartDate) {
+      if (dayOfToday >= dayOfStartDate || today > startDate) { // ensure current month counted if start day passed or if it's a future month past start date
         monthsPassed +=1;
       }
-      // Clamp monthsPassed
       monthsPassed = Math.max(0, Math.min(monthsPassed, totalInstallments));
       progress = (monthsPassed / totalInstallments) * 100;
     }
@@ -185,15 +185,18 @@ export default function LoansPage() {
     };
   };
 
+  if (authLoading || isLoading && !loans.length) { // Show loader if auth is loading OR data is loading initially
+    return <div className="flex items-center justify-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
+  }
 
   const renderLoanList = () => {
-    if (isLoading) {
+    if (isLoading && loans.length === 0 && !authLoading) { // specific loading state for loans after auth
       return <div className="flex items-center justify-center h-64 col-span-full"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando empréstimos...</p></div>;
     }
     if (error) {
       return <div className="flex flex-col items-center justify-center h-64 text-destructive col-span-full"><AlertTriangleIcon className="h-12 w-12 mb-3" /><p className="text-lg font-semibold">{error}</p></div>;
     }
-    if (loans.length === 0) {
+    if (loans.length === 0 && !isLoading) {
       return <div className="flex flex-col items-center justify-center h-64 text-muted-foreground col-span-full"><SearchX className="h-12 w-12 mb-3" /><p className="text-lg">Nenhum empréstimo encontrado.</p><p className="text-sm">Adicione um novo empréstimo para começar.</p></div>;
     }
 
@@ -212,10 +215,6 @@ export default function LoansPage() {
       const formattedStartDate = format(parseISO(loan.startDate), 'dd/MM/yyyy', { locale: ptBR });
       const formattedEndDate = format(parseISO(loan.endDate), 'dd/MM/yyyy', { locale: ptBR });
 
-      let statusColor = "bg-yellow-500";
-      if (status === "Concluído") statusColor = "bg-green-500";
-      else if (status === "A iniciar") statusColor = "bg-blue-500";
-
       return (
         <Card key={loan.id} className="shadow-md hover:shadow-lg transition-shadow flex flex-col">
           <CardHeader>
@@ -225,7 +224,7 @@ export default function LoansPage() {
                 <CardDescription>{loan.description}</CardDescription>
               </div>
               <div className="flex gap-1">
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive/90" onClick={() => handleDeleteLoan(loan)} disabled={isDeletingId === loan.id}>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive/90" onClick={() => handleDeleteLoan(loan)} disabled={isDeletingId === loan.id || !user}>
                   {isDeletingId === loan.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 </Button>
               </div>
@@ -304,7 +303,7 @@ export default function LoansPage() {
         </div>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogTrigger asChild>
-            <Button onClick={openAddModal} className="w-full sm:w-auto">
+            <Button onClick={openAddModal} className="w-full sm:w-auto" disabled={!user}>
               <PlusCircle className="mr-2 h-4 w-4" />
               Novo Empréstimo
             </Button>
@@ -316,11 +315,12 @@ export default function LoansPage() {
                 Preencha os detalhes do seu empréstimo. A data final será calculada automaticamente.
               </DialogDescription>
             </DialogHeader>
-            <LoanForm 
+            {user && <LoanForm 
               onSuccess={handleLoanAddedOrUpdated} 
               setOpen={setIsModalOpen} 
               existingLoan={loanToEdit}
-            />
+              userId={user.id}
+            />}
           </DialogContent>
         </Dialog>
       </div>
@@ -341,7 +341,7 @@ export default function LoansPage() {
             <AlertDialogCancel onClick={() => setLoanToDelete(null)} disabled={!!isDeletingId}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDeleteLoan}
-              disabled={!!isDeletingId}
+              disabled={!!isDeletingId || !user}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeletingId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -350,11 +350,7 @@ export default function LoansPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
     </div>
     </TooltipProvider>
   );
 }
-
-
-    

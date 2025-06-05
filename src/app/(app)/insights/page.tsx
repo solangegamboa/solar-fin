@@ -1,61 +1,66 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Sparkles, Loader2, AlertTriangle } from 'lucide-react';
 import { generateFinancialInsights, type FinancialInsightsOutput } from '@/ai/flows/generate-financial-insights';
-import type { FinancialDataInput } from '@/types';
+import type { FinancialDataInput } from '@/types'; // This type is for the AI flow input
 import { useToast } from '@/hooks/use-toast';
-// useAuth is still used to get the (now mock) user, though the server action doesn't need userId passed
 import { useAuth } from '@/contexts/AuthContext'; 
 import { getFinancialDataForUser } from '@/lib/databaseService';
 
 
 export default function InsightsPage() {
-  const { user } = useAuth(); // Gets the mock user
-  const [loading, setLoading] = useState(false);
-  const [fetchingData, setFetchingData] = useState(true);
+  const { user, loading: authLoading } = useAuth();
+  const [loading, setLoading] = useState(false); // For AI generation
+  const [fetchingData, setFetchingData] = useState(true); // For fetching user financial data
   const [insights, setInsights] = useState<FinancialInsightsOutput | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null); // For AI generation error
   const { toast } = useToast();
-  const [financialData, setFinancialData] = useState<FinancialDataInput | null>(null);
+  const [financialData, setFinancialData] = useState<FinancialDataInput | null>(null); // Data used for AI
 
-  useEffect(() => {
-    async function loadFinancialData() {
-      // No specific user ID check is needed as getFinancialDataForUser now uses default user
-      setFetchingData(true);
-      try {
-        // getFinancialDataForUser now doesn't need userId passed from client
-        const data = await getFinancialDataForUser(); 
-        if (data) {
-          setFinancialData(data);
-        } else {
-          toast({
-            variant: 'destructive',
-            title: 'Dados Não Encontrados',
-            description: 'Não foi possível carregar seus dados financeiros do arquivo local.',
-          });
-          setFinancialData(null);
-        }
-      } catch (e: any) {
-        const errorMessage = (e && typeof e.message === 'string') ? e.message : 'An unknown error occurred while fetching financial data.';
-        console.error('Erro ao buscar dados financeiros locais:', errorMessage);
+  const loadFinancialData = useCallback(async () => {
+    if (!user) {
+      setFetchingData(false);
+      setFinancialData(null);
+      return;
+    }
+    setFetchingData(true);
+    try {
+      const data = await getFinancialDataForUser(user.id); 
+      if (data) {
+        setFinancialData(data);
+      } else {
         toast({
           variant: 'destructive',
-          title: 'Erro ao Carregar Dados',
-          description: 'Falha ao buscar seus dados financeiros.',
+          title: 'Dados Não Encontrados',
+          description: 'Não foi possível carregar seus dados financeiros.',
         });
         setFinancialData(null);
-      } finally {
-        setFetchingData(false);
       }
+    } catch (e: any) {
+      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'An unknown error occurred.';
+      console.error('Erro ao buscar dados financeiros:', errorMessage);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao Carregar Dados',
+        description: 'Falha ao buscar seus dados financeiros.',
+      });
+      setFinancialData(null);
+    } finally {
+      setFetchingData(false);
     }
-    loadFinancialData();
-  }, [toast]); // Removed user from dependencies as it's static
+  }, [user, toast]);
+
+  useEffect(() => {
+    if (!authLoading) { // Only load data once auth status is resolved
+        loadFinancialData();
+    }
+  }, [authLoading, loadFinancialData]);
 
 
   const handleGenerateInsights = async () => {
@@ -67,20 +72,28 @@ export default function InsightsPage() {
       });
       return;
     }
+    if (!user) {
+      toast({
+        variant: 'destructive',
+        title: 'Usuário não autenticado',
+        description: 'Por favor, faça login para gerar insights.',
+      });
+      return;
+    }
 
     setLoading(true);
     setError(null);
     setInsights(null);
 
     try {
-      const result = await generateFinancialInsights(financialData);
+      const result = await generateFinancialInsights(financialData); // financialData is already user-specific
       setInsights(result);
       toast({
         title: 'Insights Gerados!',
         description: 'Suas dicas financeiras personalizadas estão prontas.',
       });
     } catch (e: any) {
-      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'An unknown error occurred while generating insights.';
+      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'An unknown error occurred.';
       console.error('Erro ao gerar insights:', errorMessage);
       setError('Falha ao gerar insights. Tente novamente mais tarde.');
       toast({
@@ -92,6 +105,14 @@ export default function InsightsPage() {
       setLoading(false);
     }
   };
+  
+  if (authLoading) {
+    return <div className="flex items-center justify-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
+  }
+  if (!user && !authLoading) {
+    return <div className="flex flex-col items-center justify-center h-64 text-muted-foreground"><AlertTriangle className="h-12 w-12 mb-3" /><p className="text-lg">Por favor, faça login para acessar esta página.</p></div>;
+  }
+
 
   return (
     <div className="space-y-8">
@@ -107,9 +128,9 @@ export default function InsightsPage() {
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>Seus Dados Financeiros (do Arquivo Local)</CardTitle>
+          <CardTitle>Seus Dados Financeiros</CardTitle>
           <CardDescription>
-            Estes são os dados que serão usados para gerar seus insights. Eles são carregados do seu arquivo local `db.json`.
+            Estes são os dados que serão usados para gerar seus insights. Eles são baseados nas suas transações, empréstimos e cartões registrados.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -129,9 +150,9 @@ export default function InsightsPage() {
               />
             </div>
           ) : (
-             <p className="text-muted-foreground">Não foi possível carregar os dados financeiros.</p>
+             <p className="text-muted-foreground">Não foi possível carregar os dados financeiros. Verifique se você registrou transações, empréstimos e cartões.</p>
           )}
-          <Button onClick={handleGenerateInsights} disabled={loading || fetchingData || !financialData} className="mt-4 w-full md:w-auto">
+          <Button onClick={handleGenerateInsights} disabled={loading || fetchingData || !financialData || !user} className="mt-4 w-full md:w-auto">
             {loading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (

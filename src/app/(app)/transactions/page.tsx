@@ -39,8 +39,10 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function TransactionsPage() {
+  const { user, loading: authLoading } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,10 +54,11 @@ export default function TransactionsPage() {
   const { toast } = useToast();
 
   const fetchUserTransactions = useCallback(async () => {
+    if (!user) return;
     setIsLoading(true);
     setError(null);
     try {
-      const userTransactions = await getTransactionsForUser();
+      const userTransactions = await getTransactionsForUser(user.id);
       setTransactions(userTransactions);
     } catch (e: any) {
       const errorMessage = (e && typeof e.message === 'string') ? e.message : 'An unknown error occurred.';
@@ -69,17 +72,20 @@ export default function TransactionsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, user]);
 
   useEffect(() => {
-    fetchUserTransactions();
-  }, [fetchUserTransactions]);
+    if (user && !authLoading) {
+      fetchUserTransactions();
+    }
+  }, [fetchUserTransactions, user, authLoading]);
 
   const handleTransactionAdded = () => {
     fetchUserTransactions(); 
   };
 
   const handleDuplicateTransaction = async (transaction: Transaction) => {
+    if (!user) return;
     setIsDuplicatingId(transaction.id);
     try {
       const newTransactionData: NewTransactionData = {
@@ -91,7 +97,7 @@ export default function TransactionsPage() {
         isRecurring: transaction.isRecurring,
       };
 
-      const result = await addTransaction(newTransactionData);
+      const result = await addTransaction(user.id, newTransactionData);
 
       if (result.success) {
         toast({
@@ -125,12 +131,12 @@ export default function TransactionsPage() {
   };
 
   const confirmDeleteTransaction = async () => {
-    if (!transactionToDelete) return;
+    if (!transactionToDelete || !user) return;
     setIsDeletingId(transactionToDelete.id);
     setShowDeleteConfirmDialog(false);
 
     try {
-      const result = await deleteTransaction(transactionToDelete.id);
+      const result = await deleteTransaction(user.id, transactionToDelete.id);
       if (result.success) {
         toast({
           title: 'Transação Excluída!',
@@ -158,9 +164,13 @@ export default function TransactionsPage() {
     }
   };
 
+  if (authLoading || isLoading && !transactions.length ) {
+    return <div className="flex items-center justify-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
+  }
+
 
   const renderTransactionRows = () => {
-    if (transactions.length === 0) {
+    if (transactions.length === 0 && !isLoading) {
       return (
         <TableRow>
           <TableCell colSpan={7} className="h-24 text-center">
@@ -205,7 +215,7 @@ export default function TransactionsPage() {
               variant="ghost"
               size="icon"
               onClick={() => handleDuplicateTransaction(transaction)}
-              disabled={isDuplicatingId === transaction.id || !!isDeletingId}
+              disabled={isDuplicatingId === transaction.id || !!isDeletingId || !user}
               aria-label="Duplicar transação"
               className="h-8 w-8"
             >
@@ -220,7 +230,7 @@ export default function TransactionsPage() {
               variant="ghost"
               size="icon"
               onClick={() => handleDeleteTransaction(transaction)}
-              disabled={isDeletingId === transaction.id || !!isDuplicatingId}
+              disabled={isDeletingId === transaction.id || !!isDuplicatingId || !user}
               aria-label="Excluir transação"
               className="h-8 w-8 text-destructive hover:text-destructive/80"
             >
@@ -246,7 +256,7 @@ export default function TransactionsPage() {
         </div>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto">
+            <Button className="w-full sm:w-auto" disabled={!user}>
               <PlusCircle className="mr-2 h-4 w-4" />
               Nova Transação
             </Button>
@@ -258,7 +268,8 @@ export default function TransactionsPage() {
                 Preencha os detalhes da sua transação abaixo.
               </DialogDescription>
             </DialogHeader>
-            <TransactionForm onSuccess={handleTransactionAdded} setOpen={setIsModalOpen} />
+            {/* Pass userId to TransactionForm */}
+            {user && <TransactionForm onSuccess={handleTransactionAdded} setOpen={setIsModalOpen} userId={user.id} />}
           </DialogContent>
         </Dialog>
       </div>
@@ -269,7 +280,7 @@ export default function TransactionsPage() {
           <CardDescription>Veja todas as suas movimentações financeiras.</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isLoading && transactions.length === 0 ? ( // Show general loading if initial load
             <div className="h-[300px] flex items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="ml-2 text-muted-foreground">Carregando transações...</p>
@@ -313,7 +324,7 @@ export default function TransactionsPage() {
             <AlertDialogCancel onClick={() => setTransactionToDelete(null)} disabled={!!isDeletingId}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDeleteTransaction}
-              disabled={!!isDeletingId}
+              disabled={!!isDeletingId || !user}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeletingId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -322,11 +333,6 @@ export default function TransactionsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
     </div>
   );
 }
-
-    
-
-    

@@ -35,7 +35,7 @@ const loanFormSchema = z.object({
     .number({ invalid_type_error: 'A quantidade de parcelas deve ser um número.', required_error: 'A quantidade de parcelas é obrigatória.' })
     .int({ message: 'A quantidade de parcelas deve ser um número inteiro.' })
     .min(1, { message: 'A quantidade de parcelas deve ser no mínimo 1.' })
-    .max(360, { message: 'A quantidade de parcelas não pode exceder 360 (30 anos).'}) // Max 30 years
+    .max(360, { message: 'A quantidade de parcelas não pode exceder 360 (30 anos).'})
 });
 
 type LoanFormValues = z.infer<typeof loanFormSchema>;
@@ -44,9 +44,10 @@ interface LoanFormProps {
   onSuccess?: () => void;
   setOpen: (open: boolean) => void;
   existingLoan?: Loan | null; 
+  userId: string; // Added userId prop
 }
 
-export function LoanForm({ onSuccess, setOpen, existingLoan }: LoanFormProps) {
+export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -68,10 +69,7 @@ export function LoanForm({ onSuccess, setOpen, existingLoan }: LoanFormProps) {
 
   const onSubmit = async (values: LoanFormValues) => {
     setIsSubmitting(true);
-
-    // Editing is not yet supported, this form currently only adds new loans.
-    // If editing were supported, we'd calculate endDate for existingLoan too.
-    // For new loans, endDate is calculated in addLoan server action.
+    
     const loanData: NewLoanData = {
       bankName: values.bankName,
       description: values.description,
@@ -81,11 +79,11 @@ export function LoanForm({ onSuccess, setOpen, existingLoan }: LoanFormProps) {
     };
 
     try {
-      // For now, only adding is implemented. Editing would require an updateLoan function.
+      // For now, only adding is implemented.
       // if (existingLoan) {
-      // Call updateLoan if it existed
+      //   // Call updateLoan(userId, existingLoan.id, loanData) if it existed
       // } else {
-      const result = await addLoan(loanData); // addLoan now calculates endDate
+      const result = await addLoan(userId, loanData);
       if (result.success && result.loanId) {
         toast({
           title: 'Sucesso!',
@@ -191,7 +189,7 @@ export function LoanForm({ onSuccess, setOpen, existingLoan }: LoanFormProps) {
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isSubmitting || !!existingLoan}> {/* Disable submit for existingLoan until edit is implemented */}
+          <Button type="submit" disabled={isSubmitting || !!existingLoan}>
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -207,4 +205,3 @@ export function LoanForm({ onSuccess, setOpen, existingLoan }: LoanFormProps) {
     </Form>
   );
 }
-

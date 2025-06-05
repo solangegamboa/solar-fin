@@ -12,7 +12,7 @@ import bcrypt from 'bcryptjs';
 const DB_PATH = path.join(process.cwd(), 'src', 'data', 'db.json');
 
 // --- PostgreSQL Schemas (Conceptual) ---
-// CREATE TABLE app_users ( -- Renamed from users to avoid conflict with pg_catalog.pg_user
+// CREATE TABLE app_users (
 //   id UUID PRIMARY KEY,
 //   email TEXT UNIQUE NOT NULL,
 //   display_name TEXT,
@@ -50,7 +50,7 @@ const DB_PATH = path.join(process.cwd(), 'src', 'data', 'db.json');
 //   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 //   user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
 //   name TEXT NOT NULL,
-//   limit_amount NUMERIC(12, 2) NOT NULL, 
+//   limit_amount NUMERIC(12, 2) NOT NULL,
 //   due_date_day INTEGER NOT NULL,
 //   closing_date_day INTEGER NOT NULL,
 //   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -60,7 +60,7 @@ const DB_PATH = path.join(process.cwd(), 'src', 'data', 'db.json');
 //   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 //   user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
 //   card_id UUID REFERENCES credit_cards(id) ON DELETE CASCADE,
-//   purchase_date DATE NOT NULL, 
+//   purchase_date DATE NOT NULL,
 //   description TEXT NOT NULL,
 //   category TEXT NOT NULL,
 //   total_amount NUMERIC(12, 2) NOT NULL,
@@ -69,7 +69,7 @@ const DB_PATH = path.join(process.cwd(), 'src', 'data', 'db.json');
 // );
 
 interface UserRecord extends UserProfile {
-  hashedPassword?: string; // Only for internal use, not sent to client
+  hashedPassword?: string;
   transactions: Transaction[];
   loans: Loan[];
   creditCards: CreditCard[];
@@ -77,7 +77,7 @@ interface UserRecord extends UserProfile {
 }
 interface LocalDB {
   users: {
-    [userId: string]: UserRecord; // UserID is the key
+    [userId: string]: UserRecord;
   };
 }
 
@@ -100,7 +100,6 @@ async function readDB(): Promise<LocalDB> {
     return JSON.parse(data) as LocalDB;
   } catch (error: any) {
     if (error.code === 'ENOENT') {
-      // If db.json doesn't exist, create it with an empty users object
       const initialDb: LocalDB = { users: {} };
       await writeDB(initialDb);
       console.log('Created empty db.json.');
@@ -120,11 +119,18 @@ async function writeDB(data: LocalDB): Promise<void> {
   }
 }
 
-// --- User Management Functions ---
 export async function createUser(email: string, password_plain: string, displayName?: string): Promise<UserProfile | null> {
   const hashedPassword = await bcrypt.hash(password_plain, 10);
   const userId = randomUUID();
   const now = Date.now();
+
+  const newUserProfile: UserProfile = {
+    id: userId,
+    email,
+    displayName: displayName || email.split('@')[0],
+    createdAt: now,
+    lastLoginAt: now,
+  };
 
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
@@ -132,10 +138,17 @@ export async function createUser(email: string, password_plain: string, displayN
         'INSERT INTO app_users (id, email, hashed_password, display_name, created_at, last_login_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, display_name, created_at, last_login_at',
         [userId, email, hashedPassword, displayName || null, new Date(now), new Date(now)]
       );
-      return res.rows[0] as UserProfile;
+      const dbUser = res.rows[0];
+      return {
+        id: dbUser.id,
+        email: dbUser.email,
+        displayName: dbUser.display_name,
+        createdAt: new Date(dbUser.created_at).getTime(),
+        lastLoginAt: new Date(dbUser.last_login_at).getTime(),
+      };
     } catch (error: any) {
       console.error('Error creating user in PostgreSQL:', error.message);
-      if (error.code === '23505') { // Unique violation
+      if (error.code === '23505') {
         throw new Error('User with this email already exists.');
       }
       throw new Error('Could not create user in PostgreSQL.');
@@ -145,13 +158,6 @@ export async function createUser(email: string, password_plain: string, displayN
     if (Object.values(db.users).find(u => u.profile.email === email)) {
       throw new Error('User with this email already exists.');
     }
-    const newUserProfile: UserProfile = {
-      id: userId,
-      email,
-      displayName: displayName || email.split('@')[0],
-      createdAt: now,
-      lastLoginAt: now,
-    };
     db.users[userId] = {
       profile: newUserProfile,
       hashedPassword,
@@ -170,7 +176,6 @@ export async function findUserByEmail(email: string): Promise<(UserProfile & { h
     try {
       const res = await pool.query('SELECT id, email, display_name as "displayName", hashed_password as "hashedPassword", created_at as "createdAt", last_login_at as "lastLoginAt" FROM app_users WHERE email = $1', [email]);
       if (res.rows.length === 0) return null;
-      // Convert date fields if necessary
       const user = res.rows[0];
       user.createdAt = new Date(user.createdAt).getTime();
       user.lastLoginAt = new Date(user.lastLoginAt).getTime();
@@ -181,10 +186,9 @@ export async function findUserByEmail(email: string): Promise<(UserProfile & { h
     }
   } else {
     const db = await readDB();
-    const foundUserEntry = Object.entries(db.users).find(([, u]) => u.profile.email === email);
+    const foundUserEntry = Object.values(db.users).find(u => u.profile.email === email);
     if (!foundUserEntry) return null;
-    const [id, userData] = foundUserEntry;
-    return { ...userData.profile, id, hashedPassword: userData.hashedPassword };
+    return { ...foundUserEntry.profile, hashedPassword: foundUserEntry.hashedPassword };
   }
 }
 
@@ -219,15 +223,13 @@ export async function updateUserLastLogin(userId: string): Promise<void> {
         }
     } else {
         const db = await readDB();
-        if (db.users[userId]) {
+        if (db.users[userId] && db.users[userId].profile) {
             db.users[userId].profile.lastLoginAt = now.getTime();
             await writeDB(db);
         }
     }
 }
 
-
-// --- Transaction Functions (Adapted for multi-user) ---
 export interface AddTransactionResult {
   success: boolean;
   transactionId?: string;
@@ -255,15 +257,11 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
   } else {
     const db = await readDB();
     if (!db.users[userId]) {
-        // Optionally create user structure if it doesn't exist, or throw error
-        console.warn(`User ${userId} not found in local DB for addTransaction. Creating structure.`);
-        db.users[userId] = { 
-            profile: { id: userId, email: "unknown@local.db", createdAt: Date.now(), lastLoginAt: Date.now()}, 
-            hashedPassword: "temp-placeholder-password", // Should not happen if user is logged in
-            transactions: [], loans: [], creditCards: [], creditCardPurchases: []
-        };
+        console.error(`User ${userId} not found in local DB for addTransaction.`);
+        return { success: false, error: "User not found." };
     }
-
+    // createUser initializes .transactions, so it should exist.
+    // For extra safety: if (!db.users[userId].transactions) db.users[userId].transactions = [];
     const newTransaction: Transaction = {
       id: randomUUID(), userId, ...transactionData,
       isRecurring: transactionData.isRecurring || false, createdAt: Date.now(),
@@ -330,15 +328,12 @@ export const deleteTransaction = async (userId: string, transactionId: string): 
   }
 };
 
-// --- Placeholder for other data functions (Loans, CreditCards, etc.) ---
-// --- These need to be adapted similarly to accept userId and filter/associate data ---
-
 export async function getFinancialDataForUser(userId: string): Promise<FinancialDataInput | null> {
   if (!userId) return null;
-  // This function needs to be updated to use user-specific data for ALL its sources
+  
   const userTransactions = await getTransactionsForUser(userId);
-  const userLoans = await getLoansForUser(userId); // Assuming this is updated
-  const userCreditCards = await getCreditCardsForUser(userId); // Assuming this is updated
+  const userLoans = await getLoansForUser(userId); 
+  const userCreditCards = await getCreditCardsForUser(userId); 
 
   try {
     const expensesByCategory: { [category: string]: number } = {};
@@ -356,12 +351,13 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
       category,
       amount,
     }));
-    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000;
+    
+    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000; // Fallback for AI if no income
 
     const loansForAI = userLoans.map(loan => ({
       description: `${loan.bankName} - ${loan.description}`,
       amount: loan.installmentAmount * loan.installmentsCount,
-      interestRate: 0,
+      interestRate: 0, // Placeholder, as we don't store this
       monthlyPayment: loan.installmentAmount,
     }));
     
@@ -372,7 +368,7 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
       creditCards: userCreditCards.map(cc => ({
         name: cc.name,
         limit: cc.limit,
-        balance: 0, 
+        balance: 0, // Placeholder, balance is dynamic and not stored directly this way
         dueDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(cc.dueDateDay).padStart(2, '0')}`
       })),
     };
@@ -382,8 +378,6 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
   }
 }
 
-
-// LOANS - TODO: Adapt all loan functions for multi-user like transactions
 export interface AddLoanResult { success: boolean; loanId?: string; error?: string; }
 export const addLoan = async (userId: string, loanData: NewLoanData): Promise<AddLoanResult> => {
    if (!userId) return { success: false, error: "User ID is required." };
@@ -391,9 +385,9 @@ export const addLoan = async (userId: string, loanData: NewLoanData): Promise<Ad
     const endDateObj = addMonths(startDateObj, loanData.installmentsCount -1); 
     const calculatedEndDate = formatDateFns(endDateObj, 'yyyy-MM-dd');
 
+    const newLoanId = randomUUID();
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
-            const newLoanId = randomUUID();
             await pool.query(
                 'INSERT INTO loans (id, user_id, bank_name, description, installment_amount, installments_count, start_date, end_date, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
                 [newLoanId, userId, loanData.bankName, loanData.description, loanData.installmentAmount, loanData.installmentsCount, loanData.startDate, calculatedEndDate, new Date()]
@@ -405,15 +399,20 @@ export const addLoan = async (userId: string, loanData: NewLoanData): Promise<Ad
         }
     } else {
         const db = await readDB();
-        if (!db.users[userId]) { /* handle missing user */ }
+        if (!db.users[userId]) {
+             console.error(`User ${userId} not found in local DB for addLoan.`);
+             return { success: false, error: "User not found." };
+        }
+        // createUser initializes .loans
         const newLoan: Loan = {
-            id: randomUUID(), userId, ...loanData, endDate: calculatedEndDate, createdAt: Date.now(),
+            id: newLoanId, userId, ...loanData, endDate: calculatedEndDate, createdAt: Date.now(),
         };
         db.users[userId].loans.push(newLoan);
         await writeDB(db);
         return { success: true, loanId: newLoan.id };
     }
 };
+
 export async function getLoansForUser(userId: string): Promise<Loan[]> {
     if (!userId) return [];
     if (DATABASE_MODE === 'postgres' && pool) {
@@ -430,21 +429,30 @@ export async function getLoansForUser(userId: string): Promise<Loan[]> {
                 installmentsCount: Number(loan.installmentsCount)
             }));
         } catch (error:any) {
-            console.error('Error fetching loans from PG:', error.message); return [];
+            console.error(`Error fetching loans for user ${userId} from PG:`, error.message); return [];
         }
     } else {
         const db = await readDB();
-        return db.users[userId]?.loans.sort((a,b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime()) || [];
+        const userData = db.users[userId];
+        if (!userData || !userData.loans) return [];
+        return userData.loans.sort((a,b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime());
     }
 }
+
 export const deleteLoan = async (userId: string, loanId: string): Promise<DeleteResult> => {
     if (!userId) return { success: false, error: "User ID required." };
     if (DATABASE_MODE === 'postgres' && pool) {
-        const res = await pool.query('DELETE FROM loans WHERE id = $1 AND user_id = $2', [loanId, userId]);
-        return { success: res.rowCount > 0 };
+       try {
+            const res = await pool.query('DELETE FROM loans WHERE id = $1 AND user_id = $2', [loanId, userId]);
+            if (res.rowCount === 0) return { success: false, error: "Loan not found or not owned by user." };
+            return { success: true };
+        } catch (error: any) {
+            console.error("Error deleting loan from PostgreSQL:", error.message);
+            return { success: false, error: "Database error deleting loan." };
+        }
     } else {
         const db = await readDB();
-        if (!db.users[userId]?.loans) return { success: false, error: "User loans not found."};
+        if (!db.users[userId] || !db.users[userId].loans) return { success: false, error: "User loans not found."};
         const initialLength = db.users[userId].loans.length;
         db.users[userId].loans = db.users[userId].loans.filter(l => l.id !== loanId);
         if (db.users[userId].loans.length === initialLength) return { success: false, error: "Loan not found."};
@@ -453,73 +461,112 @@ export const deleteLoan = async (userId: string, loanId: string): Promise<Delete
     }
 };
 
-// CREDIT CARDS - TODO: Adapt all credit card functions for multi-user
 export interface AddCreditCardResult { success: boolean; creditCardId?: string; error?: string; }
 export const addCreditCard = async (userId: string, cardData: NewCreditCardData): Promise<AddCreditCardResult> => {
     if (!userId) return { success: false, error: "User ID required." };
     const newCardId = randomUUID();
     if (DATABASE_MODE === 'postgres' && pool) {
-        await pool.query(
-            'INSERT INTO credit_cards (id, user_id, name, limit_amount, due_date_day, closing_date_day, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-            [newCardId, userId, cardData.name, cardData.limit, cardData.dueDateDay, cardData.closingDateDay, new Date()]
-        );
-        return { success: true, creditCardId: newCardId };
+       try {
+            await pool.query(
+                'INSERT INTO credit_cards (id, user_id, name, limit_amount, due_date_day, closing_date_day, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                [newCardId, userId, cardData.name, cardData.limit, cardData.dueDateDay, cardData.closingDateDay, new Date()]
+            );
+            return { success: true, creditCardId: newCardId };
+        } catch (error: any) {
+            console.error("Error adding credit card to PostgreSQL:", error.message);
+            return { success: false, error: "Database error adding credit card." };
+        }
     } else {
         const db = await readDB();
-        if (!db.users[userId]) { /* handle missing user */ }
+        if (!db.users[userId]) {
+            console.error(`User ${userId} not found in local DB for addCreditCard.`);
+            return { success: false, error: "User not found." };
+        }
+        // createUser initializes .creditCards
         const newCard: CreditCard = { id: newCardId, userId, ...cardData, createdAt: Date.now() };
         db.users[userId].creditCards.push(newCard);
         await writeDB(db);
         return { success: true, creditCardId: newCardId };
     }
 };
+
 export async function getCreditCardsForUser(userId: string): Promise<CreditCard[]> {
      if (!userId) return [];
     if (DATABASE_MODE === 'postgres' && pool) {
-        const res = await pool.query<CreditCard>('SELECT id, user_id as "userId", name, limit_amount as "limit", due_date_day as "dueDateDay", closing_date_day as "closingDateDay", created_at as "createdAt" FROM credit_cards WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
-        return res.rows.map(cc => ({ ...cc, limit: Number(cc.limit) }));
+        try {
+            const res = await pool.query<CreditCard>('SELECT id, user_id as "userId", name, limit_amount as "limit", due_date_day as "dueDateDay", closing_date_day as "closingDateDay", created_at as "createdAt" FROM credit_cards WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
+            return res.rows.map(cc => ({ ...cc, limit: Number(cc.limit) }));
+        } catch (error: any) {
+            console.error(`Error fetching credit cards for user ${userId} from PG:`, error.message); return [];
+        }
     } else {
         const db = await readDB();
-        return db.users[userId]?.creditCards.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)) || [];
+        const userData = db.users[userId];
+        if (!userData || !userData.creditCards) return [];
+        return userData.creditCards.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
     }
 }
+
 export interface AddCreditCardPurchaseResult { success: boolean; purchaseId?: string; error?: string; }
 export const addCreditCardPurchase = async (userId: string, purchaseData: NewCreditCardPurchaseData): Promise<AddCreditCardPurchaseResult> => {
     if (!userId) return { success: false, error: "User ID required." };
     const newPurchaseId = randomUUID();
     if (DATABASE_MODE === 'postgres' && pool) {
-        await pool.query(
-            'INSERT INTO credit_card_purchases (id, user_id, card_id, purchase_date, description, category, total_amount, installments, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-            [newPurchaseId, userId, purchaseData.cardId, purchaseData.date, purchaseData.description, purchaseData.category, purchaseData.totalAmount, purchaseData.installments, new Date()]
-        );
-        return { success: true, purchaseId: newPurchaseId };
+        try {
+            await pool.query(
+                'INSERT INTO credit_card_purchases (id, user_id, card_id, purchase_date, description, category, total_amount, installments, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                [newPurchaseId, userId, purchaseData.cardId, purchaseData.date, purchaseData.description, purchaseData.category, purchaseData.totalAmount, purchaseData.installments, new Date()]
+            );
+            return { success: true, purchaseId: newPurchaseId };
+        } catch (error: any) {
+            console.error("Error adding credit card purchase to PostgreSQL:", error.message);
+            return { success: false, error: "Database error adding credit card purchase." };
+        }
     } else {
         const db = await readDB();
-        if (!db.users[userId]) { /* handle missing user */ }
+        if (!db.users[userId]) {
+            console.error(`User ${userId} not found in local DB for addCreditCardPurchase.`);
+            return { success: false, error: "User not found." };
+        }
+        // createUser initializes .creditCardPurchases
         const newPurchase: CreditCardPurchase = { id: newPurchaseId, userId, ...purchaseData, createdAt: Date.now() };
         db.users[userId].creditCardPurchases.push(newPurchase);
         await writeDB(db);
         return { success: true, purchaseId: newPurchaseId };
     }
 };
+
 export async function getCreditCardPurchasesForUser(userId: string): Promise<CreditCardPurchase[]> {
     if (!userId) return [];
     if (DATABASE_MODE === 'postgres' && pool) {
-        const res = await pool.query<CreditCardPurchase>('SELECT id, user_id as "userId", card_id as "cardId", purchase_date as "date", description, category, total_amount as "totalAmount", installments, created_at as "createdAt" FROM credit_card_purchases WHERE user_id = $1 ORDER BY purchase_date DESC, created_at DESC', [userId]);
-        return res.rows.map(p => ({...p, date: formatDateFns(new Date(p.date), 'yyyy-MM-dd'), totalAmount: Number(p.totalAmount)}));
+        try {
+            const res = await pool.query<CreditCardPurchase>('SELECT id, user_id as "userId", card_id as "cardId", purchase_date as "date", description, category, total_amount as "totalAmount", installments, created_at as "createdAt" FROM credit_card_purchases WHERE user_id = $1 ORDER BY purchase_date DESC, created_at DESC', [userId]);
+            return res.rows.map(p => ({...p, date: formatDateFns(new Date(p.date), 'yyyy-MM-dd'), totalAmount: Number(p.totalAmount)}));
+        } catch (error: any) {
+            console.error(`Error fetching credit card purchases for user ${userId} from PG:`, error.message); return [];
+        }
     } else {
         const db = await readDB();
-        return db.users[userId]?.creditCardPurchases.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()) || [];
+        const userData = db.users[userId];
+        if (!userData || !userData.creditCardPurchases) return [];
+        return userData.creditCardPurchases.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
 }
+
 export const deleteCreditCardPurchase = async (userId: string, purchaseId: string): Promise<DeleteResult> => {
     if (!userId) return { success: false, error: "User ID required." };
     if (DATABASE_MODE === 'postgres' && pool) {
-        const res = await pool.query('DELETE FROM credit_card_purchases WHERE id = $1 AND user_id = $2', [purchaseId, userId]);
-        return { success: res.rowCount > 0 };
+        try {
+            const res = await pool.query('DELETE FROM credit_card_purchases WHERE id = $1 AND user_id = $2', [purchaseId, userId]);
+            if (res.rowCount === 0) return { success: false, error: "Purchase not found or not owned by user." };
+            return { success: true };
+        } catch (error: any) {
+            console.error("Error deleting credit card purchase from PostgreSQL:", error.message);
+            return { success: false, error: "Database error deleting credit card purchase." };
+        }
     } else {
         const db = await readDB();
-        if (!db.users[userId]?.creditCardPurchases) return { success: false, error: "User purchases not found."};
+        if (!db.users[userId] || !db.users[userId].creditCardPurchases) return { success: false, error: "User purchases not found."};
         const initialLength = db.users[userId].creditCardPurchases.length;
         db.users[userId].creditCardPurchases = db.users[userId].creditCardPurchases.filter(p => p.id !== purchaseId);
         if (db.users[userId].creditCardPurchases.length === initialLength) return { success: false, error: "Purchase not found."};
@@ -528,42 +575,46 @@ export const deleteCreditCardPurchase = async (userId: string, purchaseId: strin
     }
 };
 
-// Ensure that the local DB has the new top-level 'users' structure if it's old
 async function migrateOldDbStructure() {
+    // This migration might be less relevant now that user creation is explicit.
+    // However, it can be kept if there's a possibility of running against very old db.json files.
     if (DATABASE_MODE === 'local') {
         try {
             const rawData = await fs.readFile(DB_PATH, 'utf-8');
             const db = JSON.parse(rawData);
-            if (db.users && db.users.default_user && !db.users.default_user.profile) { // Heuristic for old structure
-                console.log("Old db.json structure detected. Migrating...");
-                const defaultUserData = db.users.default_user;
-                const newDb: LocalDB = {
-                    users: {
-                        "default-user-migrated-id": { // Assign a new ID
-                            profile: {
-                                id: "default-user-migrated-id",
-                                email: "user@example.local", // Default email
-                                displayName: "Local User (Migrated)",
-                                createdAt: Date.now(),
-                                lastLoginAt: Date.now(),
-                            },
-                            // IMPORTANT: You'll need a default hashed password or prompt user to reset
-                            hashedPassword: await bcrypt.hash("password", 10), // Placeholder password
-                            transactions: defaultUserData.transactions || [],
-                            loans: defaultUserData.loans || [],
-                            creditCards: defaultUserData.creditCards || [],
-                            creditCardPurchases: defaultUserData.creditCardPurchases || [],
+            
+            // Check if the old single-user structure (without distinct user IDs as keys in 'users') exists
+            if (!db.users || (db.users && !Object.keys(db.users).every(key => typeof db.users[key].profile === 'object'))) {
+                 if (db.transactions || db.loans || db.creditCards || db.creditCardPurchases) { // Heuristic for old structure
+                    console.log("Old db.json structure detected. Migrating to multi-user structure...");
+                    const defaultUserId = "default-user-migrated-id"; // A fixed ID for the migrated data
+                    const newDb: LocalDB = {
+                        users: {
+                            [defaultUserId]: {
+                                profile: {
+                                    id: defaultUserId,
+                                    email: "migrated@example.local", // Assign a placeholder email
+                                    displayName: "Migrated User",
+                                    createdAt: Date.now(),
+                                    lastLoginAt: Date.now(),
+                                },
+                                hashedPassword: await bcrypt.hash("password", 10), // Placeholder password
+                                transactions: (db.transactions || []).map((tx: any) => ({...tx, userId: defaultUserId})),
+                                loans: (db.loans || []).map((l: any) => ({...l, userId: defaultUserId})),
+                                creditCards: (db.creditCards || []).map((cc: any) => ({...cc, userId: defaultUserId})),
+                                creditCardPurchases: (db.creditCardPurchases || []).map((p: any) => ({...p, userId: defaultUserId})),
+                            }
                         }
-                    }
-                };
-                await writeDB(newDb);
-                console.log("db.json migrated to new multi-user structure. Default user data moved. Please update password for 'user@example.local'.");
-            } else if (!db.users) { // If file is truly empty or malformed
-                 await writeDB({ users: {} });
+                    };
+                    await writeDB(newDb);
+                    console.log("db.json migrated. Data moved under 'migrated@example.local'. Please update password or create new users.");
+                 } else if (!db.users) {
+                    await writeDB({ users: {} });
+                 }
             }
         } catch (error: any) {
             if (error.code === 'ENOENT') {
-                await writeDB({ users: {} }); // Create new if not exists
+                await writeDB({ users: {} }); 
             } else {
                 console.error("Error during DB migration check:", error);
             }
@@ -571,4 +622,4 @@ async function migrateOldDbStructure() {
     }
 }
 
-migrateOldDbStructure(); // Run on server start
+migrateOldDbStructure();

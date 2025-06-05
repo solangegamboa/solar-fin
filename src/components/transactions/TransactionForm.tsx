@@ -23,8 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
-import { useAuth } from '@/contexts/AuthContext'; 
+import { Checkbox } from '@/components/ui/checkbox';
 import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/databaseService';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -44,7 +43,7 @@ const transactionFormSchema = z.object({
     required_error: 'A data da transação é obrigatória.',
   }),
   description: z.string().max(200, { message: 'A descrição deve ter no máximo 200 caracteres.'}).optional(),
-  isRecurring: z.boolean().optional(), // Adicionado campo isRecurring
+  isRecurring: z.boolean().optional(),
 });
 
 type TransactionFormValues = z.infer<typeof transactionFormSchema>;
@@ -52,10 +51,10 @@ type TransactionFormValues = z.infer<typeof transactionFormSchema>;
 interface TransactionFormProps {
   onSuccess?: () => void;
   setOpen: (open: boolean) => void;
+  userId: string; // Added userId prop
 }
 
-export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
-  const { user } = useAuth(); 
+export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -67,7 +66,7 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
       category: '',
       date: new Date(),
       description: '',
-      isRecurring: false, // Valor padrão para isRecurring
+      isRecurring: false,
     },
   });
 
@@ -82,7 +81,8 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
     };
 
     try {
-      const result: AddTransactionResult = await addTransaction(transactionData);
+      // Pass userId to addTransaction
+      const result: AddTransactionResult = await addTransaction(userId, transactionData);
 
       if (result.success && result.transactionId) {
         toast({
@@ -100,7 +100,7 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
         });
       }
     } catch (error: any) {
-      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred while saving the transaction.';
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
       console.error('Client-side error calling addTransaction:', errorMessage);
       const displayMessage = 'Ocorreu um erro ao salvar a transação. Tente novamente.';
       toast({

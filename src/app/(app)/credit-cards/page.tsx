@@ -23,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Loader2, ShoppingBag, Edit3, Trash2, TrendingUp, TrendingDown, FileText } from "lucide-react";
+import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Loader2, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
 import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
 import { getCreditCardsForUser, getCreditCardPurchasesForUser, deleteCreditCardPurchase } from "@/lib/databaseService";
@@ -34,6 +34,7 @@ import { format, parseISO, addMonths, getMonth, getYear, getDate, setDate } from
 import { ptBR } from 'date-fns/locale';
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface MonthlySummary {
   monthYear: string; 
@@ -47,6 +48,7 @@ const ptBRMonthNames = [
 ];
 
 export default function CreditCardsPage() {
+  const { user, loading: authLoading } = useAuth();
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   
@@ -65,10 +67,11 @@ export default function CreditCardsPage() {
 
 
   const fetchUserCreditCards = useCallback(async () => {
+    if (!user) return;
     setIsLoadingCards(true);
     setError(null);
     try {
-      const userCreditCards = await getCreditCardsForUser();
+      const userCreditCards = await getCreditCardsForUser(user.id);
       setCreditCards(userCreditCards);
     } catch (e: any) {
       const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Falha ao carregar cartões.';
@@ -78,12 +81,13 @@ export default function CreditCardsPage() {
     } finally {
       setIsLoadingCards(false);
     }
-  }, [toast]);
+  }, [toast, user]);
 
   const fetchUserPurchases = useCallback(async () => {
+    if (!user) return;
     setIsLoadingPurchases(true);
     try {
-      const userPurchases = await getCreditCardPurchasesForUser();
+      const userPurchases = await getCreditCardPurchasesForUser(user.id);
       setPurchases(userPurchases);
     } catch (e: any) {
       const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Falha ao carregar compras.';
@@ -92,12 +96,14 @@ export default function CreditCardsPage() {
     } finally {
       setIsLoadingPurchases(false);
     }
-  }, [toast]);
+  }, [toast, user]);
 
   useEffect(() => {
-    fetchUserCreditCards();
-    fetchUserPurchases();
-  }, [fetchUserCreditCards, fetchUserPurchases]);
+    if (user && !authLoading) {
+      fetchUserCreditCards();
+      fetchUserPurchases();
+    }
+  }, [fetchUserCreditCards, fetchUserPurchases, user, authLoading]);
 
   const handleCreditCardAdded = () => {
     setIsCardModalOpen(false);
@@ -212,18 +218,18 @@ export default function CreditCardsPage() {
   };
 
   const confirmDeleteCreditCardPurchase = async () => {
-    if (!purchaseToDelete) return;
+    if (!purchaseToDelete || !user) return;
     setIsDeletingPurchaseId(purchaseToDelete.id);
     setShowDeletePurchaseConfirmDialog(false);
 
     try {
-      const result = await deleteCreditCardPurchase(purchaseToDelete.id);
+      const result = await deleteCreditCardPurchase(user.id, purchaseToDelete.id);
       if (result.success) {
         toast({
           title: 'Compra Excluída!',
           description: 'A compra do cartão de crédito foi excluída com sucesso.',
         });
-        handlePurchaseAddedOrDeleted(); // Refreshes purchases
+        handlePurchaseAddedOrDeleted(); 
       } else {
         toast({
           variant: 'destructive',
@@ -244,6 +250,10 @@ export default function CreditCardsPage() {
       setPurchaseToDelete(null);
     }
   };
+  
+  if (authLoading) {
+    return <div className="flex items-center justify-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando dados do usuário...</p></div>;
+  }
 
   const renderCreditCardList = () => {
     if (isLoadingCards || (isLoadingPurchases && creditCards.length > 0)) { 
@@ -331,7 +341,7 @@ export default function CreditCardsPage() {
                     variant="ghost"
                     size="icon"
                     onClick={() => handleDeleteCreditCardPurchase(p)}
-                    disabled={isDeletingPurchaseId === p.id}
+                    disabled={isDeletingPurchaseId === p.id || !user}
                     aria-label="Excluir compra"
                     className="h-8 w-8 text-destructive hover:text-destructive/80"
                   >
@@ -401,24 +411,24 @@ export default function CreditCardsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight font-headline">Cartões de Crédito</h1>
           <p className="text-muted-foreground">Gerencie seus cartões e compras parceladas.</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Dialog open={isCardModalOpen} onOpenChange={setIsCardModalOpen}>
-            <DialogTrigger asChild><Button className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4" />Novo Cartão</Button></DialogTrigger>
+            <DialogTrigger asChild><Button className="w-full sm:w-auto" disabled={!user}><PlusCircle className="mr-2 h-4 w-4" />Novo Cartão</Button></DialogTrigger>
             <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Adicionar Novo Cartão</DialogTitle><DialogDescription>Preencha os detalhes do seu novo cartão.</DialogDescription></DialogHeader>
-              <CreditCardForm onSuccess={handleCreditCardAdded} setOpen={setIsCardModalOpen} />
+              {user && <CreditCardForm onSuccess={handleCreditCardAdded} setOpen={setIsCardModalOpen} userId={user.id} />}
             </DialogContent>
           </Dialog>
           <Dialog open={isPurchaseModalOpen} onOpenChange={setIsPurchaseModalOpen}>
-            <DialogTrigger asChild><Button variant="secondary" disabled={creditCards.length === 0} className="w-full sm:w-auto"><ShoppingBag className="mr-2 h-4 w-4" />Nova Compra</Button></DialogTrigger>
+            <DialogTrigger asChild><Button variant="secondary" disabled={creditCards.length === 0 || !user} className="w-full sm:w-auto"><ShoppingBag className="mr-2 h-4 w-4" />Nova Compra</Button></DialogTrigger>
             <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Adicionar Compra Parcelada</DialogTitle><DialogDescription>Registre uma nova compra no cartão de crédito.</DialogDescription></DialogHeader>
-              <CreditCardTransactionForm userCreditCards={creditCards} onSuccess={handlePurchaseAddedOrDeleted} setOpen={setIsPurchaseModalOpen} />
+              {user && <CreditCardTransactionForm userCreditCards={creditCards} onSuccess={handlePurchaseAddedOrDeleted} setOpen={setIsPurchaseModalOpen} userId={user.id} />}
             </DialogContent>
           </Dialog>
         </div>
@@ -454,7 +464,7 @@ export default function CreditCardsPage() {
             <AlertDialogCancel onClick={() => setPurchaseToDelete(null)} disabled={!!isDeletingPurchaseId}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDeleteCreditCardPurchase}
-              disabled={!!isDeletingPurchaseId}
+              disabled={!!isDeletingPurchaseId || !user}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeletingPurchaseId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -463,11 +473,6 @@ export default function CreditCardsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
     </div>
   );
 }
-
-    
-
-    

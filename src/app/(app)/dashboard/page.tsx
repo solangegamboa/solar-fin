@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
-import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Loader2, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock, Landmark } from "lucide-react";
+import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Loader2, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock } from "lucide-react";
 import { getTransactionsForUser, getCreditCardsForUser, getCreditCardPurchasesForUser, getLoansForUser } from '@/lib/databaseService';
 import type { Transaction, CreditCard, CreditCardPurchase, Loan } from '@/types';
 import { formatCurrency } from "@/lib/utils";
@@ -26,7 +26,7 @@ import {
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-
+import { useAuth } from '@/contexts/AuthContext';
 
 interface DashboardSummary {
   balance: number; 
@@ -48,6 +48,7 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export default function DashboardPage() {
+  const { user, loading: authLoading } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,14 +94,18 @@ export default function DashboardPage() {
   );
 
   const fetchDashboardData = useCallback(async () => {
+    if (!user) {
+      setIsLoading(false); // Stop loading if no user
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
       const [transactions, creditCards, creditCardPurchases, loans] = await Promise.all([
-        getTransactionsForUser(),
-        getCreditCardsForUser(),
-        getCreditCardPurchasesForUser(),
-        getLoansForUser(),
+        getTransactionsForUser(user.id),
+        getCreditCardsForUser(user.id),
+        getCreditCardPurchasesForUser(user.id),
+        getLoansForUser(user.id),
       ]);
 
       let lifetimeBalance = 0;
@@ -182,11 +187,17 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [calculateInvoiceTotalForCardAndMonth, selectedDate]); 
+  }, [calculateInvoiceTotalForCardAndMonth, selectedDate, user]); 
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]); 
+    if (user && !authLoading) {
+      fetchDashboardData();
+    } else if (!authLoading && !user) {
+      // Handle case where user is definitively not logged in after auth check
+      setIsLoading(false);
+      setError("Usuário não autenticado.");
+    }
+  }, [fetchDashboardData, user, authLoading]); 
 
   const handlePreviousMonth = () => {
     setSelectedDate(prev => subMonths(prev, 1));
@@ -206,7 +217,7 @@ export default function DashboardPage() {
   };
 
 
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -229,6 +240,7 @@ export default function DashboardPage() {
       <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
         <SearchX className="h-12 w-12 mb-3" />
         <p className="text-lg">Nenhum dado disponível para exibir no painel.</p>
+         {!user && <p className="text-sm">Por favor, faça login para ver seus dados.</p>}
       </div>
     );
   }
