@@ -9,7 +9,7 @@
         "createdAt": 1749089165220,
         "lastLoginAt": 1749168000000
       },
-      "hashedPassword": "$2a$10$YOUR_BCRYPT_HASH_FOR_PASSWORD_HERE",
+      "hashedPassword": "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy",
       "transactions": [
         {
           "id": "9293844a-d293-4d90-b4ed-65f88440ab21",
