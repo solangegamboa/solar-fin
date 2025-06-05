@@ -13,14 +13,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Loader2, ShoppingBag, Edit3, Trash2 } from "lucide-react";
+import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Loader2, ShoppingBag, Edit3, Trash2, TrendingUp, TrendingDown, FileText } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
 import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
 import { getCreditCardsForUser, getCreditCardPurchasesForUser } from "@/lib/databaseService";
 import type { CreditCard, CreditCardPurchase } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { format, parseISO, addMonths, getMonth, getYear } from 'date-fns';
+import { format, parseISO, addMonths, getMonth, getYear, getDate, setDate } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -95,8 +95,46 @@ export default function CreditCardsPage() {
     fetchUserPurchases();
   };
 
+  const calculateInvoiceTotalForCardAndMonth = useCallback(
+    (
+      card: CreditCard,
+      allPurchases: CreditCardPurchase[],
+      targetInvoiceClosingMonth: number, // 0-indexed month
+      targetInvoiceClosingYear: number
+    ): number => {
+      let invoiceTotal = 0;
+      const purchasesOnThisCard = allPurchases.filter(p => p.cardId === card.id);
+
+      purchasesOnThisCard.forEach(purchase => {
+        const purchaseDate = parseISO(purchase.date);
+        const installmentAmount = purchase.totalAmount / purchase.installments;
+
+        for (let i = 0; i < purchase.installments; i++) {
+          let installmentPaymentDate = purchaseDate;
+          
+          if (getDate(purchaseDate) > card.closingDateDay) {
+            installmentPaymentDate = addMonths(installmentPaymentDate, 1);
+          }
+          installmentPaymentDate = addMonths(installmentPaymentDate, i);
+          
+          const installmentInvoiceClosingMonth = getMonth(installmentPaymentDate);
+          const installmentInvoiceClosingYear = getYear(installmentPaymentDate);
+
+          if (
+            installmentInvoiceClosingMonth === targetInvoiceClosingMonth &&
+            installmentInvoiceClosingYear === targetInvoiceClosingYear
+          ) {
+            invoiceTotal += installmentAmount;
+          }
+        }
+      });
+      return invoiceTotal;
+    },
+    []
+  );
+
   const calculateMonthlySummaries = useCallback((): MonthlySummary[] => {
-    const summaries: { [key: string]: MonthlySummary } = {}; // Key is 'yyyy-MM' for sorting, value stores display monthYear
+    const summaries: { [key: string]: MonthlySummary } = {}; 
     if (!creditCards.length || !purchases.length) return [];
 
     purchases.forEach(purchase => {
@@ -109,20 +147,17 @@ export default function CreditCardsPage() {
       for (let i = 0; i < purchase.installments; i++) {
         let paymentMonthDate = new Date(purchaseDate);
         
-        // Determina o mês de fechamento da fatura para a primeira parcela
         if (purchaseDate.getDate() > card.closingDateDay) {
           paymentMonthDate = addMonths(purchaseDate, 1); 
         }
-        // Adiciona os meses das parcelas subsequentes
         paymentMonthDate = addMonths(paymentMonthDate, i);
 
-        // Use 'yyyy-MM' for the key to ensure lexicographical sort works before converting to Date
         const monthYearSortKey = format(paymentMonthDate, 'yyyy-MM'); 
-        const displayMonthYear = format(paymentMonthDate, 'MMMM/yyyy', { locale: ptBR }); // e.g., "junho/2025"
+        const displayMonthYear = format(paymentMonthDate, 'MMMM/yyyy', { locale: ptBR });
 
         if (!summaries[monthYearSortKey]) {
           summaries[monthYearSortKey] = {
-            monthYear: displayMonthYear, // Store the display name
+            monthYear: displayMonthYear,
             totalAmount: 0,
             purchases: [],
           };
@@ -138,26 +173,19 @@ export default function CreditCardsPage() {
     });
     
     return Object.values(summaries).sort((a, b) => {
-        // a.monthYear is like "junho/2025"
         const [aMonthName, aYearStr] = a.monthYear.split('/');
         const [bMonthName, bYearStr] = b.monthYear.split('/');
-
         const aYear = parseInt(aYearStr);
         const bYear = parseInt(bYearStr);
-
-        // Get 0-indexed month number
         const aMonthIndex = ptBRMonthNames.indexOf(aMonthName.toLowerCase());
         const bMonthIndex = ptBRMonthNames.indexOf(bMonthName.toLowerCase());
 
         if (aMonthIndex === -1 || bMonthIndex === -1) {
-          // Should not happen if month names are correct
           console.error("Invalid month name found in summary:", aMonthName, bMonthName);
           return 0; 
         }
-
         const dateA = new Date(aYear, aMonthIndex, 1);
         const dateB = new Date(bYear, bMonthIndex, 1);
-        
         return dateA.getTime() - dateB.getTime();
     });
   }, [purchases, creditCards]);
@@ -165,40 +193,73 @@ export default function CreditCardsPage() {
   const monthlySummaries = calculateMonthlySummaries();
 
   const renderCreditCardList = () => {
-    if (isLoadingCards) {
-      return <div className="flex items-center justify-center h-40 col-span-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Carregando cartões...</p></div>;
+    if (isLoadingCards || (isLoadingPurchases && creditCards.length > 0)) { // Show loader if cards are loading OR purchases are loading but we have cards
+      return <div className="flex items-center justify-center h-40 col-span-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Carregando cartões e faturas...</p></div>;
     }
-    if (error && !creditCards.length) { // Show error only if list is empty due to it
+    if (error && !creditCards.length) {
       return <div className="flex flex-col items-center justify-center h-40 text-destructive col-span-full"><AlertTriangleIcon className="h-8 w-8 mb-2" /><p>{error}</p></div>;
     }
     if (creditCards.length === 0) {
       return <div className="flex flex-col items-center justify-center h-40 col-span-full"><SearchX className="h-12 w-12 text-muted-foreground mb-4" /><p className="text-xl text-muted-foreground">Nenhum cartão de crédito encontrado.</p></div>;
     }
-    return creditCards.map((card) => (
-      <Card key={card.id} className="shadow-md hover:shadow-lg transition-shadow">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center text-xl"><CreditCardLucideIcon className="mr-2 h-6 w-6 text-primary" />{card.name}</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Limite:</span><span className="font-semibold">{formatCurrency(card.limit)}</span></div>
-          <div className="flex items-center"><CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Vencimento: Dia</span><span className="font-medium ml-auto">{String(card.dueDateDay).padStart(2, '0')}</span></div>
-          <div className="flex items-center"><CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Fechamento: Dia</span><span className="font-medium ml-auto">{String(card.closingDateDay).padStart(2, '0')}</span></div>
-        </CardContent>
-      </Card>
-    ));
+
+    const currentDate = new Date();
+    const currentMonth = getMonth(currentDate);
+    const currentYear = getYear(currentDate);
+    
+    const nextMonthDate = addMonths(currentDate, 1);
+    const nextMonth = getMonth(nextMonthDate);
+    const nextYear = getYear(nextMonthDate);
+
+    return creditCards.map((card) => {
+      const currentInvoiceTotal = calculateInvoiceTotalForCardAndMonth(card, purchases, currentMonth, currentYear);
+      const nextInvoiceTotal = calculateInvoiceTotalForCardAndMonth(card, purchases, nextMonth, nextYear);
+      
+      const currentClosingDate = setDate(currentDate, card.closingDateDay);
+      let nextClosingDate = addMonths(currentDate, 1);
+      nextClosingDate = setDate(nextClosingDate, card.closingDateDay);
+
+      return (
+        <Card key={card.id} className="shadow-md hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center text-xl"><CreditCardLucideIcon className="mr-2 h-6 w-6 text-primary" />{card.name}</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Limite:</span><span className="font-semibold">{formatCurrency(card.limit)}</span></div>
+            <div className="flex items-center"><CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Vencimento: Dia</span><span className="font-medium ml-auto">{String(card.dueDateDay).padStart(2, '0')}</span></div>
+            <div className="flex items-center"><CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Fechamento: Dia</span><span className="font-medium ml-auto">{String(card.closingDateDay).padStart(2, '0')}</span></div>
+            <Separator className="my-2"/>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center text-sm text-muted-foreground">
+                <FileText className="mr-2 h-4 w-4 text-blue-500" />
+                <span>Fatura Atual (Fecha {format(currentClosingDate, 'dd/MM', { locale: ptBR })}):</span>
+              </div>
+              <span className="font-semibold text-blue-600">{formatCurrency(currentInvoiceTotal)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center text-sm text-muted-foreground">
+                <TrendingUp className="mr-2 h-4 w-4 text-green-500" />
+                <span>Próxima Fatura (Fecha {format(nextClosingDate, 'dd/MM', { locale: ptBR })}):</span>
+              </div>
+              <span className="font-semibold text-green-600">{formatCurrency(nextInvoiceTotal)}</span>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    });
   };
 
   const renderPurchasesList = () => {
-    if (isLoadingPurchases && purchases.length === 0) { // Show loader only if purchases not yet loaded
+    if (isLoadingPurchases && purchases.length === 0) { 
       return <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Carregando compras...</p></div>;
     }
     if (!isLoadingPurchases && purchases.length === 0) {
       return <div className="flex flex-col items-center justify-center h-40"><SearchX className="h-12 w-12 text-muted-foreground mb-4" /><p className="text-muted-foreground">Nenhuma compra parcelada registrada.</p></div>;
     }
     return (
-      <ul className="space-y-3">
+      <ul className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
         {purchases.map(p => {
           const cardName = creditCards.find(c => c.id === p.cardId)?.name || 'Cartão desconhecido';
           return (
@@ -222,15 +283,19 @@ export default function CreditCardsPage() {
   }
 
   const renderMonthlySummary = () => {
-    if (isLoadingCards || isLoadingPurchases && monthlySummaries.length === 0) {
+    if ((isLoadingCards || isLoadingPurchases) && monthlySummaries.length === 0) {
          return <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Calculando resumos...</p></div>;
     }
-    if (monthlySummaries.length === 0) {
+    if (monthlySummaries.length === 0 && !isLoadingPurchases && !isLoadingCards) { // Only show 'no summary' if not loading and data is present
       return <div className="flex flex-col items-center justify-center h-40"><SearchX className="h-12 w-12 text-muted-foreground mb-4" /><p className="text-muted-foreground">Nenhuma fatura futura encontrada.</p></div>;
     }
+    if (monthlySummaries.length === 0) { // Fallback for initial load or if there are truly no summaries
+        return <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Calculando...</p></div>;
+    }
+
 
     return (
-      <Accordion type="single" collapsible className="w-full">
+      <Accordion type="single" collapsible className="w-full max-h-[400px] overflow-y-auto pr-2">
         {monthlySummaries.map(summary => (
           <AccordionItem value={summary.monthYear} key={summary.monthYear}>
             <AccordionTrigger className="hover:no-underline">
@@ -300,11 +365,11 @@ export default function CreditCardsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div>
-            <h2 className="text-2xl font-semibold tracking-tight font-headline mb-4">Compras Realizadas</h2>
+            <h2 className="text-2xl font-semibold tracking-tight font-headline mb-4">Compras Realizadas (Todas)</h2>
             {renderPurchasesList()}
         </div>
         <div>
-            <h2 className="text-2xl font-semibold tracking-tight font-headline mb-4">Próximas Faturas (Estimativa)</h2>
+            <h2 className="text-2xl font-semibold tracking-tight font-headline mb-4">Próximas Faturas (Estimativa Consolidada)</h2>
             {renderMonthlySummary()}
         </div>
       </div>
@@ -312,4 +377,4 @@ export default function CreditCardsPage() {
     </div>
   );
 }
-
+        
