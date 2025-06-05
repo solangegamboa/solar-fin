@@ -31,6 +31,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel
 } from '@/components/ui/sidebar';
+import { SheetTitle } from '@/components/ui/sheet'; // Import SheetTitle
 
 const navItems = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -47,21 +48,22 @@ const secondaryNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { open } = useSidebar(); // Get sidebar state
+  const { open, isMobile } = useSidebar(); // Get sidebar state and isMobile
 
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
         <Link href="/dashboard" className="flex items-center gap-2">
           <Logo className={cn("transition-all duration-300 ease-in-out", open ? "h-10 w-10" : "h-8 w-8")} />
-          <h1
+          <SheetTitle
             className={cn(
               "font-bold text-2xl font-headline whitespace-nowrap transition-opacity duration-300 ease-in-out",
-              open ? "opacity-100" : "opacity-0 pointer-events-none"
+              // If not mobile and desktop sidebar is collapsed, hide it. Otherwise, show it.
+              (!isMobile && !open) ? "opacity-0 pointer-events-none" : "opacity-100"
             )}
           >
             Solar Fin
-          </h1>
+          </SheetTitle>
         </Link>
       </SidebarHeader>
       
