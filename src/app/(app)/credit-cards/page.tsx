@@ -26,10 +26,16 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
 interface MonthlySummary {
-  monthYear: string; // "MM/YYYY"
+  monthYear: string; // "MMMM/yyyy" e.g. "junho/2025"
   totalAmount: number;
   purchases: Array<CreditCardPurchase & { installmentAmount: number; currentInstallment: number; totalInstallments: number }>;
 }
+
+// Correct Portuguese month names in lowercase, as produced by format(..., 'MMMM', { locale: ptBR })
+const ptBRMonthNames = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
+];
 
 export default function CreditCardsPage() {
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
@@ -90,7 +96,7 @@ export default function CreditCardsPage() {
   };
 
   const calculateMonthlySummaries = useCallback((): MonthlySummary[] => {
-    const summaries: { [key: string]: MonthlySummary } = {};
+    const summaries: { [key: string]: MonthlySummary } = {}; // Key is 'yyyy-MM' for sorting, value stores display monthYear
     if (!creditCards.length || !purchases.length) return [];
 
     purchases.forEach(purchase => {
@@ -110,18 +116,19 @@ export default function CreditCardsPage() {
         // Adiciona os meses das parcelas subsequentes
         paymentMonthDate = addMonths(paymentMonthDate, i);
 
-        // O mês/ano da fatura é o mês em que ela fecha
-        const monthYearKey = format(paymentMonthDate, 'MM/yyyy', { locale: ptBR });
+        // Use 'yyyy-MM' for the key to ensure lexicographical sort works before converting to Date
+        const monthYearSortKey = format(paymentMonthDate, 'yyyy-MM'); 
+        const displayMonthYear = format(paymentMonthDate, 'MMMM/yyyy', { locale: ptBR }); // e.g., "junho/2025"
 
-        if (!summaries[monthYearKey]) {
-          summaries[monthYearKey] = {
-            monthYear: format(paymentMonthDate, 'MMMM/yyyy', { locale: ptBR }), // Para exibição
+        if (!summaries[monthYearSortKey]) {
+          summaries[monthYearSortKey] = {
+            monthYear: displayMonthYear, // Store the display name
             totalAmount: 0,
             purchases: [],
           };
         }
-        summaries[monthYearKey].totalAmount += installmentAmount;
-        summaries[monthYearKey].purchases.push({
+        summaries[monthYearSortKey].totalAmount += installmentAmount;
+        summaries[monthYearSortKey].purchases.push({
           ...purchase,
           installmentAmount,
           currentInstallment: i + 1,
@@ -131,10 +138,26 @@ export default function CreditCardsPage() {
     });
     
     return Object.values(summaries).sort((a, b) => {
-        const [aMonth, aYear] = a.monthYear.split('/');
-        const [bMonth, bYear] = b.monthYear.split('/');
-        const dateA = new Date(parseInt(aYear), ptBR.localize?.month(ptBR.monthNames.indexOf(aMonth.charAt(0).toUpperCase() + aMonth.slice(1))) , 1);
-        const dateB = new Date(parseInt(bYear), ptBR.localize?.month(ptBR.monthNames.indexOf(bMonth.charAt(0).toUpperCase() + bMonth.slice(1))) , 1);
+        // a.monthYear is like "junho/2025"
+        const [aMonthName, aYearStr] = a.monthYear.split('/');
+        const [bMonthName, bYearStr] = b.monthYear.split('/');
+
+        const aYear = parseInt(aYearStr);
+        const bYear = parseInt(bYearStr);
+
+        // Get 0-indexed month number
+        const aMonthIndex = ptBRMonthNames.indexOf(aMonthName.toLowerCase());
+        const bMonthIndex = ptBRMonthNames.indexOf(bMonthName.toLowerCase());
+
+        if (aMonthIndex === -1 || bMonthIndex === -1) {
+          // Should not happen if month names are correct
+          console.error("Invalid month name found in summary:", aMonthName, bMonthName);
+          return 0; 
+        }
+
+        const dateA = new Date(aYear, aMonthIndex, 1);
+        const dateB = new Date(bYear, bMonthIndex, 1);
+        
         return dateA.getTime() - dateB.getTime();
     });
   }, [purchases, creditCards]);
@@ -289,3 +312,4 @@ export default function CreditCardsPage() {
     </div>
   );
 }
+
