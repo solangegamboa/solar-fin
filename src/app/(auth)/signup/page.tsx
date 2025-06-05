@@ -40,11 +40,18 @@ export default function SignupPage() {
           message = "Erro de rede. Verifique sua conexão e tente novamente.";
           break;
         default:
-          // message remains the generic one
+          // message remains the generic one for the user
+          // Log the specific Firebase error for debugging, if available
+          if (error.code && error.message) {
+            console.error("Firebase signup error (unhandled code):", error.code, error.message);
+          } else {
+            console.error("Firebase signup error (generic):", error); // Fallback if code/message are not present
+          }
           break;
       }
 
-      console.error("Firebase signup error:", error.code, error.message, error);
+      // Log only safe properties to avoid call stack errors from complex error objects
+      console.error("Firebase signup error details:", error.code, error.message);
       throw new Error(message); // This will be caught by AuthForm
     }
   };
