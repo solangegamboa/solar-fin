@@ -394,7 +394,7 @@ export default function DashboardPage() {
 
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex items-center justify-center gap-1">
           <Button onClick={handlePreviousMonth} variant="outline" size="icon" aria-label="Mês anterior">
               <ChevronLeft className="h-5 w-5" />
@@ -407,7 +407,7 @@ export default function DashboardPage() {
           </Button>
       </div>
       
-       <div className="flex flex-row items-center justify-center sm:justify-end gap-2 mt-4 sm:mt-0">
+       <div className="flex flex-row items-center justify-center sm:justify-end gap-2">
          <Button onClick={handleCurrentMonth} variant="secondary" size="icon" aria-label="Mês Atual" disabled={isCurrentMonthSelected()}>
             <CalendarClock className="h-4 w-4" />
           </Button>
