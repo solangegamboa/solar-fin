@@ -406,17 +406,17 @@ export default function CreditCardsPage() {
           <h1 className="text-3xl font-bold tracking-tight font-headline">Cartões de Crédito</h1>
           <p className="text-muted-foreground">Gerencie seus cartões e compras parceladas.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Dialog open={isCardModalOpen} onOpenChange={setIsCardModalOpen}>
-            <DialogTrigger asChild><Button><PlusCircle className="mr-2 h-4 w-4" />Novo Cartão</Button></DialogTrigger>
-            <DialogContent className="sm:max-w-[520px]">
+            <DialogTrigger asChild><Button className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4" />Novo Cartão</Button></DialogTrigger>
+            <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Adicionar Novo Cartão</DialogTitle><DialogDescription>Preencha os detalhes do seu novo cartão.</DialogDescription></DialogHeader>
               <CreditCardForm onSuccess={handleCreditCardAdded} setOpen={setIsCardModalOpen} />
             </DialogContent>
           </Dialog>
           <Dialog open={isPurchaseModalOpen} onOpenChange={setIsPurchaseModalOpen}>
-            <DialogTrigger asChild><Button variant="secondary" disabled={creditCards.length === 0}><ShoppingBag className="mr-2 h-4 w-4" />Nova Compra</Button></DialogTrigger>
-            <DialogContent className="sm:max-w-[520px]">
+            <DialogTrigger asChild><Button variant="secondary" disabled={creditCards.length === 0} className="w-full sm:w-auto"><ShoppingBag className="mr-2 h-4 w-4" />Nova Compra</Button></DialogTrigger>
+            <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Adicionar Compra Parcelada</DialogTitle><DialogDescription>Registre uma nova compra no cartão de crédito.</DialogDescription></DialogHeader>
               <CreditCardTransactionForm userCreditCards={creditCards} onSuccess={handlePurchaseAddedOrDeleted} setOpen={setIsPurchaseModalOpen} />
             </DialogContent>
@@ -467,5 +467,7 @@ export default function CreditCardsPage() {
     </div>
   );
 }
+
+    
 
     

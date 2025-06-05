@@ -295,7 +295,7 @@ export default function LoansPage() {
   return (
     <TooltipProvider>
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight font-headline">Empréstimos</h1>
           <p className="text-muted-foreground">
@@ -304,12 +304,12 @@ export default function LoansPage() {
         </div>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogTrigger asChild>
-            <Button onClick={openAddModal}>
+            <Button onClick={openAddModal} className="w-full sm:w-auto">
               <PlusCircle className="mr-2 h-4 w-4" />
               Novo Empréstimo
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[520px]">
+          <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{loanToEdit ? "Editar Empréstimo" : "Adicionar Novo Empréstimo"}</DialogTitle>
               <DialogDescription>
@@ -356,3 +356,5 @@ export default function LoansPage() {
   );
 }
 
+
+    

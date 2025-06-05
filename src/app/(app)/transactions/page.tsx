@@ -179,7 +179,7 @@ export default function TransactionsPage() {
         <TableCell>
           {format(parseISO(transaction.date), 'dd/MM/yyyy', { locale: ptBR })}
         </TableCell>
-        <TableCell className="font-medium max-w-[200px] truncate" title={transaction.description}>
+        <TableCell className="font-medium max-w-[120px] sm:max-w-[200px] truncate" title={transaction.description}>
           {transaction.description || '-'}
         </TableCell>
         <TableCell>
@@ -237,7 +237,7 @@ export default function TransactionsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight font-headline">Transações</h1>
           <p className="text-muted-foreground">
@@ -246,12 +246,12 @@ export default function TransactionsPage() {
         </div>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <PlusCircle className="mr-2 h-4 w-4" />
               Nova Transação
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[480px]">
+          <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Adicionar Nova Transação</DialogTitle>
               <DialogDescription>
@@ -280,21 +280,23 @@ export default function TransactionsPage() {
               <p>{error}</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {renderTransactionRows()}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {renderTransactionRows()}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -324,5 +326,7 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
+    
 
     
