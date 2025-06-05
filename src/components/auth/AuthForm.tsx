@@ -70,7 +70,7 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
         title: "Erro de Autenticação",
         description: (mode === 'login' ? 'Falha ao entrar. Verifique suas credenciais e tente novamente.' : 'Falha ao criar conta. Por favor, tente novamente.'),
       });
-      console.error("AuthForm submission error:", error); 
+      console.error("AuthForm submission error:", error.message ? error.message : String(error)); 
     } finally {
       setLoading(false);
     }
@@ -93,7 +93,8 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
       } else if (error.code === 'auth/popup-closed-by-user') {
         message = "Login com Google cancelado.";
       }
-      console.error("Firebase Google sign-in error:", error);
+      // Log only safe properties for Google sign-in errors as well
+      console.error("Firebase Google sign-in error:", error.code, error.message);
       toast({
         variant: "destructive",
         title: "Erro de Autenticação com Google",
