@@ -1,0 +1,29 @@
+
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "9002:3000"
+    container_name: solar-fin-app
+    # If you had environment variables to pass, you could use:
+    # environment:
+    #   - NODE_ENV=production
+    # Or an env_file:
+    # env_file:
+    #   - .env.production
+    # For local development where you want live code changes reflected
+    # and data to persist outside the container, you might add volumes.
+    # However, for running the production build from the Dockerfile,
+    # volumes for code are generally not mounted.
+    # If you want db.json to persist across container restarts and rebuilds
+    # during development with docker-compose, you could add:
+    # volumes:
+    #   - ./src/data:/app/src/data
+    restart: unless-stopped
+
+# To run: docker-compose up --build
+# To stop: docker-compose down
