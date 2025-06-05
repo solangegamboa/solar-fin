@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Loader2, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock, PlusCircle, ShoppingBag } from "lucide-react";
+import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Sun, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock, PlusCircle, ShoppingBag } from "lucide-react";
 import { getTransactionsForUser, getCreditCardsForUser, getCreditCardPurchasesForUser, getLoansForUser } from '@/lib/databaseService';
 import type { Transaction, CreditCard, CreditCardPurchase, Loan } from '@/types';
 import { formatCurrency } from "@/lib/utils";
@@ -356,7 +356,7 @@ export default function DashboardPage() {
   if (isLoading || authLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <Sun className="h-12 w-12 animate-spin text-primary" />
         <p className="ml-3 text-muted-foreground">Carregando painel...</p>
       </div>
     );

@@ -4,7 +4,7 @@
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { Sun } from 'lucide-react';
 import { AppHeader } from '@/components/core/AppHeader';
 import { AppSidebar } from '@/components/core/AppSidebar';
 import { SidebarProvider, SidebarInset, SidebarRail } from '@/components/ui/sidebar';
@@ -23,7 +23,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <Sun className="h-12 w-12 animate-spin text-primary" />
         <p className="ml-4 text-lg">Carregando sua sessão...</p>
       </div>
     );
@@ -35,7 +35,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // Or, if the redirect is robust, this might not even be reached for app routes.
      return (
       <div className="flex items-center justify-center min-h-screen bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <Sun className="h-12 w-12 animate-spin text-primary" />
         <p className="ml-4 text-lg">Redirecionando...</p>
       </div>
     );

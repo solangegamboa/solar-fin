@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Sun } from 'lucide-react';
 import { useState } from 'react';
 import { addCreditCardPurchase, type AddCreditCardPurchaseResult } from '@/lib/databaseService';
 import type { CreditCard, NewCreditCardPurchaseData } from '@/types';
@@ -220,7 +220,7 @@ export function CreditCardTransactionForm({
           <Button type="submit" disabled={isSubmitting || userCreditCards.length === 0}>
             {isSubmitting ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Sun className="mr-2 h-4 w-4 animate-spin" />
                 Salvando...
               </>
             ) : (

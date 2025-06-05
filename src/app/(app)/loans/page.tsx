@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, Landmark, CalendarDays, Trash2, Loader2, AlertTriangleIcon, SearchX, Info, TrendingUp, TrendingDown, CircleDollarSign, ReceiptText } from "lucide-react";
+import { PlusCircle, Landmark, CalendarDays, Trash2, Sun, AlertTriangleIcon, SearchX, Info, TrendingUp, TrendingDown, CircleDollarSign, ReceiptText } from "lucide-react";
 import { LoanForm } from "@/components/loans/LoanForm";
 import type { Loan } from "@/types";
 import { getLoansForUser, deleteLoan } from "@/lib/databaseService";
@@ -186,12 +186,12 @@ export default function LoansPage() {
   };
 
   if (authLoading || isLoading && !loans.length) { // Show loader if auth is loading OR data is loading initially
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
+    return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
   }
 
   const renderLoanList = () => {
     if (isLoading && loans.length === 0 && !authLoading) { // specific loading state for loans after auth
-      return <div className="flex items-center justify-center h-64 col-span-full"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando empréstimos...</p></div>;
+      return <div className="flex items-center justify-center h-64 col-span-full"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando empréstimos...</p></div>;
     }
     if (error) {
       return <div className="flex flex-col items-center justify-center h-64 text-destructive col-span-full"><AlertTriangleIcon className="h-12 w-12 mb-3" /><p className="text-lg font-semibold">{error}</p></div>;
@@ -225,7 +225,7 @@ export default function LoansPage() {
               </div>
               <div className="flex gap-1">
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive/90" onClick={() => handleDeleteLoan(loan)} disabled={isDeletingId === loan.id || !user}>
-                  {isDeletingId === loan.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  {isDeletingId === loan.id ? <Sun className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
@@ -344,7 +344,7 @@ export default function LoansPage() {
               disabled={!!isDeletingId || !user}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeletingId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isDeletingId ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : null}
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -26,7 +26,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Checkbox } from '@/components/ui/checkbox';
 import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/databaseService';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Sun } from 'lucide-react';
 import { format } from 'date-fns';
 import { useState } from 'react';
 
@@ -225,7 +225,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Sun className="mr-2 h-4 w-4 animate-spin" />
                 Salvando...
               </>
             ) : (

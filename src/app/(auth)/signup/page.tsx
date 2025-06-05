@@ -13,7 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import Logo from '@/components/core/Logo';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Sun } from 'lucide-react';
 
 const signupSchema = z.object({
   displayName: z.string().optional(),
@@ -96,7 +96,7 @@ export default function SignupPage() {
             )}
           />
           <Button type="submit" className="w-full" disabled={isSubmitting || authLoading}>
-            {isSubmitting || authLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {isSubmitting || authLoading ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : null}
             Criar Conta
           </Button>
         </form>

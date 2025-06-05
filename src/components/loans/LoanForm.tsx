@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Sun } from 'lucide-react';
 import { useState } from 'react';
 import { addLoan, type NewLoanData } from '@/lib/databaseService';
 import type { Loan } from '@/types';
@@ -192,7 +192,7 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
           <Button type="submit" disabled={isSubmitting || !!existingLoan}>
             {isSubmitting ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Sun className="mr-2 h-4 w-4 animate-spin" />
                 Salvando...
               </>
             ) : (

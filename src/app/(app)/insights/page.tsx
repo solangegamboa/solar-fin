@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Sparkles, Loader2, AlertTriangle } from 'lucide-react';
+import { Sparkles, Sun, AlertTriangle } from 'lucide-react';
 import { generateFinancialInsights, type FinancialInsightsOutput } from '@/ai/flows/generate-financial-insights';
 import type { FinancialDataInput } from '@/types'; // This type is for the AI flow input
 import { useToast } from '@/hooks/use-toast';
@@ -107,7 +107,7 @@ export default function InsightsPage() {
   };
   
   if (authLoading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
+    return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
   }
   if (!user && !authLoading) {
     return <div className="flex flex-col items-center justify-center h-64 text-muted-foreground"><AlertTriangle className="h-12 w-12 mb-3" /><p className="text-lg">Por favor, faça login para acessar esta página.</p></div>;
@@ -136,7 +136,7 @@ export default function InsightsPage() {
         <CardContent>
           {fetchingData ? (
             <div className="flex items-center space-x-2">
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Sun className="h-5 w-5 animate-spin" />
               <p className="text-muted-foreground">Carregando dados financeiros...</p>
             </div>
           ) : financialData ? (
@@ -154,7 +154,7 @@ export default function InsightsPage() {
           )}
           <Button onClick={handleGenerateInsights} disabled={loading || fetchingData || !financialData || !user} className="mt-4 w-full md:w-auto">
             {loading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Sun className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Sparkles className="mr-2 h-4 w-4" />
             )}

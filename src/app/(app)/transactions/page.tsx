@@ -31,7 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { TransactionForm } from "@/components/transactions/TransactionForm";
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Loader2, AlertTriangleIcon, SearchX, Copy, RefreshCw, Trash2 } from "lucide-react";
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Sun, AlertTriangleIcon, SearchX, Copy, RefreshCw, Trash2 } from "lucide-react";
 import type { Transaction, NewTransactionData } from '@/types';
 import { getTransactionsForUser, addTransaction, deleteTransaction } from '@/lib/databaseService';
 import { formatCurrency } from '@/lib/utils';
@@ -165,7 +165,7 @@ export default function TransactionsPage() {
   };
 
   if (authLoading || isLoading && !transactions.length ) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
+    return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
   }
 
 
@@ -220,7 +220,7 @@ export default function TransactionsPage() {
               className="h-8 w-8"
             >
               {isDuplicatingId === transaction.id ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Sun className="h-4 w-4 animate-spin" />
               ) : (
                 <Copy className="h-4 w-4" />
               )}
@@ -235,7 +235,7 @@ export default function TransactionsPage() {
               className="h-8 w-8 text-destructive hover:text-destructive/80"
             >
               {isDeletingId === transaction.id ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Sun className="h-4 w-4 animate-spin" />
               ) : (
                 <Trash2 className="h-4 w-4" />
               )}
@@ -282,7 +282,7 @@ export default function TransactionsPage() {
         <CardContent>
           {isLoading && transactions.length === 0 ? ( // Show general loading if initial load
             <div className="h-[300px] flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <Sun className="h-8 w-8 animate-spin text-primary" />
               <p className="ml-2 text-muted-foreground">Carregando transações...</p>
             </div>
           ) : error ? (
@@ -327,7 +327,7 @@ export default function TransactionsPage() {
               disabled={!!isDeletingId || !user}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeletingId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isDeletingId ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : null}
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>

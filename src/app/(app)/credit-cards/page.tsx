@@ -23,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Loader2, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText } from "lucide-react";
+import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
 import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
 import { getCreditCardsForUser, getCreditCardPurchasesForUser, deleteCreditCardPurchase } from "@/lib/databaseService";
@@ -252,12 +252,12 @@ export default function CreditCardsPage() {
   };
   
   if (authLoading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando dados do usuário...</p></div>;
+    return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando dados do usuário...</p></div>;
   }
 
   const renderCreditCardList = () => {
     if (isLoadingCards || (isLoadingPurchases && creditCards.length > 0)) { 
-      return <div className="flex items-center justify-center h-40 col-span-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Carregando cartões e faturas...</p></div>;
+      return <div className="flex items-center justify-center h-40 col-span-full"><Sun className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Carregando cartões e faturas...</p></div>;
     }
     if (error && !creditCards.length) {
       return <div className="flex flex-col items-center justify-center h-40 text-destructive col-span-full"><AlertTriangleIcon className="h-8 w-8 mb-2" /><p>{error}</p></div>;
@@ -316,7 +316,7 @@ export default function CreditCardsPage() {
 
   const renderPurchasesList = () => {
     if (isLoadingPurchases && purchases.length === 0) { 
-      return <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Carregando compras...</p></div>;
+      return <div className="flex items-center justify-center h-40"><Sun className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Carregando compras...</p></div>;
     }
     if (!isLoadingPurchases && purchases.length === 0) {
       return <div className="flex flex-col items-center justify-center h-40"><SearchX className="h-12 w-12 text-muted-foreground mb-4" /><p className="text-muted-foreground">Nenhuma compra parcelada registrada.</p></div>;
@@ -346,7 +346,7 @@ export default function CreditCardsPage() {
                     className="h-8 w-8 text-destructive hover:text-destructive/80"
                   >
                     {isDeletingPurchaseId === p.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Sun className="h-4 w-4 animate-spin" />
                     ) : (
                       <Trash2 className="h-4 w-4" />
                     )}
@@ -363,13 +363,13 @@ export default function CreditCardsPage() {
 
   const renderMonthlySummary = () => {
     if ((isLoadingCards || isLoadingPurchases) && monthlySummaries.length === 0) {
-         return <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Calculando resumos...</p></div>;
+         return <div className="flex items-center justify-center h-40"><Sun className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Calculando resumos...</p></div>;
     }
     if (monthlySummaries.length === 0 && !isLoadingPurchases && !isLoadingCards) { 
       return <div className="flex flex-col items-center justify-center h-40"><SearchX className="h-12 w-12 text-muted-foreground mb-4" /><p className="text-muted-foreground">Nenhuma fatura futura encontrada.</p></div>;
     }
     if (monthlySummaries.length === 0) { 
-        return <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Calculando...</p></div>;
+        return <div className="flex items-center justify-center h-40"><Sun className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Calculando...</p></div>;
     }
 
     return (
@@ -467,7 +467,7 @@ export default function CreditCardsPage() {
               disabled={!!isDeletingPurchaseId || !user}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeletingPurchaseId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isDeletingPurchaseId ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : null}
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
