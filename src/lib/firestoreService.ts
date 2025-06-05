@@ -29,11 +29,13 @@ export const upsertUserInFirestore = async (firebaseUser: FirebaseUser): Promise
 
   const userRef = doc(db, 'users', firebaseUser.uid);
   
-  const dataToPersist: Partial<UserDocument> = {
+  // Dados que são comuns para criação e atualização.
+  // lastLoginAt é sempre atualizado.
+  const commonData = {
     uid: firebaseUser.uid,
     email: firebaseUser.email,
     displayName: firebaseUser.displayName,
-    photoURL: firebaseUser.photoURL,
+    photoURL: firebaseUser.photoURL, // Pode ser null, o que é ok.
     lastLoginAt: serverTimestamp(),
   };
 
@@ -41,13 +43,18 @@ export const upsertUserInFirestore = async (firebaseUser: FirebaseUser): Promise
     const userSnap = await getDoc(userRef);
 
     if (!userSnap.exists()) {
-      // Novo usuário no Firestore, definir createdAt
-      dataToPersist.createdAt = serverTimestamp();
-      await setDoc(userRef, dataToPersist);
+      // Novo usuário no Firestore: adiciona createdAt e cria o documento.
+      // Este é o ponto onde o "path" do documento do usuário é criado se não existir.
+      const dataToCreate: UserDocument = {
+        ...commonData,
+        createdAt: serverTimestamp(),
+      };
+      await setDoc(userRef, dataToCreate);
       console.log(`Novo usuário ${firebaseUser.uid} salvo no Firestore.`);
     } else {
-      // Usuário existente, mesclar dados para atualizar e não sobrescrever createdAt
-      await setDoc(userRef, dataToPersist, { merge: true });
+      // Usuário existente: atualiza com commonData.
+      // A opção { merge: true } garante que outros campos (como createdAt) sejam preservados.
+      await setDoc(userRef, commonData, { merge: true });
       console.log(`Dados do usuário ${firebaseUser.uid} atualizados no Firestore.`);
     }
   } catch (error) {
@@ -76,6 +83,16 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
     return { success: false, error: "User ID is required to add a transaction." };
   }
   try {
+    // Verifica se o documento do usuário pai existe antes de adicionar uma transação na subcoleção.
+    // A função upsertUserInFirestore deve garantir que o documento do usuário seja criado no login/signup.
+    const userDocRef = doc(db, 'users', userId);
+    const userDocSnap = await getDoc(userDocRef);
+
+    if (!userDocSnap.exists()) {
+      console.error(`Documento do usuário ${userId} não existe. Não é possível adicionar transação.`);
+      return { success: false, error: "Perfil de usuário não encontrado. Não é possível adicionar transação." };
+    }
+
     const transactionsCollectionRef = collection(db, 'users', userId, 'transactions');
     const docRef = await addDoc(transactionsCollectionRef, {
       ...transactionData,
@@ -84,8 +101,7 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
     return { success: true, transactionId: docRef.id };
   } catch (error: any) { 
     console.error("Error adding transaction to Firestore:", error); // Server-side log
-    // Return a generic, safe error message to the client to prevent call stack issues.
+    // Retorna uma mensagem de erro genérica e segura para o cliente.
     return { success: false, error: "Ocorreu um erro ao adicionar a transação. Por favor, tente novamente." };
   }
 };
-
