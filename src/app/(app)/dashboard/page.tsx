@@ -5,7 +5,15 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
-import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Loader2, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock, MoreHorizontal } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Loader2, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock, PlusCircle, ShoppingBag } from "lucide-react";
 import { getTransactionsForUser, getCreditCardsForUser, getCreditCardPurchasesForUser, getLoansForUser } from '@/lib/databaseService';
 import type { Transaction, CreditCard, CreditCardPurchase, Loan } from '@/types';
 import { formatCurrency } from "@/lib/utils";
@@ -19,10 +27,9 @@ import {
   getDate,
   addMonths,
   subMonths,
-  format as formatDateFns, // Renamed to avoid conflict
+  format as formatDateFns, 
   isSameMonth,
   isSameYear,
-  // isSameDay, // No longer explicitly used here, but fine to keep if other logic might need it
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -31,6 +38,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { DayProps } from "react-day-picker";
+import { TransactionForm } from "@/components/transactions/TransactionForm";
+import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
 
 interface DashboardSummary {
   balance: number; 
@@ -65,6 +74,10 @@ export default function DashboardPage() {
   const [expensesByCategory, setExpensesByCategory] = useState<CategoryExpense[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [userCreditCards, setUserCreditCards] = useState<CreditCard[]>([]);
+
+  const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+  const [isCreditCardPurchaseModalOpen, setIsCreditCardPurchaseModalOpen] = useState(false);
 
 
   const dailyTransactionSummaries = useMemo(() => {
@@ -96,7 +109,7 @@ export default function DashboardPage() {
         daysWithNetIncome.push(date);
       } else if (summary.net < 0) {
         daysWithNetExpense.push(date);
-      } else if (summary.income > 0 || summary.expense > 0) { // Net zero but had transactions
+      } else if (summary.income > 0 || summary.expense > 0) { 
         daysWithNetZeroAndTransactions.push(date);
       }
     });
@@ -128,7 +141,6 @@ export default function DashboardPage() {
   function CustomDay(props: DayProps) {
     const dayNumberNode = <>{formatDateFns(props.date, "d")}</>;
 
-    // Render only the day number if it's not in the current display month
     if (!isSameMonth(props.date, props.displayMonth) ) {
       return dayNumberNode;
     }
@@ -136,7 +148,6 @@ export default function DashboardPage() {
     const dayKey = formatDateFns(props.date, 'yyyy-MM-dd');
     const daySummary = dailyTransactionSummaries.get(dayKey);
 
-    // Render only the day number if it has no summary
     if (!daySummary) {
         return dayNumberNode;
     }
@@ -149,7 +160,6 @@ export default function DashboardPage() {
     return (
       <Popover>
         <PopoverTrigger asChild disabled={!daySummary}>
-          {/* This div becomes the interactive day cell styled by Calendar */}
           <div className="relative h-full w-full flex items-center justify-center cursor-pointer">
             {dayNumberNode}
             {indicatorColorClass && (
@@ -216,13 +226,14 @@ export default function DashboardPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [transactions, creditCards, creditCardPurchases, loans] = await Promise.all([
+      const [transactions, fetchedCreditCards, creditCardPurchases, loans] = await Promise.all([
         getTransactionsForUser(user.id),
         getCreditCardsForUser(user.id),
         getCreditCardPurchasesForUser(user.id),
         getLoansForUser(user.id),
       ]);
-      setAllTransactions(transactions); // Store all transactions for calendar
+      setAllTransactions(transactions); 
+      setUserCreditCards(fetchedCreditCards);
 
       let lifetimeBalance = 0;
       transactions.forEach(tx => {
@@ -258,7 +269,7 @@ export default function DashboardPage() {
       const targetPrevMonthClosingMonth = getMonth(monthBeforeSelected);
       const targetPrevMonthClosingYear = getYear(monthBeforeSelected);
       let ccBillsClosedLastMonth = 0;
-      creditCards.forEach(card => {
+      fetchedCreditCards.forEach(card => {
         ccBillsClosedLastMonth += calculateInvoiceTotalForCardAndMonth(
           card,
           creditCardPurchases,
@@ -281,7 +292,7 @@ export default function DashboardPage() {
       let cardSpendingForSelectedMonthBills = 0;
       const targetSelectedMonthClosingMonth = getMonth(selectedDate);
       const targetSelectedMonthClosingYear = getYear(selectedDate);
-      creditCards.forEach(card => {
+      fetchedCreditCards.forEach(card => {
         cardSpendingForSelectedMonthBills += calculateInvoiceTotalForCardAndMonth(
           card,
           creditCardPurchases,
@@ -329,6 +340,16 @@ export default function DashboardPage() {
   const isCurrentMonthSelected = () => {
     const today = new Date();
     return isSameMonth(selectedDate, today) && isSameYear(selectedDate, today);
+  };
+  
+  const handleTransactionAdded = () => {
+    setIsTransactionModalOpen(false);
+    fetchDashboardData();
+  };
+
+  const handleCreditCardPurchaseAdded = () => {
+    setIsCreditCardPurchaseModalOpen(false);
+    fetchDashboardData();
   };
 
 
@@ -381,11 +402,11 @@ export default function DashboardPage() {
             Resumo da sua saúde financeira.
           </p>
         </div>
-         <div className="flex items-center justify-center gap-2 sm:gap-4">
+         <div className="flex items-center justify-center gap-2 sm:gap-1">
             <Button onClick={handlePreviousMonth} variant="outline" size="icon" aria-label="Mês anterior">
                 <ChevronLeft className="h-5 w-5" />
             </Button>
-            <h2 className="text-lg sm:text-xl font-semibold text-center whitespace-nowrap tabular-nums">
+            <h2 className="text-lg sm:text-xl font-semibold text-center whitespace-nowrap tabular-nums mx-2">
                 {formatDateFns(selectedDate, 'MMMM/yyyy', { locale: ptBR })}
             </h2>
             <Button onClick={handleNextMonth} variant="outline" size="icon" aria-label="Próximo mês">
@@ -393,10 +414,39 @@ export default function DashboardPage() {
             </Button>
          </div>
       </div>
-       <div className="text-center sm:text-right">
+      
+       <div className="flex flex-col sm:flex-row items-center justify-end gap-2 mt-4 sm:mt-0">
          <Button onClick={handleCurrentMonth} variant="secondary" size="sm" disabled={isCurrentMonthSelected()}>
             <CalendarClock className="h-4 w-4 mr-2" /> Mês Atual
           </Button>
+          <Dialog open={isTransactionModalOpen} onOpenChange={setIsTransactionModalOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" disabled={!user}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Nova Transação
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Adicionar Nova Transação</DialogTitle>
+                <DialogDescription>Preencha os detalhes da sua transação.</DialogDescription>
+              </DialogHeader>
+              {user && <TransactionForm onSuccess={handleTransactionAdded} setOpen={setIsTransactionModalOpen} userId={user.id} />}
+            </DialogContent>
+          </Dialog>
+          <Dialog open={isCreditCardPurchaseModalOpen} onOpenChange={setIsCreditCardPurchaseModalOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" disabled={!user || userCreditCards.length === 0}>
+                <ShoppingBag className="mr-2 h-4 w-4" /> Nova Compra (Cartão)
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Adicionar Compra Parcelada</DialogTitle>
+                <DialogDescription>Registre uma nova compra no cartão de crédito.</DialogDescription>
+              </DialogHeader>
+              {user && <CreditCardTransactionForm userCreditCards={userCreditCards} onSuccess={handleCreditCardPurchaseAdded} setOpen={setIsCreditCardPurchaseModalOpen} userId={user.id} />}
+            </DialogContent>
+          </Dialog>
        </div>
 
 
