@@ -24,7 +24,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useAuth } from '@/contexts/AuthContext';
-import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/databaseService'; // ATUALIZADO O CAMINHO DA IMPORTAÇÃO
+import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/databaseService';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -61,7 +61,7 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
     resolver: zodResolver(transactionFormSchema),
     defaultValues: {
       type: undefined,
-      amount: '' as unknown as number, // Mantido como estava para evitar o erro de input não controlado
+      amount: '' as unknown as number, 
       category: '',
       date: new Date(),
       description: '',
@@ -87,7 +87,7 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
     };
 
     try {
-      const result: AddTransactionResult = await addTransaction(user.uid, transactionData); // Salva no RTDB
+      const result: AddTransactionResult = await addTransaction(user.uid, transactionData); 
 
       if (result.success && result.transactionId) {
         toast({
@@ -105,7 +105,8 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
         });
       }
     } catch (error: any) {
-      console.error('Client-side error calling addTransaction:', error?.message || String(error));
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred while saving the transaction.';
+      console.error('Client-side error calling addTransaction:', errorMessage);
       const displayMessage = 'Ocorreu um erro ao salvar a transação. Tente novamente.';
       toast({
         variant: 'destructive',

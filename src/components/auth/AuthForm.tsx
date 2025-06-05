@@ -22,7 +22,7 @@ import { auth } from '@/lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
-import { upsertUserInFirestore } from '@/lib/databaseService'; // ATUALIZADO O CAMINHO DA IMPORTAÇÃO
+import { upsertUserInFirestore } from '@/lib/databaseService';
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Por favor, insira um email válido.' }),
@@ -67,9 +67,10 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
        toast({
         variant: "destructive",
         title: "Erro de Autenticação",
-        description: (error && error.message) ? error.message : (mode === 'login' ? 'Falha ao entrar. Verifique suas credenciais e tente novamente.' : 'Falha ao criar conta. Por favor, tente novamente.'),
+        description: (mode === 'login' ? 'Falha ao entrar. Verifique suas credenciais e tente novamente.' : 'Falha ao criar conta. Por favor, tente novamente.'),
       });
-      console.error("AuthForm submission error:", (error && error.message) ? error.message : String(error)); 
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown auth error occurred during submit.';
+      console.error("AuthForm submission error:", errorMessage); 
     } finally {
       setLoading(false);
     }
@@ -81,7 +82,7 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
     try {
       const userCredential = await signInWithPopup(auth, provider);
       if (userCredential.user) {
-        await upsertUserInFirestore(userCredential.user); // Salva/Atualiza no RTDB
+        await upsertUserInFirestore(userCredential.user);
       }
       toast({ title: "Login com Google bem-sucedido!", description: "Redirecionando para o painel..." });
       router.push('/dashboard');
@@ -92,7 +93,10 @@ export function AuthForm({ mode, onSubmit }: AuthFormProps) {
       } else if (error.code === 'auth/popup-closed-by-user') {
         message = "Login com Google cancelado.";
       }
-      console.error("Firebase Google sign-in error:", error.code, error.message);
+      
+      const logMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown Google sign-in error occurred.';
+      console.error("Firebase Google sign-in error:", error?.code, logMessage);
+      
       toast({
         variant: "destructive",
         title: "Erro de Autenticação com Google",

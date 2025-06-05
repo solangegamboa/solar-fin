@@ -72,7 +72,8 @@ export default function InsightsPage() {
         description: 'Suas dicas financeiras personalizadas estão prontas.',
       });
     } catch (e: any) {
-      console.error('Erro ao gerar insights:', e?.message || String(e));
+      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'An unknown error occurred while generating insights.';
+      console.error('Erro ao gerar insights:', errorMessage);
       setError('Falha ao gerar insights. Tente novamente mais tarde.');
       toast({
         variant: 'destructive',
