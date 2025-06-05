@@ -137,12 +137,10 @@ export async function getTransactionsForUser(): Promise<Transaction[]> {
     db = await ensureDefaultUserStructure(db);
     const transactions = db.users[DEFAULT_USER_ID]?.transactions || [];
     return transactions.sort((a, b) => {
-      // Primeiro, ordena por data (mais recente primeiro)
       const dateComparison = new Date(b.date).getTime() - new Date(a.date).getTime();
       if (dateComparison !== 0) {
         return dateComparison;
       }
-      // Se as datas forem iguais, ordena por createdAt (mais recente primeiro)
       return b.createdAt - a.createdAt;
     });
   } catch (error: any) {
@@ -151,6 +149,36 @@ export async function getTransactionsForUser(): Promise<Transaction[]> {
     return []; 
   }
 }
+
+export interface DeleteResult {
+  success: boolean;
+  error?: string;
+}
+
+export const deleteTransaction = async (transactionId: string): Promise<DeleteResult> => {
+  try {
+    let db = await readDB();
+    db = await ensureDefaultUserStructure(db);
+
+    const initialLength = db.users[DEFAULT_USER_ID].transactions.length;
+    db.users[DEFAULT_USER_ID].transactions = db.users[DEFAULT_USER_ID].transactions.filter(
+      (tx) => tx.id !== transactionId
+    );
+
+    if (db.users[DEFAULT_USER_ID].transactions.length === initialLength) {
+      console.log(`Transaction ${transactionId} not found for default user.`);
+      return { success: false, error: "Transaction not found." };
+    }
+
+    await writeDB(db);
+    console.log(`Transaction ${transactionId} deleted for default user in local DB.`);
+    return { success: true };
+  } catch (error: any) {
+    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+    console.error("Error deleting transaction from local DB:", errorMessage, error);
+    return { success: false, error: "An error occurred while deleting the transaction." };
+  }
+};
 
 export async function getFinancialDataForUser(): Promise<FinancialDataInput | null> {
   try {
@@ -180,10 +208,8 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
       amount,
     }));
 
-    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000; // Default if no income transactions
+    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000; 
 
-    // For credit card balance in AI prompt, this would need to calculate current outstanding balances
-    // based on purchases and payments, which is complex. For now, sending 0.
     return {
       income: incomeForAI, 
       expenses: expensesArray,
@@ -191,7 +217,7 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
       creditCards: (userData.creditCards || []).map(cc => ({
         name: cc.name,
         limit: cc.limit,
-        balance: 0, // Placeholder: Real balance calculation is complex
+        balance: 0, 
         dueDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(cc.dueDateDay).padStart(2, '0')}`
       })),
     };
@@ -252,7 +278,6 @@ export async function getCreditCardsForUser(): Promise<CreditCard[]> {
   }
 }
 
-// --- Credit Card Purchase Functions ---
 
 export interface AddCreditCardPurchaseResult {
   success: boolean;
@@ -294,7 +319,6 @@ export async function getCreditCardPurchasesForUser(): Promise<CreditCardPurchas
     let db = await readDB();
     db = await ensureDefaultUserStructure(db);
     const purchases = db.users[DEFAULT_USER_ID]?.creditCardPurchases || [];
-    // Sort by purchase date, newest first
     return purchases.sort((a, b) => {
       const dateComparison = new Date(b.date).getTime() - new Date(a.date).getTime();
       if (dateComparison !== 0) {
@@ -308,3 +332,31 @@ export async function getCreditCardPurchasesForUser(): Promise<CreditCardPurchas
     return [];
   }
 }
+
+export const deleteCreditCardPurchase = async (purchaseId: string): Promise<DeleteResult> => {
+  try {
+    let db = await readDB();
+    db = await ensureDefaultUserStructure(db);
+
+    const purchasesArray = db.users[DEFAULT_USER_ID].creditCardPurchases || [];
+    const initialLength = purchasesArray.length;
+    db.users[DEFAULT_USER_ID].creditCardPurchases = purchasesArray.filter(
+      (p) => p.id !== purchaseId
+    );
+
+    if (db.users[DEFAULT_USER_ID].creditCardPurchases!.length === initialLength) {
+      console.log(`Credit Card Purchase ${purchaseId} not found for default user.`);
+      return { success: false, error: "Credit card purchase not found." };
+    }
+
+    await writeDB(db);
+    console.log(`Credit Card Purchase ${purchaseId} deleted for default user in local DB.`);
+    return { success: true };
+  } catch (error: any) {
+    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+    console.error("Error deleting credit card purchase from local DB:", errorMessage, error);
+    return { success: false, error: "An error occurred while deleting the credit card purchase." };
+  }
+};
+
+    

@@ -20,10 +20,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { TransactionForm } from "@/components/transactions/TransactionForm";
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Loader2, AlertTriangleIcon, SearchX, Copy, RefreshCw } from "lucide-react";
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Loader2, AlertTriangleIcon, SearchX, Copy, RefreshCw, Trash2 } from "lucide-react";
 import type { Transaction, NewTransactionData } from '@/types';
-import { getTransactionsForUser, addTransaction } from '@/lib/databaseService';
+import { getTransactionsForUser, addTransaction, deleteTransaction } from '@/lib/databaseService';
 import { formatCurrency } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -36,6 +46,9 @@ export default function TransactionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDuplicatingId, setIsDuplicatingId] = useState<string | null>(null);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const { toast } = useToast();
 
   const fetchUserTransactions = useCallback(async () => {
@@ -63,7 +76,7 @@ export default function TransactionsPage() {
   }, [fetchUserTransactions]);
 
   const handleTransactionAdded = () => {
-    fetchUserTransactions(); // Refresh list after adding a new transaction
+    fetchUserTransactions(); 
   };
 
   const handleDuplicateTransaction = async (transaction: Transaction) => {
@@ -74,7 +87,7 @@ export default function TransactionsPage() {
         amount: transaction.amount,
         category: transaction.category,
         description: transaction.description || '',
-        date: format(new Date(), 'yyyy-MM-dd'), // Current date
+        date: format(new Date(), 'yyyy-MM-dd'), 
         isRecurring: transaction.isRecurring,
       };
 
@@ -85,7 +98,7 @@ export default function TransactionsPage() {
           title: 'Transação Duplicada!',
           description: 'A transação recorrente foi duplicada para a data atual.',
         });
-        fetchUserTransactions(); // Refresh list
+        fetchUserTransactions(); 
       } else {
         toast({
           variant: 'destructive',
@@ -106,11 +119,51 @@ export default function TransactionsPage() {
     }
   };
 
+  const handleDeleteTransaction = (transaction: Transaction) => {
+    setTransactionToDelete(transaction);
+    setShowDeleteConfirmDialog(true);
+  };
+
+  const confirmDeleteTransaction = async () => {
+    if (!transactionToDelete) return;
+    setIsDeletingId(transactionToDelete.id);
+    setShowDeleteConfirmDialog(false);
+
+    try {
+      const result = await deleteTransaction(transactionToDelete.id);
+      if (result.success) {
+        toast({
+          title: 'Transação Excluída!',
+          description: 'A transação foi excluída com sucesso.',
+        });
+        fetchUserTransactions();
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao Excluir',
+          description: result.error || 'Não foi possível excluir a transação.',
+        });
+      }
+    } catch (e: any) {
+      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Ocorreu um erro desconhecido.';
+      console.error('Error deleting transaction:', errorMessage);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao Excluir',
+        description: 'Ocorreu um erro ao tentar excluir a transação.',
+      });
+    } finally {
+      setIsDeletingId(null);
+      setTransactionToDelete(null);
+    }
+  };
+
+
   const renderTransactionRows = () => {
     if (transactions.length === 0) {
       return (
         <TableRow>
-          <TableCell colSpan={6} className="h-24 text-center">
+          <TableCell colSpan={7} className="h-24 text-center">
             <div className="flex flex-col items-center justify-center space-y-2">
               <SearchX className="h-8 w-8 text-muted-foreground" />
               <p className="text-muted-foreground">Nenhuma transação encontrada.</p>
@@ -146,14 +199,15 @@ export default function TransactionsPage() {
         <TableCell className={`text-right font-semibold ${transaction.type === 'income' ? 'text-positive' : 'text-negative'}`}>
           {formatCurrency(transaction.amount)}
         </TableCell>
-        <TableCell className="text-right">
+        <TableCell className="text-right space-x-1">
           {transaction.isRecurring && (
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
               onClick={() => handleDuplicateTransaction(transaction)}
-              disabled={isDuplicatingId === transaction.id}
+              disabled={isDuplicatingId === transaction.id || !!isDeletingId}
               aria-label="Duplicar transação"
+              className="h-8 w-8"
             >
               {isDuplicatingId === transaction.id ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -162,6 +216,20 @@ export default function TransactionsPage() {
               )}
             </Button>
           )}
+           <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleDeleteTransaction(transaction)}
+              disabled={isDeletingId === transaction.id || !!isDuplicatingId}
+              aria-label="Excluir transação"
+              className="h-8 w-8 text-destructive hover:text-destructive/80"
+            >
+              {isDeletingId === transaction.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </Button>
         </TableCell>
       </TableRow>
     ));
@@ -230,6 +298,31 @@ export default function TransactionsPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={showDeleteConfirmDialog} onOpenChange={setShowDeleteConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a transação "{transactionToDelete?.description || 'selecionada'}" no valor de {formatCurrency(transactionToDelete?.amount || 0)}? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setTransactionToDelete(null)} disabled={!!isDeletingId}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteTransaction}
+              disabled={!!isDeletingId}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }
+
+    

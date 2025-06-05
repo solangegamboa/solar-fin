@@ -13,10 +13,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Loader2, ShoppingBag, Edit3, Trash2, TrendingUp, TrendingDown, FileText } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
 import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
-import { getCreditCardsForUser, getCreditCardPurchasesForUser } from "@/lib/databaseService";
+import { getCreditCardsForUser, getCreditCardPurchasesForUser, deleteCreditCardPurchase } from "@/lib/databaseService";
 import type { CreditCard, CreditCardPurchase } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
@@ -26,12 +36,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
 interface MonthlySummary {
-  monthYear: string; // "MMMM/yyyy" e.g. "junho/2025"
+  monthYear: string; 
   totalAmount: number;
   purchases: Array<CreditCardPurchase & { installmentAmount: number; currentInstallment: number; totalInstallments: number }>;
 }
 
-// Correct Portuguese month names in lowercase, as produced by format(..., 'MMMM', { locale: ptBR })
 const ptBRMonthNames = [
   'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
@@ -49,6 +58,11 @@ export default function CreditCardsPage() {
   
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const [isDeletingPurchaseId, setIsDeletingPurchaseId] = useState<string | null>(null);
+  const [showDeletePurchaseConfirmDialog, setShowDeletePurchaseConfirmDialog] = useState(false);
+  const [purchaseToDelete, setPurchaseToDelete] = useState<CreditCardPurchase | null>(null);
+
 
   const fetchUserCreditCards = useCallback(async () => {
     setIsLoadingCards(true);
@@ -90,7 +104,7 @@ export default function CreditCardsPage() {
     fetchUserCreditCards(); 
   };
 
-  const handlePurchaseAdded = () => {
+  const handlePurchaseAddedOrDeleted = () => {
     setIsPurchaseModalOpen(false);
     fetchUserPurchases();
   };
@@ -99,7 +113,7 @@ export default function CreditCardsPage() {
     (
       card: CreditCard,
       allPurchases: CreditCardPurchase[],
-      targetInvoiceClosingMonth: number, // 0-indexed month
+      targetInvoiceClosingMonth: number, 
       targetInvoiceClosingYear: number
     ): number => {
       let invoiceTotal = 0;
@@ -192,8 +206,47 @@ export default function CreditCardsPage() {
 
   const monthlySummaries = calculateMonthlySummaries();
 
+  const handleDeleteCreditCardPurchase = (purchase: CreditCardPurchase) => {
+    setPurchaseToDelete(purchase);
+    setShowDeletePurchaseConfirmDialog(true);
+  };
+
+  const confirmDeleteCreditCardPurchase = async () => {
+    if (!purchaseToDelete) return;
+    setIsDeletingPurchaseId(purchaseToDelete.id);
+    setShowDeletePurchaseConfirmDialog(false);
+
+    try {
+      const result = await deleteCreditCardPurchase(purchaseToDelete.id);
+      if (result.success) {
+        toast({
+          title: 'Compra Excluída!',
+          description: 'A compra do cartão de crédito foi excluída com sucesso.',
+        });
+        handlePurchaseAddedOrDeleted(); // Refreshes purchases
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao Excluir Compra',
+          description: result.error || 'Não foi possível excluir a compra.',
+        });
+      }
+    } catch (e: any) {
+      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Ocorreu um erro desconhecido.';
+      console.error('Error deleting credit card purchase:', errorMessage);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao Excluir Compra',
+        description: 'Ocorreu um erro ao tentar excluir a compra do cartão.',
+      });
+    } finally {
+      setIsDeletingPurchaseId(null);
+      setPurchaseToDelete(null);
+    }
+  };
+
   const renderCreditCardList = () => {
-    if (isLoadingCards || (isLoadingPurchases && creditCards.length > 0)) { // Show loader if cards are loading OR purchases are loading but we have cards
+    if (isLoadingCards || (isLoadingPurchases && creditCards.length > 0)) { 
       return <div className="flex items-center justify-center h-40 col-span-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Carregando cartões e faturas...</p></div>;
     }
     if (error && !creditCards.length) {
@@ -269,9 +322,25 @@ export default function CreditCardsPage() {
                   <p className="font-medium">{p.description}</p>
                   <p className="text-xs text-muted-foreground">{p.category} - {cardName}</p>
                 </div>
-                <div className="text-right">
-                  <p className="font-semibold">{formatCurrency(p.totalAmount)}</p>
-                  <p className="text-xs text-muted-foreground">{p.installments}x de {formatCurrency(p.totalAmount / p.installments)}</p>
+                <div className="text-right flex items-center">
+                 <div className="mr-2">
+                    <p className="font-semibold">{formatCurrency(p.totalAmount)}</p>
+                    <p className="text-xs text-muted-foreground">{p.installments}x de {formatCurrency(p.totalAmount / p.installments)}</p>
+                  </div>
+                   <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDeleteCreditCardPurchase(p)}
+                    disabled={isDeletingPurchaseId === p.id}
+                    aria-label="Excluir compra"
+                    className="h-8 w-8 text-destructive hover:text-destructive/80"
+                  >
+                    {isDeletingPurchaseId === p.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-1">Comprado em: {format(parseISO(p.date), 'dd/MM/yyyy', { locale: ptBR })}</p>
@@ -286,13 +355,12 @@ export default function CreditCardsPage() {
     if ((isLoadingCards || isLoadingPurchases) && monthlySummaries.length === 0) {
          return <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Calculando resumos...</p></div>;
     }
-    if (monthlySummaries.length === 0 && !isLoadingPurchases && !isLoadingCards) { // Only show 'no summary' if not loading and data is present
+    if (monthlySummaries.length === 0 && !isLoadingPurchases && !isLoadingCards) { 
       return <div className="flex flex-col items-center justify-center h-40"><SearchX className="h-12 w-12 text-muted-foreground mb-4" /><p className="text-muted-foreground">Nenhuma fatura futura encontrada.</p></div>;
     }
-    if (monthlySummaries.length === 0) { // Fallback for initial load or if there are truly no summaries
+    if (monthlySummaries.length === 0) { 
         return <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Calculando...</p></div>;
     }
-
 
     return (
       <Accordion type="single" collapsible className="w-full max-h-[400px] overflow-y-auto pr-2">
@@ -350,7 +418,7 @@ export default function CreditCardsPage() {
             <DialogTrigger asChild><Button variant="secondary" disabled={creditCards.length === 0}><ShoppingBag className="mr-2 h-4 w-4" />Nova Compra</Button></DialogTrigger>
             <DialogContent className="sm:max-w-[520px]">
               <DialogHeader><DialogTitle>Adicionar Compra Parcelada</DialogTitle><DialogDescription>Registre uma nova compra no cartão de crédito.</DialogDescription></DialogHeader>
-              <CreditCardTransactionForm userCreditCards={creditCards} onSuccess={handlePurchaseAdded} setOpen={setIsPurchaseModalOpen} />
+              <CreditCardTransactionForm userCreditCards={creditCards} onSuccess={handlePurchaseAddedOrDeleted} setOpen={setIsPurchaseModalOpen} />
             </DialogContent>
           </Dialog>
         </div>
@@ -374,7 +442,30 @@ export default function CreditCardsPage() {
         </div>
       </div>
 
+      <AlertDialog open={showDeletePurchaseConfirmDialog} onOpenChange={setShowDeletePurchaseConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a compra "{purchaseToDelete?.description || 'selecionada'}" no valor total de {formatCurrency(purchaseToDelete?.totalAmount || 0)}? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPurchaseToDelete(null)} disabled={!!isDeletingPurchaseId}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteCreditCardPurchase}
+              disabled={!!isDeletingPurchaseId}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingPurchaseId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }
-        
+
+    

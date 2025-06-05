@@ -29,6 +29,17 @@
           "date": "2025-06-04",
           "description": "",
           "createdAt": 1749089249330
+        },
+        {
+          "id": "1689acb5-5c29-4a5c-ace1-292cd6e1bb5d",
+          "userId": "default_user",
+          "type": "expense",
+          "amount": 2800,
+          "category": "Aluguel",
+          "date": "2025-06-04",
+          "description": "",
+          "isRecurring": true,
+          "createdAt": 1749090843659
         }
       ],
       "loans": [],
