@@ -487,8 +487,7 @@ export default function DashboardPage() {
         </Card>
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle className="font-headline">Calendário Financeiro ({selectedMonthNameCapitalized})</CardTitle>
-            <CardDescription>Visão geral das suas transações no mês. Clique em um dia para ver detalhes.</CardDescription>
+            <CardTitle className="font-headline">Calendário Financeiro</CardTitle>
           </CardHeader>
           <CardContent className="flex justify-center">
             {allTransactions ? (
