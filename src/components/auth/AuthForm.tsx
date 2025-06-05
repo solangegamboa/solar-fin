@@ -22,7 +22,7 @@ import { auth } from '@/lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
-import { upsertUserInFirestore } from '@/lib/firestoreService'; // O nome da função é mantido, mas a implementação usa RTDB
+import { upsertUserInFirestore } from '@/lib/databaseService'; // O nome da função é mantido, mas a implementação usa RTDB
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Por favor, insira um email válido.' }),

@@ -24,7 +24,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useAuth } from '@/contexts/AuthContext';
-import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/firestoreService'; // O nome da função é mantido, mas a implementação usa RTDB
+import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/databaseService'; // O nome da função é mantido, mas a implementação usa RTDB
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -48,8 +48,8 @@ const transactionFormSchema = z.object({
 type TransactionFormValues = z.infer<typeof transactionFormSchema>;
 
 interface TransactionFormProps {
-  onSuccess?: () => void; 
-  setOpen: (open: boolean) => void; 
+  onSuccess?: () => void;
+  setOpen: (open: boolean) => void;
 }
 
 export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
@@ -60,8 +60,8 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema),
     defaultValues: {
-      type: undefined, 
-      amount: '' as unknown as number, 
+      type: undefined,
+      amount: '' as unknown as number,
       category: '',
       date: new Date(),
       description: '',
@@ -82,8 +82,8 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
 
     const transactionData: NewTransactionData = {
       ...values,
-      date: format(values.date, 'yyyy-MM-dd'), 
-      amount: Number(values.amount) 
+      date: format(values.date, 'yyyy-MM-dd'),
+      amount: Number(values.amount)
     };
 
     try {
@@ -96,7 +96,7 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
         });
         form.reset();
         if (onSuccess) onSuccess();
-        setOpen(false); 
+        setOpen(false);
       } else {
         toast({
           variant: 'destructive',
@@ -104,8 +104,8 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
           description: result.error || 'Ocorreu um erro desconhecido.',
         });
       }
-    } catch (error: any) { 
-      console.error('Client-side error calling addTransaction:', error); 
+    } catch (error: any) {
+      console.error('Client-side error calling addTransaction:', error?.message || String(error));
       const displayMessage = 'Ocorreu um erro ao salvar a transação. Tente novamente.';
       toast({
         variant: 'destructive',
