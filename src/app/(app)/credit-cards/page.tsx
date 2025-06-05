@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Dialog,
   DialogContent,
@@ -12,147 +13,279 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, Landmark, AlertTriangleIcon, SearchX, Loader2 } from "lucide-react";
+import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Loader2, ShoppingBag, Edit3, Trash2 } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
-import { getCreditCardsForUser } from "@/lib/databaseService";
-import type { CreditCard } from "@/types";
+import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
+import { getCreditCardsForUser, getCreditCardPurchasesForUser } from "@/lib/databaseService";
+import type { CreditCard, CreditCardPurchase } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
+import { format, parseISO, addMonths, getMonth, getYear } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+
+interface MonthlySummary {
+  monthYear: string; // "MM/YYYY"
+  totalAmount: number;
+  purchases: Array<CreditCardPurchase & { installmentAmount: number; currentInstallment: number; totalInstallments: number }>;
+}
 
 export default function CreditCardsPage() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  
   const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [purchases, setPurchases] = useState<CreditCardPurchase[]>([]);
+  
+  const [isLoadingCards, setIsLoadingCards] = useState(true);
+  const [isLoadingPurchases, setIsLoadingPurchases] = useState(true);
+  
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchUserCreditCards = useCallback(async () => {
-    setIsLoading(true);
+    setIsLoadingCards(true);
     setError(null);
     try {
       const userCreditCards = await getCreditCardsForUser();
       setCreditCards(userCreditCards);
     } catch (e: any) {
-      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'An unknown error occurred.';
+      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Falha ao carregar cartões.';
       console.error("Failed to fetch credit cards:", errorMessage);
       setError("Falha ao carregar cartões. Tente novamente.");
-      toast({
-        variant: "destructive",
-        title: "Erro ao Carregar Cartões",
-        description: "Não foi possível buscar seus cartões de crédito.",
-      });
+      toast({ variant: "destructive", title: "Erro", description: errorMessage });
     } finally {
-      setIsLoading(false);
+      setIsLoadingCards(false);
+    }
+  }, [toast]);
+
+  const fetchUserPurchases = useCallback(async () => {
+    setIsLoadingPurchases(true);
+    try {
+      const userPurchases = await getCreditCardPurchasesForUser();
+      setPurchases(userPurchases);
+    } catch (e: any) {
+      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Falha ao carregar compras.';
+      console.error("Failed to fetch purchases:", errorMessage);
+      toast({ variant: "destructive", title: "Erro", description: errorMessage });
+    } finally {
+      setIsLoadingPurchases(false);
     }
   }, [toast]);
 
   useEffect(() => {
     fetchUserCreditCards();
-  }, [fetchUserCreditCards]);
+    fetchUserPurchases();
+  }, [fetchUserCreditCards, fetchUserPurchases]);
 
   const handleCreditCardAdded = () => {
-    setIsModalOpen(false);
+    setIsCardModalOpen(false);
     fetchUserCreditCards(); 
   };
 
+  const handlePurchaseAdded = () => {
+    setIsPurchaseModalOpen(false);
+    fetchUserPurchases();
+  };
+
+  const calculateMonthlySummaries = useCallback((): MonthlySummary[] => {
+    const summaries: { [key: string]: MonthlySummary } = {};
+    if (!creditCards.length || !purchases.length) return [];
+
+    purchases.forEach(purchase => {
+      const card = creditCards.find(c => c.id === purchase.cardId);
+      if (!card) return;
+
+      const purchaseDate = parseISO(purchase.date);
+      const installmentAmount = purchase.totalAmount / purchase.installments;
+
+      for (let i = 0; i < purchase.installments; i++) {
+        let paymentMonthDate = new Date(purchaseDate);
+        
+        // Determina o mês de fechamento da fatura para a primeira parcela
+        if (purchaseDate.getDate() > card.closingDateDay) {
+          paymentMonthDate = addMonths(purchaseDate, 1); 
+        }
+        // Adiciona os meses das parcelas subsequentes
+        paymentMonthDate = addMonths(paymentMonthDate, i);
+
+        // O mês/ano da fatura é o mês em que ela fecha
+        const monthYearKey = format(paymentMonthDate, 'MM/yyyy', { locale: ptBR });
+
+        if (!summaries[monthYearKey]) {
+          summaries[monthYearKey] = {
+            monthYear: format(paymentMonthDate, 'MMMM/yyyy', { locale: ptBR }), // Para exibição
+            totalAmount: 0,
+            purchases: [],
+          };
+        }
+        summaries[monthYearKey].totalAmount += installmentAmount;
+        summaries[monthYearKey].purchases.push({
+          ...purchase,
+          installmentAmount,
+          currentInstallment: i + 1,
+          totalInstallments: purchase.installments,
+        });
+      }
+    });
+    
+    return Object.values(summaries).sort((a, b) => {
+        const [aMonth, aYear] = a.monthYear.split('/');
+        const [bMonth, bYear] = b.monthYear.split('/');
+        const dateA = new Date(parseInt(aYear), ptBR.localize?.month(ptBR.monthNames.indexOf(aMonth.charAt(0).toUpperCase() + aMonth.slice(1))) , 1);
+        const dateB = new Date(parseInt(bYear), ptBR.localize?.month(ptBR.monthNames.indexOf(bMonth.charAt(0).toUpperCase() + bMonth.slice(1))) , 1);
+        return dateA.getTime() - dateB.getTime();
+    });
+  }, [purchases, creditCards]);
+
+  const monthlySummaries = calculateMonthlySummaries();
+
   const renderCreditCardList = () => {
-    if (isLoading) {
-      return (
-        <div className="flex items-center justify-center h-64 col-span-1 md:col-span-2 lg:col-span-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="ml-2 text-muted-foreground">Carregando cartões...</p>
-        </div>
-      );
+    if (isLoadingCards) {
+      return <div className="flex items-center justify-center h-40 col-span-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Carregando cartões...</p></div>;
     }
-
-    if (error) {
-      return (
-        <div className="flex flex-col items-center justify-center h-64 text-destructive col-span-1 md:col-span-2 lg:col-span-3">
-          <AlertTriangleIcon className="h-8 w-8 mb-2" />
-          <p>{error}</p>
-        </div>
-      );
+    if (error && !creditCards.length) { // Show error only if list is empty due to it
+      return <div className="flex flex-col items-center justify-center h-40 text-destructive col-span-full"><AlertTriangleIcon className="h-8 w-8 mb-2" /><p>{error}</p></div>;
     }
-
     if (creditCards.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center h-64 col-span-1 md:col-span-2 lg:col-span-3">
-          <SearchX className="h-12 w-12 text-muted-foreground mb-4" />
-          <p className="text-xl text-muted-foreground">Nenhum cartão de crédito encontrado.</p>
-          <p className="text-sm text-muted-foreground">Adicione um novo cartão para começar.</p>
-        </div>
-      );
+      return <div className="flex flex-col items-center justify-center h-40 col-span-full"><SearchX className="h-12 w-12 text-muted-foreground mb-4" /><p className="text-xl text-muted-foreground">Nenhum cartão de crédito encontrado.</p></div>;
     }
-
     return creditCards.map((card) => (
       <Card key={card.id} className="shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center text-xl">
-              <CreditCardLucideIcon className="mr-2 h-6 w-6 text-primary" />
-              {card.name}
-            </CardTitle>
-            {/* Placeholder for a menu or edit button */}
-            {/* <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button> */}
+            <CardTitle className="flex items-center text-xl"><CreditCardLucideIcon className="mr-2 h-6 w-6 text-primary" />{card.name}</CardTitle>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Limite do Cartão:</span>
-            <span className="font-semibold text-lg">{formatCurrency(card.limit)}</span>
-          </div>
-          <div className="flex items-center">
-            <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Dia de Vencimento:</span>
-            <span className="font-medium ml-auto">{String(card.dueDateDay).padStart(2, '0')}</span>
-          </div>
-          <div className="flex items-center">
-            <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Dia de Fechamento:</span>
-            <span className="font-medium ml-auto">{String(card.closingDateDay).padStart(2, '0')}</span>
-          </div>
+          <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Limite:</span><span className="font-semibold">{formatCurrency(card.limit)}</span></div>
+          <div className="flex items-center"><CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Vencimento: Dia</span><span className="font-medium ml-auto">{String(card.dueDateDay).padStart(2, '0')}</span></div>
+          <div className="flex items-center"><CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Fechamento: Dia</span><span className="font-medium ml-auto">{String(card.closingDateDay).padStart(2, '0')}</span></div>
         </CardContent>
-        {/* 
-        <CardFooter className="pt-4">
-          <Button variant="outline" className="w-full">Ver Faturas</Button>
-        </CardFooter>
-        */}
       </Card>
     ));
   };
 
+  const renderPurchasesList = () => {
+    if (isLoadingPurchases && purchases.length === 0) { // Show loader only if purchases not yet loaded
+      return <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Carregando compras...</p></div>;
+    }
+    if (!isLoadingPurchases && purchases.length === 0) {
+      return <div className="flex flex-col items-center justify-center h-40"><SearchX className="h-12 w-12 text-muted-foreground mb-4" /><p className="text-muted-foreground">Nenhuma compra parcelada registrada.</p></div>;
+    }
+    return (
+      <ul className="space-y-3">
+        {purchases.map(p => {
+          const cardName = creditCards.find(c => c.id === p.cardId)?.name || 'Cartão desconhecido';
+          return (
+            <li key={p.id} className="p-3 border rounded-md shadow-sm bg-card">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="font-medium">{p.description}</p>
+                  <p className="text-xs text-muted-foreground">{p.category} - {cardName}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold">{formatCurrency(p.totalAmount)}</p>
+                  <p className="text-xs text-muted-foreground">{p.installments}x de {formatCurrency(p.totalAmount / p.installments)}</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Comprado em: {format(parseISO(p.date), 'dd/MM/yyyy', { locale: ptBR })}</p>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  const renderMonthlySummary = () => {
+    if (isLoadingCards || isLoadingPurchases && monthlySummaries.length === 0) {
+         return <div className="flex items-center justify-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Calculando resumos...</p></div>;
+    }
+    if (monthlySummaries.length === 0) {
+      return <div className="flex flex-col items-center justify-center h-40"><SearchX className="h-12 w-12 text-muted-foreground mb-4" /><p className="text-muted-foreground">Nenhuma fatura futura encontrada.</p></div>;
+    }
+
+    return (
+      <Accordion type="single" collapsible className="w-full">
+        {monthlySummaries.map(summary => (
+          <AccordionItem value={summary.monthYear} key={summary.monthYear}>
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex justify-between w-full pr-2">
+                <span className="font-semibold text-base">{summary.monthYear.charAt(0).toUpperCase() + summary.monthYear.slice(1)}</span>
+                <Badge variant="secondary" className="text-base">{formatCurrency(summary.totalAmount)}</Badge>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <ul className="space-y-2 pt-2">
+                {summary.purchases.map(p => (
+                  <li key={`${p.id}-${p.currentInstallment}`} className="p-2 border-b last:border-b-0">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm font-medium">{p.description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {creditCards.find(c => c.id === p.cardId)?.name || 'Cartão'} - {p.category}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold">{formatCurrency(p.installmentAmount)}</p>
+                        <p className="text-xs text-muted-foreground">Parcela {p.currentInstallment}/{p.totalInstallments}</p>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    );
+  }
+
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight font-headline">Cartões de Crédito</h1>
-          <p className="text-muted-foreground">
-            Gerencie seus cartões e compras parceladas.
-          </p>
+          <p className="text-muted-foreground">Gerencie seus cartões e compras parceladas.</p>
         </div>
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Novo Cartão
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[520px]">
-            <DialogHeader>
-              <DialogTitle>Adicionar Novo Cartão de Crédito</DialogTitle>
-              <DialogDescription>
-                Preencha os detalhes do seu novo cartão abaixo.
-              </DialogDescription>
-            </DialogHeader>
-            <CreditCardForm onSuccess={handleCreditCardAdded} setOpen={setIsModalOpen} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Dialog open={isCardModalOpen} onOpenChange={setIsCardModalOpen}>
+            <DialogTrigger asChild><Button><PlusCircle className="mr-2 h-4 w-4" />Novo Cartão</Button></DialogTrigger>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader><DialogTitle>Adicionar Novo Cartão</DialogTitle><DialogDescription>Preencha os detalhes do seu novo cartão.</DialogDescription></DialogHeader>
+              <CreditCardForm onSuccess={handleCreditCardAdded} setOpen={setIsCardModalOpen} />
+            </DialogContent>
+          </Dialog>
+          <Dialog open={isPurchaseModalOpen} onOpenChange={setIsPurchaseModalOpen}>
+            <DialogTrigger asChild><Button variant="secondary" disabled={creditCards.length === 0}><ShoppingBag className="mr-2 h-4 w-4" />Nova Compra</Button></DialogTrigger>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader><DialogTitle>Adicionar Compra Parcelada</DialogTitle><DialogDescription>Registre uma nova compra no cartão de crédito.</DialogDescription></DialogHeader>
+              <CreditCardTransactionForm userCreditCards={creditCards} onSuccess={handlePurchaseAdded} setOpen={setIsPurchaseModalOpen} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
+      <h2 className="text-2xl font-semibold tracking-tight font-headline border-b pb-2">Meus Cartões</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {renderCreditCardList()}
       </div>
+      
+      <Separator className="my-8" />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div>
+            <h2 className="text-2xl font-semibold tracking-tight font-headline mb-4">Compras Realizadas</h2>
+            {renderPurchasesList()}
+        </div>
+        <div>
+            <h2 className="text-2xl font-semibold tracking-tight font-headline mb-4">Próximas Faturas (Estimativa)</h2>
+            {renderMonthlySummary()}
+        </div>
+      </div>
+
     </div>
   );
 }

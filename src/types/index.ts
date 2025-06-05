@@ -46,17 +46,17 @@ export interface CreditCard {
   createdAt: number; 
 }
 
+// Representa uma compra individual feita com cartão de crédito
 export interface CreditCardPurchase {
   id: string;
   userId: string;
-  cardId: string;
+  cardId: string; // ID do cartão usado na compra
+  date: string; // Data da compra (YYYY-MM-DD)
   description: string;
-  totalAmount: number;
-  installments: number; 
-  currentInstallment: number; 
-  purchaseDate: string; 
-  firstPaymentDate: string; 
-  createdAt: number; 
+  category: string;
+  totalAmount: number; // Valor total da compra
+  installments: number; // Número de parcelas (1 para compra à vista)
+  createdAt: number;
 }
 
 export interface FinancialDataInput {
@@ -80,4 +80,14 @@ export interface NewCreditCardData {
   limit: number;
   dueDateDay: number;
   closingDateDay: number;
+}
+
+// Para o formulário de nova compra no cartão
+export interface NewCreditCardPurchaseData {
+  cardId: string;
+  date: string; // YYYY-MM-DD
+  description: string;
+  category: string;
+  totalAmount: number;
+  installments: number;
 }
