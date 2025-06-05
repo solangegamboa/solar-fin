@@ -3,32 +3,29 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput } from '@/types';
+import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData } from '@/types';
 import { randomUUID } from 'crypto';
 
-// Path to the local JSON database file
 const DB_PATH = path.join(process.cwd(), 'src', 'data', 'db.json');
-const DEFAULT_USER_ID = 'default_user'; // Centralized default user ID
+const DEFAULT_USER_ID = 'default_user'; 
 
 interface LocalDB {
   users: {
     [uid: string]: {
       profile: UserProfile;
       transactions: Transaction[];
-      loans?: any[]; // Kept for structural consistency, not fully implemented
-      creditCards?: any[]; // Kept for structural consistency, not fully implemented
+      loans?: any[]; 
+      creditCards?: CreditCard[]; 
     };
   };
 }
 
-// Helper function to read the database
 async function readDB(): Promise<LocalDB> {
   try {
     const data = await fs.readFile(DB_PATH, 'utf-8');
     return JSON.parse(data) as LocalDB;
   } catch (error: any) {
     if (error.code === 'ENOENT') {
-      // If db.json doesn't exist, create it with a default structure
       const initialDb: LocalDB = {
         users: {
           [DEFAULT_USER_ID]: {
@@ -55,7 +52,6 @@ async function readDB(): Promise<LocalDB> {
   }
 }
 
-// Helper function to write to the database
 async function writeDB(data: LocalDB): Promise<void> {
   try {
     await fs.writeFile(DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
@@ -65,7 +61,6 @@ async function writeDB(data: LocalDB): Promise<void> {
   }
 }
 
-// Ensures the default user profile and basic structure exists in db.json
 async function ensureDefaultUserStructure(db: LocalDB): Promise<LocalDB> {
   if (!db.users[DEFAULT_USER_ID]) {
     db.users[DEFAULT_USER_ID] = {
@@ -83,7 +78,6 @@ async function ensureDefaultUserStructure(db: LocalDB): Promise<LocalDB> {
     };
     console.log(`Default user structure created in local DB for ${DEFAULT_USER_ID}.`);
   } else {
-    // Ensure sub-arrays exist if profile exists but arrays are missing
     if (!db.users[DEFAULT_USER_ID].transactions) db.users[DEFAULT_USER_ID].transactions = [];
     if (!db.users[DEFAULT_USER_ID].loans) db.users[DEFAULT_USER_ID].loans = [];
     if (!db.users[DEFAULT_USER_ID].creditCards) db.users[DEFAULT_USER_ID].creditCards = [];
@@ -91,9 +85,6 @@ async function ensureDefaultUserStructure(db: LocalDB): Promise<LocalDB> {
   return db;
 }
 
-/**
- * Ensures the default user profile exists and updates last login time.
- */
 export const upsertUser = async (): Promise<void> => {
   let db = await readDB();
   db = await ensureDefaultUserStructure(db);
@@ -118,7 +109,7 @@ export const addTransaction = async (transactionData: NewTransactionData): Promi
 
     const newTransaction: Transaction = {
       id: randomUUID(),
-      userId: DEFAULT_USER_ID, // Always use default user
+      userId: DEFAULT_USER_ID, 
       ...transactionData,
       createdAt: Date.now(),
     };
@@ -140,7 +131,6 @@ export async function getTransactionsForUser(): Promise<Transaction[]> {
     let db = await readDB();
     db = await ensureDefaultUserStructure(db);
     const transactions = db.users[DEFAULT_USER_ID]?.transactions || [];
-    // Sort by date (string YYYY-MM-DD) descending, then by createdAt descending as a tie-breaker
     return transactions.sort((a, b) => {
       if (b.date < a.date) return -1;
       if (b.date > a.date) return 1;
@@ -149,10 +139,9 @@ export async function getTransactionsForUser(): Promise<Transaction[]> {
   } catch (error: any) {
     const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
     console.error(`Error fetching transactions for default user from local DB:`, errorMessage, error);
-    return []; // Return empty array on error
+    return []; 
   }
 }
-
 
 export async function getFinancialDataForUser(): Promise<FinancialDataInput | null> {
   try {
@@ -167,12 +156,9 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
     }
 
     const expensesByCategory: { [category: string]: number } = {};
-    let totalIncomeThisMonth = 0; // This might need more sophisticated date filtering if truly "this month"
+    let totalIncomeThisMonth = 0; 
 
-    // For simplicity, we'll sum all income transactions for the AI.
-    // And all expenses.
     (userData.transactions || []).forEach(tx => {
-      // Consider filtering by month if this data is meant to be monthly
       if (tx.type === 'expense') {
         expensesByCategory[tx.category] = (expensesByCategory[tx.category] || 0) + tx.amount;
       } else if (tx.type === 'income') {
@@ -185,15 +171,18 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
       amount,
     }));
 
-    // Provide a default income if none found, so AI flow has something to work with
-    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000; // Default to 5000 if no income found
+    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000;
 
     return {
-      income: incomeForAI, // Using a simplified total income
+      income: incomeForAI, 
       expenses: expensesArray,
-      // Using placeholder/empty arrays for loans and credit cards as per previous scope
       loans: userData.loans || [],
-      creditCards: userData.creditCards || [],
+      creditCards: (userData.creditCards || []).map(cc => ({ // Map to format expected by AI
+        name: cc.name,
+        limit: cc.limit,
+        balance: 0, // Placeholder, balance calculation is complex
+        dueDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(cc.dueDateDay).padStart(2, '0')}` // Approximate
+      })),
     };
 
   } catch (error: any) {
@@ -202,3 +191,39 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
     return null;
   }
 }
+
+export interface AddCreditCardResult {
+  success: boolean;
+  creditCardId?: string;
+  error?: string;
+}
+
+export const addCreditCard = async (creditCardData: NewCreditCardData): Promise<AddCreditCardResult> => {
+  try {
+    let db = await readDB();
+    db = await ensureDefaultUserStructure(db);
+
+    const newCreditCard: CreditCard = {
+      id: randomUUID(),
+      userId: DEFAULT_USER_ID,
+      ...creditCardData,
+      limit: Number(creditCardData.limit), // Ensure limit is a number
+      dueDateDay: Number(creditCardData.dueDateDay),
+      closingDateDay: Number(creditCardData.closingDateDay),
+      createdAt: Date.now(),
+    };
+
+    if (!db.users[DEFAULT_USER_ID].creditCards) {
+      db.users[DEFAULT_USER_ID].creditCards = [];
+    }
+    db.users[DEFAULT_USER_ID].creditCards!.push(newCreditCard);
+    await writeDB(db);
+
+    console.log(`Credit Card ${newCreditCard.id} added for default user in local DB.`);
+    return { success: true, creditCardId: newCreditCard.id };
+  } catch (error: any) {
+    const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
+    console.error("Error adding credit card to local DB:", errorMessage, error);
+    return { success: false, error: "An error occurred while adding the credit card." };
+  }
+};

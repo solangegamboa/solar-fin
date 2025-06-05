@@ -3,22 +3,22 @@ export interface UserProfile {
   uid: string;
   email: string | null;
   displayName?: string | null;
-  photoURL?: string | null; // Kept for type consistency, but will be null for local user
-  createdAt?: number; // Timestamp (Date.now())
-  lastLoginAt?: number; // Timestamp (Date.now())
+  photoURL?: string | null;
+  createdAt?: number; 
+  lastLoginAt?: number; 
 }
 
 export type TransactionType = 'income' | 'expense';
 
 export interface Transaction {
   id: string;
-  userId: string; // Will be the DEFAULT_USER_ID
+  userId: string; 
   type: TransactionType;
   amount: number;
   category: string;
-  date: string; // ISO string e.g., "2024-07-15"
+  date: string; 
   description?: string;
-  createdAt: number; // Timestamp (Date.now())
+  createdAt: number; 
 }
 
 export interface Loan {
@@ -26,14 +26,14 @@ export interface Loan {
   userId: string;
   name: string;
   totalAmount: number;
-  interestRate: number; // Annual percentage
-  installments: number; // Total number of installments
+  interestRate: number; 
+  installments: number; 
   paidAmount: number;
   remainingAmount: number;
   monthlyPayment: number;
-  startDate: string; // ISO string
-  endDate?: string; // ISO string
-  createdAt: number; // timestamp
+  startDate: string; 
+  endDate?: string; 
+  createdAt: number; 
 }
 
 export interface CreditCard {
@@ -41,9 +41,9 @@ export interface CreditCard {
   userId: string;
   name: string;
   limit: number;
-  dueDateDay: number; // Day of the month (1-31)
-  closingDateDay: number; // Day of the month (1-31)
-  createdAt: number; // timestamp
+  dueDateDay: number; 
+  closingDateDay: number; 
+  createdAt: number; 
 }
 
 export interface CreditCardPurchase {
@@ -52,17 +52,32 @@ export interface CreditCardPurchase {
   cardId: string;
   description: string;
   totalAmount: number;
-  installments: number; // Total number of installments (1 for single payment)
-  currentInstallment: number; // For recurring purchases, otherwise 1
-  purchaseDate: string; // ISO string
-  firstPaymentDate: string; // ISO string
-  createdAt: number; // timestamp
+  installments: number; 
+  currentInstallment: number; 
+  purchaseDate: string; 
+  firstPaymentDate: string; 
+  createdAt: number; 
 }
 
-// This type is used by the AI flow, ensure it's compatible with local data
 export interface FinancialDataInput {
   income: number;
   expenses: Array<{ category: string; amount: number }>;
   loans: Array<{ description: string; amount: number; interestRate: number; monthlyPayment: number }>;
   creditCards: Array<{ name: string; limit: number; balance: number; dueDate: string }>;
+}
+
+// New type for data submitted from the form
+export interface NewTransactionData {
+  type: TransactionType;
+  amount: number;
+  category: string;
+  date: string; // ISO string e.g., "2024-07-15"
+  description?: string;
+}
+
+export interface NewCreditCardData {
+  name: string;
+  limit: number;
+  dueDateDay: number;
+  closingDateDay: number;
 }

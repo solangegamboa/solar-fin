@@ -19,6 +19,16 @@
           "date": "2025-06-04",
           "description": "",
           "createdAt": 1749089165221
+        },
+        {
+          "id": "f89acf6d-7289-4e26-b363-b8f1d131c3ea",
+          "userId": "default_user",
+          "type": "expense",
+          "amount": 400,
+          "category": "serie",
+          "date": "2025-06-04",
+          "description": "",
+          "createdAt": 1749089249330
         }
       ],
       "loans": [],
