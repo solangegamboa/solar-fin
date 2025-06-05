@@ -25,7 +25,6 @@ interface DashboardSummary {
   balance: number;
   monthlyIncome: number;
   monthlyExpenses: number;
-  savingsRate: number;
   currentMonthCardSpending: number;
 }
 
@@ -140,14 +139,11 @@ export default function DashboardPage() {
         );
       });
       
-      // Savings Rate
-      const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100 : 0;
 
       setSummary({
         balance: lifetimeBalance,
         monthlyIncome,
         monthlyExpenses,
-        savingsRate,
         currentMonthCardSpending,
       });
 
@@ -195,9 +191,6 @@ export default function DashboardPage() {
     { title: "Receitas do Mês", value: summary.monthlyIncome, icon: TrendingUp, currency: true, color: "text-positive" },
     { title: "Despesas do Mês", value: summary.monthlyExpenses, icon: TrendingDown, currency: true, color: "text-negative" },
     { title: "Gastos nos Cartões (Mês Atual)", value: summary.currentMonthCardSpending, icon: CreditCardIcon, currency: true, color: "text-blue-500", link: "/credit-cards" },
-    // Taxa de poupança pode precisar ser ajustada para caber, ou movida. Para caber em 2x2, um card será maior ou teremos mais uma linha.
-    // Por enquanto, vou deixar 4 cards para manter o layout 2x2.
-    // { title: "Taxa de Poupança", value: summary.savingsRate, icon: Landmark, currency: false, unit: "%", color: "text-indigo-500" },
   ];
 
 
@@ -222,7 +215,6 @@ export default function DashboardPage() {
                 <div className={`text-2xl font-bold ${card.color || ''}`}>
                   {card.currency ? formatCurrency(card.value) : `${card.value.toFixed(2)}${card.unit || ''}`}
                 </div>
-                {/* <p className="text-xs text-muted-foreground">+20.1% from last month</p> */}
               </CardContent>
             </Card>
           );
@@ -238,21 +230,6 @@ export default function DashboardPage() {
         })}
       </div>
       
-       <Card className="shadow-lg lg:col-span-2"> {/* Taxa de poupança em um card separado abaixo */}
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Taxa de Poupança</CardTitle>
-            <Landmark className="h-5 w-5 text-indigo-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-indigo-500">
-              {summary.savingsRate.toFixed(2)}%
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Baseado nas receitas e despesas do mês atual.
-            </p>
-          </CardContent>
-        </Card>
-
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="shadow-lg">
           <CardHeader>
