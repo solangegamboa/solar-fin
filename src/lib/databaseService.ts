@@ -115,6 +115,7 @@ export const addTransaction = async (transactionData: NewTransactionData): Promi
       id: randomUUID(),
       userId: DEFAULT_USER_ID, 
       ...transactionData,
+      isRecurring: transactionData.isRecurring || false,
       createdAt: Date.now(),
     };
 
@@ -136,8 +137,12 @@ export async function getTransactionsForUser(): Promise<Transaction[]> {
     db = await ensureDefaultUserStructure(db);
     const transactions = db.users[DEFAULT_USER_ID]?.transactions || [];
     return transactions.sort((a, b) => {
-      if (b.date < a.date) return -1;
-      if (b.date > a.date) return 1;
+      // Primeiro, ordena por data (mais recente primeiro)
+      const dateComparison = new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (dateComparison !== 0) {
+        return dateComparison;
+      }
+      // Se as datas forem iguais, ordena por createdAt (mais recente primeiro)
       return b.createdAt - a.createdAt;
     });
   } catch (error: any) {
@@ -291,8 +296,10 @@ export async function getCreditCardPurchasesForUser(): Promise<CreditCardPurchas
     const purchases = db.users[DEFAULT_USER_ID]?.creditCardPurchases || [];
     // Sort by purchase date, newest first
     return purchases.sort((a, b) => {
-      if (b.date < a.date) return -1;
-      if (b.date > a.date) return 1;
+      const dateComparison = new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (dateComparison !== 0) {
+        return dateComparison;
+      }
       return b.createdAt - a.createdAt;
     });
   } catch (error: any) {

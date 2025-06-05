@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-// useAuth is still used to get the (now mock) user details if needed, though userId is hardcoded in service
+import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { useAuth } from '@/contexts/AuthContext'; 
 import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/databaseService';
 import { useToast } from '@/hooks/use-toast';
@@ -36,7 +36,7 @@ const transactionFormSchema = z.object({
     required_error: 'O tipo da transação é obrigatório.',
   }),
   amount: z.coerce
-    .number({ invalid_type_error: 'O valor deve ser um número.' })
+    .number({ invalid_type_error: 'O valor deve ser um número.' , required_error: 'O valor é obrigatório.'})
     .positive({ message: 'O valor deve ser positivo.' })
     .min(0.01, { message: 'O valor deve ser maior que zero.' }),
   category: z.string().min(1, { message: 'A categoria é obrigatória.' }).max(50, { message: 'A categoria deve ter no máximo 50 caracteres.'}),
@@ -44,6 +44,7 @@ const transactionFormSchema = z.object({
     required_error: 'A data da transação é obrigatória.',
   }),
   description: z.string().max(200, { message: 'A descrição deve ter no máximo 200 caracteres.'}).optional(),
+  isRecurring: z.boolean().optional(), // Adicionado campo isRecurring
 });
 
 type TransactionFormValues = z.infer<typeof transactionFormSchema>;
@@ -54,7 +55,7 @@ interface TransactionFormProps {
 }
 
 export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
-  const { user } = useAuth(); // Gets the mock user
+  const { user } = useAuth(); 
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -66,24 +67,21 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
       category: '',
       date: new Date(),
       description: '',
+      isRecurring: false, // Valor padrão para isRecurring
     },
   });
 
   const onSubmit = async (values: TransactionFormValues) => {
-    // No user check needed as user is always the mock user
-    // if (!user) { ... }
-
     setIsSubmitting(true);
 
     const transactionData: NewTransactionData = {
       ...values,
       date: format(values.date, 'yyyy-MM-dd'),
-      amount: Number(values.amount)
-      // userId is now handled by addTransaction server action (uses DEFAULT_USER_ID)
+      amount: Number(values.amount),
+      isRecurring: values.isRecurring || false,
     };
 
     try {
-      // addTransaction now doesn't need userId passed from client
       const result: AddTransactionResult = await addTransaction(transactionData);
 
       if (result.success && result.transactionId) {
@@ -198,7 +196,29 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
           )}
         />
 
-        <div className="flex justify-end space-x-2">
+        <FormField
+          control={form.control}
+          name="isRecurring"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow">
+              <FormControl>
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+              <div className="space-y-1 leading-none">
+                <FormLabel>
+                  Transação Recorrente?
+                </FormLabel>
+                <FormMessage />
+              </div>
+            </FormItem>
+          )}
+        />
+
+
+        <div className="flex justify-end space-x-2 pt-2">
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
             Cancelar
           </Button>

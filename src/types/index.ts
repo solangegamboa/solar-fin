@@ -18,6 +18,7 @@ export interface Transaction {
   category: string;
   date: string; 
   description?: string;
+  isRecurring?: boolean; // Novo campo para transação recorrente
   createdAt: number; 
 }
 
@@ -73,6 +74,7 @@ export interface NewTransactionData {
   category: string;
   date: string; // ISO string e.g., "2024-07-15"
   description?: string;
+  isRecurring?: boolean; // Novo campo para transação recorrente
 }
 
 export interface NewCreditCardData {

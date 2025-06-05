@@ -21,9 +21,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { TransactionForm } from "@/components/transactions/TransactionForm";
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Loader2, AlertTriangleIcon, SearchX } from "lucide-react";
-import type { Transaction } from '@/types';
-import { getTransactionsForUser } from '@/lib/databaseService';
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Loader2, AlertTriangleIcon, SearchX, Copy, RefreshCw } from "lucide-react";
+import type { Transaction, NewTransactionData } from '@/types';
+import { getTransactionsForUser, addTransaction } from '@/lib/databaseService';
 import { formatCurrency } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -35,6 +35,7 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDuplicatingId, setIsDuplicatingId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchUserTransactions = useCallback(async () => {
@@ -65,11 +66,51 @@ export default function TransactionsPage() {
     fetchUserTransactions(); // Refresh list after adding a new transaction
   };
 
+  const handleDuplicateTransaction = async (transaction: Transaction) => {
+    setIsDuplicatingId(transaction.id);
+    try {
+      const newTransactionData: NewTransactionData = {
+        type: transaction.type,
+        amount: transaction.amount,
+        category: transaction.category,
+        description: transaction.description || '',
+        date: format(new Date(), 'yyyy-MM-dd'), // Current date
+        isRecurring: transaction.isRecurring,
+      };
+
+      const result = await addTransaction(newTransactionData);
+
+      if (result.success) {
+        toast({
+          title: 'Transação Duplicada!',
+          description: 'A transação recorrente foi duplicada para a data atual.',
+        });
+        fetchUserTransactions(); // Refresh list
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao Duplicar',
+          description: result.error || 'Não foi possível duplicar a transação.',
+        });
+      }
+    } catch (e: any) {
+      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Ocorreu um erro desconhecido.';
+      console.error('Error duplicating transaction:', errorMessage);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao Duplicar',
+        description: 'Ocorreu um erro ao tentar duplicar a transação.',
+      });
+    } finally {
+      setIsDuplicatingId(null);
+    }
+  };
+
   const renderTransactionRows = () => {
     if (transactions.length === 0) {
       return (
         <TableRow>
-          <TableCell colSpan={5} className="h-24 text-center">
+          <TableCell colSpan={6} className="h-24 text-center">
             <div className="flex flex-col items-center justify-center space-y-2">
               <SearchX className="h-8 w-8 text-muted-foreground" />
               <p className="text-muted-foreground">Nenhuma transação encontrada.</p>
@@ -89,7 +130,10 @@ export default function TransactionsPage() {
           {transaction.description || '-'}
         </TableCell>
         <TableCell>
-          <Badge variant="secondary">{transaction.category}</Badge>
+          <Badge variant={transaction.isRecurring ? "default" : "secondary"} className={transaction.isRecurring ? "bg-blue-500 hover:bg-blue-600 text-white" : ""}>
+            {transaction.category}
+            {transaction.isRecurring && <RefreshCw className="ml-1.5 h-3 w-3" />}
+          </Badge>
         </TableCell>
         <TableCell className={`flex items-center ${transaction.type === 'income' ? 'text-positive' : 'text-negative'}`}>
           {transaction.type === 'income' ? (
@@ -101,6 +145,23 @@ export default function TransactionsPage() {
         </TableCell>
         <TableCell className={`text-right font-semibold ${transaction.type === 'income' ? 'text-positive' : 'text-negative'}`}>
           {formatCurrency(transaction.amount)}
+        </TableCell>
+        <TableCell className="text-right">
+          {transaction.isRecurring && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleDuplicateTransaction(transaction)}
+              disabled={isDuplicatingId === transaction.id}
+              aria-label="Duplicar transação"
+            >
+              {isDuplicatingId === transaction.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </Button>
+          )}
         </TableCell>
       </TableRow>
     ));
@@ -159,6 +220,7 @@ export default function TransactionsPage() {
                   <TableHead>Categoria</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
