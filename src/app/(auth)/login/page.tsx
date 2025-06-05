@@ -1,55 +1,29 @@
 
 'use client';
 
-import { AuthForm } from '@/components/auth/AuthForm';
-import { auth } from '@/lib/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useRouter } from 'next/navigation';
-import { useToast } from '@/hooks/use-toast';
-import { upsertUser } from '@/lib/databaseService'; // Updated import
+import Link from 'next/link';
+import Logo from '@/components/core/Logo';
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { toast } = useToast();
-
-  const handleLogin = async (values: { email: string; password: string }) => {
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
-      if (userCredential.user) {
-        await upsertUser(userCredential.user); // Use new local DB function
-      }
-      toast({ title: "Login bem-sucedido!", description: "Redirecionando para o painel..." });
-      router.push('/dashboard');
-    } catch (error: any) {
-      let message = "Ocorreu um erro ao tentar fazer login. Tente novamente.";
-      
-      switch (error.code) {
-        case 'auth/user-not-found':
-        case 'auth/wrong-password':
-        case 'auth/invalid-credential':
-          message = "Email ou senha inválidos.";
-          break;
-        case 'auth/user-disabled':
-          message = "Esta conta de usuário foi desabilitada.";
-          break;
-        case 'auth/too-many-requests':
-          message = "Acesso bloqueado temporariamente devido a muitas tentativas. Tente novamente mais tarde.";
-          break;
-        case 'auth/operation-not-allowed':
-          message = "Login com email e senha não está habilitado. Contate o suporte.";
-          break;
-        case 'auth/network-request-failed':
-          message = "Erro de rede. Verifique sua conexão e tente novamente.";
-          break;
-        default:
-          // No default change, already logging code and message if available
-          break;
-      }
-      
-      console.error("Firebase login error details:", error?.code, error?.message);
-      throw new Error(message); 
-    }
-  };
-
-  return <AuthForm mode="login" onSubmit={handleLogin} />;
+  return (
+    <div className="space-y-6 p-8 rounded-lg shadow-xl border bg-card text-center">
+      <div className="flex flex-col items-center space-y-2">
+        <Logo className="h-16 w-16" />
+        <h1 className="text-2xl font-semibold tracking-tight font-headline">
+          Acesso Simplificado
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          A autenticação de usuário foi removida. Você pode acessar o painel diretamente.
+        </p>
+      </div>
+      <Link href="/dashboard">
+        <button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 rounded-md">
+          Ir para o Painel
+        </button>
+      </Link>
+       <p className="text-xs text-muted-foreground mt-4">
+        As funcionalidades de login e cadastro foram desabilitadas.
+      </p>
+    </div>
+  );
 }

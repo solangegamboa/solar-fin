@@ -1,53 +1,29 @@
 
 'use client';
 
-import { AuthForm } from '@/components/auth/AuthForm';
-import { auth } from '@/lib/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { useRouter } from 'next/navigation';
-import { useToast } from '@/hooks/use-toast';
-import { upsertUser } from '@/lib/databaseService'; // Updated import
+import Link from 'next/link';
+import Logo from '@/components/core/Logo';
 
 export default function SignupPage() {
-  const router = useRouter();
-  const { toast } = useToast();
-
-  const handleSignup = async (values: { email: string; password: string }) => {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-      if (userCredential.user) {
-        await upsertUser(userCredential.user); // Use new local DB function
-      }
-      toast({ title: "Conta criada com sucesso!", description: "Redirecionando para o painel..." });
-      router.push('/dashboard');
-    } catch (error: any) {
-      let message = "Ocorreu um erro ao tentar criar a conta. Tente novamente.";
-      
-      switch (error.code) {
-        case 'auth/email-already-in-use':
-          message = "Este email já está em uso por outra conta.";
-          break;
-        case 'auth/weak-password':
-          message = "A senha é muito fraca. Por favor, use uma senha mais forte.";
-          break;
-        case 'auth/operation-not-allowed':
-          message = "Cadastro com email e senha não está habilitado. Contate o suporte.";
-          break;
-        case 'auth/invalid-email':
-          message = "O formato do email é inválido.";
-          break;
-        case 'auth/network-request-failed':
-          message = "Erro de rede. Verifique sua conexão e tente novamente.";
-          break;
-        default:
-          // No default change
-          break;
-      }
-
-      console.error("Firebase signup error details:", error?.code, error?.message);
-      throw new Error(message); 
-    }
-  };
-
-  return <AuthForm mode="signup" onSubmit={handleSignup} />;
+   return (
+    <div className="space-y-6 p-8 rounded-lg shadow-xl border bg-card text-center">
+      <div className="flex flex-col items-center space-y-2">
+        <Logo className="h-16 w-16" />
+        <h1 className="text-2xl font-semibold tracking-tight font-headline">
+          Acesso Simplificado
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          A funcionalidade de cadastro foi removida. A aplicação utiliza um usuário local padrão.
+        </p>
+      </div>
+      <Link href="/dashboard">
+        <button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 rounded-md">
+          Ir para o Painel
+        </button>
+      </Link>
+      <p className="text-xs text-muted-foreground mt-4">
+        As funcionalidades de login e cadastro foram desabilitadas.
+      </p>
+    </div>
+  );
 }

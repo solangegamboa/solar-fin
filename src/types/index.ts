@@ -3,7 +3,7 @@ export interface UserProfile {
   uid: string;
   email: string | null;
   displayName?: string | null;
-  photoURL?: string | null;
+  photoURL?: string | null; // Kept for type consistency, but will be null for local user
   createdAt?: number; // Timestamp (Date.now())
   lastLoginAt?: number; // Timestamp (Date.now())
 }
@@ -12,7 +12,7 @@ export type TransactionType = 'income' | 'expense';
 
 export interface Transaction {
   id: string;
-  userId: string;
+  userId: string; // Will be the DEFAULT_USER_ID
   type: TransactionType;
   amount: number;
   category: string;

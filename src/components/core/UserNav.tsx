@@ -1,7 +1,7 @@
 
 'use client';
 
-import { LogOut, User as UserIcon, Settings } from 'lucide-react'; // Adicionado Settings
+import { User as UserIcon, Settings } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,46 +14,35 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
-import { auth } from '@/lib/firebase';
-import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 
 export function UserNav() {
-  const { user } = useAuth();
+  const { user } = useAuth(); // Will get the mock user
   const router = useRouter();
   const { toast } = useToast();
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      router.push('/login');
-      toast({ // Adicionado toast de sucesso no logout
-        title: 'Logout realizado',
-        description: 'Você saiu da sua conta com sucesso.',
-      });
-    } catch (error: any) {
-      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred during logout.';
-      console.error('Erro ao fazer logout:', errorMessage);
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao Sair',
-        description: 'Não foi possível fazer logout. Tente novamente.',
-      });
-    }
-  };
+
+  // Logout is no longer relevant in a no-auth setup
+  // const handleLogout = async () => { ... }
 
   if (!user) {
+    // This should not happen with the new AuthContext that always provides a user
     return null;
   }
 
-  const getInitials = (email?: string | null) => {
-    if (!email) return 'SF'; 
-    const nameParts = user.displayName?.split(' ') || [];
-    if (nameParts.length > 1) {
-      return (nameParts[0][0] + nameParts[nameParts.length -1][0]).toUpperCase();
+  const getInitials = (email?: string | null, displayName?: string | null) => {
+    if (displayName) {
+      const nameParts = displayName.split(' ');
+      if (nameParts.length > 1) {
+        return (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
+      }
+      return displayName.substring(0, 2).toUpperCase();
     }
-    return email.substring(0, 2).toUpperCase();
+    if (email) {
+      return email.substring(0, 2).toUpperCase();
+    }
+    return 'SF';
   };
 
   return (
@@ -61,8 +50,9 @@ export function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
           <Avatar className="h-8 w-8">
+            {/* photoURL will likely be null for mock user */}
             {user.photoURL && <AvatarImage src={user.photoURL} alt={user.displayName || user.email || 'User'} />}
-            <AvatarFallback>{getInitials(user.email)}</AvatarFallback>
+            <AvatarFallback>{getInitials(user.email, user.displayName)}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
@@ -79,6 +69,7 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          {/* "Perfil" can link to settings page as before */}
           <DropdownMenuItem onClick={() => router.push('/settings')}>
             <UserIcon className="mr-2 h-4 w-4" />
             <span>Perfil</span>
@@ -88,11 +79,7 @@ export function UserNav() {
             <span>Configurações</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleLogout}>
-          <LogOut className="mr-2 h-4 w-4" />
-          <span>Sair</span>
-        </DropdownMenuItem>
+        {/* No Logout option needed without authentication */}
       </DropdownMenuContent>
     </DropdownMenu>
   );

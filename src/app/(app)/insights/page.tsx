@@ -8,14 +8,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Sparkles, Loader2, AlertTriangle } from 'lucide-react';
 import { generateFinancialInsights, type FinancialInsightsOutput } from '@/ai/flows/generate-financial-insights';
-import type { FinancialDataInput } from '@/types'; // Updated import for FinancialDataInput
+import type { FinancialDataInput } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
-import { getFinancialDataForUser } from '@/lib/databaseService'; // New server action to fetch local data
+// useAuth is still used to get the (now mock) user, though the server action doesn't need userId passed
+import { useAuth } from '@/contexts/AuthContext'; 
+import { getFinancialDataForUser } from '@/lib/databaseService';
 
 
 export default function InsightsPage() {
-  const { user } = useAuth();
+  const { user } = useAuth(); // Gets the mock user
   const [loading, setLoading] = useState(false);
   const [fetchingData, setFetchingData] = useState(true);
   const [insights, setInsights] = useState<FinancialInsightsOutput | null>(null);
@@ -25,39 +26,36 @@ export default function InsightsPage() {
 
   useEffect(() => {
     async function loadFinancialData() {
-      if (user?.uid) {
-        setFetchingData(true);
-        try {
-          const data = await getFinancialDataForUser(user.uid);
-          if (data) {
-            setFinancialData(data);
-          } else {
-            toast({
-              variant: 'destructive',
-              title: 'Dados Não Encontrados',
-              description: 'Não foi possível carregar seus dados financeiros do arquivo local.',
-            });
-            setFinancialData(null); // Explicitly set to null if not found or error
-          }
-        } catch (e: any) {
-          const errorMessage = (e && typeof e.message === 'string') ? e.message : 'An unknown error occurred while fetching financial data.';
-          console.error('Erro ao buscar dados financeiros locais:', errorMessage);
+      // No specific user ID check is needed as getFinancialDataForUser now uses default user
+      setFetchingData(true);
+      try {
+        // getFinancialDataForUser now doesn't need userId passed from client
+        const data = await getFinancialDataForUser(); 
+        if (data) {
+          setFinancialData(data);
+        } else {
           toast({
             variant: 'destructive',
-            title: 'Erro ao Carregar Dados',
-            description: 'Falha ao buscar seus dados financeiros.',
+            title: 'Dados Não Encontrados',
+            description: 'Não foi possível carregar seus dados financeiros do arquivo local.',
           });
           setFinancialData(null);
-        } finally {
-          setFetchingData(false);
         }
-      } else {
+      } catch (e: any) {
+        const errorMessage = (e && typeof e.message === 'string') ? e.message : 'An unknown error occurred while fetching financial data.';
+        console.error('Erro ao buscar dados financeiros locais:', errorMessage);
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao Carregar Dados',
+          description: 'Falha ao buscar seus dados financeiros.',
+        });
+        setFinancialData(null);
+      } finally {
         setFetchingData(false);
-        setFinancialData(null); // Clear data if no user
       }
     }
     loadFinancialData();
-  }, [user, toast]);
+  }, [toast]); // Removed user from dependencies as it's static
 
 
   const handleGenerateInsights = async () => {
@@ -131,7 +129,7 @@ export default function InsightsPage() {
               />
             </div>
           ) : (
-             <p className="text-muted-foreground">Não foi possível carregar os dados financeiros. Verifique se você está logado ou se os dados existem.</p>
+             <p className="text-muted-foreground">Não foi possível carregar os dados financeiros.</p>
           )}
           <Button onClick={handleGenerateInsights} disabled={loading || fetchingData || !financialData} className="mt-4 w-full md:w-auto">
             {loading ? (

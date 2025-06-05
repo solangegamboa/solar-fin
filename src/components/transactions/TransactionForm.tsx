@@ -23,7 +23,8 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-import { useAuth } from '@/contexts/AuthContext';
+// useAuth is still used to get the (now mock) user details if needed, though userId is hardcoded in service
+import { useAuth } from '@/contexts/AuthContext'; 
 import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/databaseService';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -53,7 +54,7 @@ interface TransactionFormProps {
 }
 
 export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
-  const { user } = useAuth();
+  const { user } = useAuth(); // Gets the mock user
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -61,7 +62,7 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
     resolver: zodResolver(transactionFormSchema),
     defaultValues: {
       type: undefined,
-      amount: '' as unknown as number, 
+      amount: '' as unknown as number,
       category: '',
       date: new Date(),
       description: '',
@@ -69,14 +70,8 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
   });
 
   const onSubmit = async (values: TransactionFormValues) => {
-    if (!user) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro de Autenticação',
-        description: 'Você precisa estar logado para adicionar uma transação.',
-      });
-      return;
-    }
+    // No user check needed as user is always the mock user
+    // if (!user) { ... }
 
     setIsSubmitting(true);
 
@@ -84,10 +79,12 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
       ...values,
       date: format(values.date, 'yyyy-MM-dd'),
       amount: Number(values.amount)
+      // userId is now handled by addTransaction server action (uses DEFAULT_USER_ID)
     };
 
     try {
-      const result: AddTransactionResult = await addTransaction(user.uid, transactionData); 
+      // addTransaction now doesn't need userId passed from client
+      const result: AddTransactionResult = await addTransaction(transactionData);
 
       if (result.success && result.transactionId) {
         toast({
