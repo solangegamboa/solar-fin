@@ -22,16 +22,32 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, Landmark, CalendarDays, Trash2, Loader2, AlertTriangleIcon, SearchX, Edit3 } from "lucide-react";
+import { PlusCircle, Landmark, CalendarDays, Trash2, Loader2, AlertTriangleIcon, SearchX, Edit3, TrendingUp, TrendingDown, CircleDollarSign, ReceiptText, Info } from "lucide-react";
 import { LoanForm } from "@/components/loans/LoanForm";
 import type { Loan } from "@/types";
 import { getLoansForUser, deleteLoan } from "@/lib/databaseService";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { format, parseISO, isPast, isFuture, differenceInMonths } from 'date-fns';
+import { format, parseISO, isPast, isFuture, differenceInMonths, addMonths, getDaysInMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+
+interface LoanProgressInfo {
+  progress: number;
+  status: string;
+  monthsPassed: number;
+  remainingMonths: number;
+  totalInstallments: number;
+  paidAmount: number;
+  remainingAmount: number;
+  totalLoanAmount: number;
+  isUpcoming: boolean;
+}
+
 
 export default function LoansPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,7 +56,7 @@ export default function LoansPage() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const [loanToEdit, setLoanToEdit] = useState<Loan | null>(null);
+  const [loanToEdit, setLoanToEdit] = useState<Loan | null>(null); // Editing not implemented yet
   const [loanToDelete, setLoanToDelete] = useState<Loan | null>(null);
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
@@ -70,14 +86,9 @@ export default function LoansPage() {
     setLoanToEdit(null);
     fetchUserLoans();
   };
-
-  const openEditModal = (loan: Loan) => {
-    setLoanToEdit(loan);
-    setIsModalOpen(true);
-  };
   
   const openAddModal = () => {
-    setLoanToEdit(null);
+    setLoanToEdit(null); // Ensure we are adding, not editing
     setIsModalOpen(true);
   };
 
@@ -120,24 +131,58 @@ export default function LoansPage() {
     }
   };
   
-  const calculateLoanProgress = (loan: Loan): { progress: number; status: string; remainingMonths: number; totalMonths: number } => {
+  const calculateLoanProgress = (loan: Loan): LoanProgressInfo => {
     const startDate = parseISO(loan.startDate);
-    const endDate = parseISO(loan.endDate);
+    const endDate = parseISO(loan.endDate); // This is now the calculated end date
     const today = new Date();
-
-    if (isPast(endDate)) {
-      return { progress: 100, status: "Concluído", remainingMonths: 0, totalMonths: differenceInMonths(endDate, startDate) +1  };
-    }
-    if (isFuture(startDate)) {
-      return { progress: 0, status: "A iniciar", remainingMonths: differenceInMonths(endDate, startDate) + 1, totalMonths: differenceInMonths(endDate, startDate) + 1 };
-    }
-
-    const totalMonths = differenceInMonths(endDate, startDate) + 1;
-    const monthsPassed = differenceInMonths(today, startDate) +1;
-    const progress = Math.min(100, Math.max(0,(monthsPassed / totalMonths) * 100));
-    const remainingMonths = differenceInMonths(endDate, today) +1;
     
-    return { progress, status: "Em andamento", remainingMonths: Math.max(0, remainingMonths), totalMonths };
+    const totalInstallments = loan.installmentsCount;
+    const totalLoanAmount = loan.installmentAmount * totalInstallments;
+    let monthsPassed = 0;
+    let status = "";
+    let progress = 0;
+    let isUpcoming = false;
+
+    if (isFuture(startDate)) {
+      status = "A iniciar";
+      progress = 0;
+      monthsPassed = 0;
+      isUpcoming = true;
+    } else if (isPast(endDate)) {
+      status = "Concluído";
+      progress = 100;
+      monthsPassed = totalInstallments;
+    } else {
+      status = "Em andamento";
+      // Calculate months passed since the start date up to today
+      // Ensure today's month is counted if the start date's day has passed or is today
+      monthsPassed = differenceInMonths(today, startDate);
+      const dayOfToday = today.getDate();
+      const dayOfStartDate = startDate.getDate();
+      
+      if (dayOfToday >= dayOfStartDate) {
+        monthsPassed +=1;
+      }
+      // Clamp monthsPassed
+      monthsPassed = Math.max(0, Math.min(monthsPassed, totalInstallments));
+      progress = (monthsPassed / totalInstallments) * 100;
+    }
+    
+    const remainingMonths = Math.max(0, totalInstallments - monthsPassed);
+    const paidAmount = loan.installmentAmount * monthsPassed;
+    const remainingAmount = totalLoanAmount - paidAmount;
+
+    return { 
+      progress: Math.max(0, Math.min(100, progress)), 
+      status, 
+      monthsPassed, 
+      remainingMonths, 
+      totalInstallments,
+      paidAmount: Math.max(0, paidAmount),
+      remainingAmount: Math.max(0, remainingAmount),
+      totalLoanAmount,
+      isUpcoming
+    };
   };
 
 
@@ -153,46 +198,94 @@ export default function LoansPage() {
     }
 
     return loans.map((loan) => {
-      const { progress, status, remainingMonths, totalMonths } = calculateLoanProgress(loan);
+      const { 
+        progress, 
+        status, 
+        monthsPassed, 
+        remainingMonths, 
+        totalInstallments, 
+        paidAmount, 
+        remainingAmount, 
+        totalLoanAmount,
+        isUpcoming
+      } = calculateLoanProgress(loan);
       const formattedStartDate = format(parseISO(loan.startDate), 'dd/MM/yyyy', { locale: ptBR });
       const formattedEndDate = format(parseISO(loan.endDate), 'dd/MM/yyyy', { locale: ptBR });
 
+      let statusColor = "bg-yellow-500";
+      if (status === "Concluído") statusColor = "bg-green-500";
+      else if (status === "A iniciar") statusColor = "bg-blue-500";
+
       return (
-        <Card key={loan.id} className="shadow-md hover:shadow-lg transition-shadow">
+        <Card key={loan.id} className="shadow-md hover:shadow-lg transition-shadow flex flex-col">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center text-xl"><Landmark className="mr-2 h-6 w-6 text-primary" />{loan.bankName}</CardTitle>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="flex items-center text-xl"><Landmark className="mr-2 h-6 w-6 text-primary" />{loan.bankName}</CardTitle>
+                <CardDescription>{loan.description}</CardDescription>
+              </div>
               <div className="flex gap-1">
-                {/* <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditModal(loan)} disabled={!!isDeletingId}> <Edit3 className="h-4 w-4" /> </Button> */}
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive/90" onClick={() => handleDeleteLoan(loan)} disabled={isDeletingId === loan.id}>
                   {isDeletingId === loan.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
-            <CardDescription>{loan.description}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 flex-grow">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Valor da Parcela:</span>
+              <span className="text-sm text-muted-foreground flex items-center"><ReceiptText className="mr-1.5 h-4 w-4 text-muted-foreground/70" />Valor da Parcela:</span>
               <span className="font-semibold">{formatCurrency(loan.installmentAmount)}</span>
             </div>
-            <div className="flex items-center">
-              <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Início: {formattedStartDate}</span>
-            </div>
-            <div className="flex items-center">
-              <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Fim: {formattedEndDate}</span>
-            </div>
              <div className="space-y-1 pt-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Progresso ({totalMonths - remainingMonths}/{totalMonths} meses)</span>
-                <Badge variant={status === "Concluído" ? "default" : (status === "A iniciar" ? "outline" : "secondary")}>{status}</Badge>
+              <div className="flex justify-between items-center text-xs text-muted-foreground">
+                <span>Progresso ({monthsPassed}/{totalInstallments} parcelas)</span>
+                <Badge variant={status === "Concluído" ? "default" : (status === "A iniciar" ? "outline" : "secondary")}
+                       className={cn(
+                          status === "Concluído" && "bg-green-100 text-green-700 border-green-300",
+                          status === "Em andamento" && "bg-yellow-100 text-yellow-700 border-yellow-300",
+                          status === "A iniciar" && "bg-blue-100 text-blue-700 border-blue-300"
+                       )}
+                >
+                  {status}
+                </Badge>
               </div>
-              <Progress value={progress} className="h-2" />
-              {status !== "Concluído" && <p className="text-xs text-muted-foreground text-right">{remainingMonths} parcelas restantes</p>}
+              <Progress value={progress} className="h-2" 
+                indicatorClassName={cn(
+                  status === "Concluído" && "bg-green-500",
+                  status === "Em andamento" && "bg-yellow-500",
+                  status === "A iniciar" && "bg-blue-500",
+                )}
+              />
+            </div>
+            <Separator className="my-2" />
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <div className="text-muted-foreground flex items-center"><CircleDollarSign className="mr-1.5 h-4 w-4 text-muted-foreground/70" />Total:</div>
+                <div className="font-medium text-right">{formatCurrency(totalLoanAmount)}</div>
+
+                <div className="text-muted-foreground flex items-center"><TrendingUp className="mr-1.5 h-4 w-4 text-green-500" />Pago:</div>
+                <div className="font-medium text-green-600 text-right">{formatCurrency(paidAmount)}</div>
+
+                <div className="text-muted-foreground flex items-center"><TrendingDown className="mr-1.5 h-4 w-4 text-orange-500" />Restante:</div>
+                <div className="font-medium text-orange-600 text-right">{formatCurrency(remainingAmount)}</div>
+            </div>
+             <Separator className="my-2" />
+             <div className_name="space-y-1 text-xs text-muted-foreground">
+                <div className="flex items-center">
+                    <CalendarDays className="mr-1.5 h-3.5 w-3.5 text-muted-foreground/70" />
+                    <span>Início: {formattedStartDate}</span>
+                </div>
+                <div className="flex items-center">
+                    <CalendarDays className="mr-1.5 h-3.5 w-3.5 text-muted-foreground/70" />
+                    <span>Fim: {formattedEndDate} ({loan.installmentsCount}ª parcela)</span>
+                </div>
             </div>
           </CardContent>
+           <CardFooter className="text-xs text-muted-foreground pt-3">
+            <Info className="mr-1.5 h-3.5 w-3.5 text-muted-foreground/70" />
+            {status !== "Concluído" && !isUpcoming && <span>{remainingMonths} parcelas restantes. </span>}
+            {isUpcoming && <span>Este empréstimo ainda não iniciou.</span>}
+            {status === "Concluído" && <span>Este empréstimo foi totalmente pago.</span>}
+          </CardFooter>
         </Card>
       );
     });
@@ -200,6 +293,7 @@ export default function LoansPage() {
 
 
   return (
+    <TooltipProvider>
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
@@ -219,7 +313,7 @@ export default function LoansPage() {
             <DialogHeader>
               <DialogTitle>{loanToEdit ? "Editar Empréstimo" : "Adicionar Novo Empréstimo"}</DialogTitle>
               <DialogDescription>
-                Preencha os detalhes do seu empréstimo.
+                Preencha os detalhes do seu empréstimo. A data final será calculada automaticamente.
               </DialogDescription>
             </DialogHeader>
             <LoanForm 
@@ -258,5 +352,7 @@ export default function LoansPage() {
       </AlertDialog>
 
     </div>
+    </TooltipProvider>
   );
 }
+

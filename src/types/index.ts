@@ -28,8 +28,9 @@ export interface Loan {
   bankName: string;
   description: string;
   installmentAmount: number;
+  installmentsCount: number; // Added
   startDate: string; // YYYY-MM-DD
-  endDate: string;   // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD (Calculated and stored)
   createdAt: number; 
 }
 
@@ -58,7 +59,7 @@ export interface CreditCardPurchase {
 export interface FinancialDataInput {
   income: number;
   expenses: Array<{ category: string; amount: number }>;
-  loans: Array<{ description: string; amount: number; interestRate: number; monthlyPayment: number }>; // This might need adjustment if AI uses it
+  loans: Array<{ description: string; amount: number; interestRate: number; monthlyPayment: number }>; 
   creditCards: Array<{ name: string; limit: number; balance: number; dueDate: string }>;
 }
 
@@ -91,6 +92,7 @@ export interface NewLoanData {
   bankName: string;
   description: string;
   installmentAmount: number;
+  installmentsCount: number; // Changed from endDate
   startDate: string; // YYYY-MM-DD
-  endDate: string;   // YYYY-MM-DD
 }
+

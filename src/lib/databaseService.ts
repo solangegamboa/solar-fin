@@ -5,7 +5,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData } from '@/types';
 import { randomUUID } from 'crypto';
-import { parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
+import { parseISO, isWithinInterval, startOfMonth, endOfMonth, addMonths, format as formatDateFns } from 'date-fns';
 
 
 const DB_PATH = path.join(process.cwd(), 'src', 'data', 'db.json');
@@ -198,7 +198,6 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
     let totalIncomeThisMonth = 0; 
 
     (userData.transactions || []).forEach(tx => {
-      // For simplicity, AI data will focus on a general period rather than specific month for income/expenses
       if (tx.type === 'expense') {
         expensesByCategory[tx.category] = (expensesByCategory[tx.category] || 0) + tx.amount;
       } else if (tx.type === 'income') {
@@ -213,11 +212,10 @@ export async function getFinancialDataForUser(): Promise<FinancialDataInput | nu
 
     const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000; 
 
-    // Map loans for AI (simple version)
     const loansForAI = (userData.loans || []).map(loan => ({
       description: `${loan.bankName} - ${loan.description}`,
-      amount: loan.installmentAmount * 12, // Estimate total for a year for AI context
-      interestRate: 0, // Placeholder
+      amount: loan.installmentAmount * loan.installmentsCount, // Using installmentsCount
+      interestRate: 0, 
       monthlyPayment: loan.installmentAmount,
     }));
 
@@ -384,11 +382,22 @@ export const addLoan = async (loanData: NewLoanData): Promise<AddLoanResult> => 
     let db = await readDB();
     db = await ensureDefaultUserStructure(db);
 
+    const startDateObj = parseISO(loanData.startDate);
+    // Subtract 1 from installmentsCount because addMonths is 0-indexed for the number of months to add
+    // e.g., adding 0 months to Jan 15 gives Jan 15 (1st installment)
+    // adding 11 months to Jan 15 for a 12-installment loan gives Dec 15 (12th installment)
+    const endDateObj = addMonths(startDateObj, loanData.installmentsCount -1); 
+    const calculatedEndDate = formatDateFns(endDateObj, 'yyyy-MM-dd');
+
     const newLoan: Loan = {
       id: randomUUID(),
       userId: DEFAULT_USER_ID,
-      ...loanData,
+      bankName: loanData.bankName,
+      description: loanData.description,
       installmentAmount: Number(loanData.installmentAmount),
+      installmentsCount: Number(loanData.installmentsCount),
+      startDate: loanData.startDate,
+      endDate: calculatedEndDate, // Store the calculated end date
       createdAt: Date.now(),
     };
 
@@ -398,7 +407,7 @@ export const addLoan = async (loanData: NewLoanData): Promise<AddLoanResult> => 
     db.users[DEFAULT_USER_ID].loans.push(newLoan);
     await writeDB(db);
 
-    console.log(`Loan ${newLoan.id} added for default user in local DB.`);
+    console.log(`Loan ${newLoan.id} added for default user in local DB. End date: ${calculatedEndDate}`);
     return { success: true, loanId: newLoan.id };
   } catch (error: any) {
     const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
@@ -412,7 +421,6 @@ export async function getLoansForUser(): Promise<Loan[]> {
     let db = await readDB();
     db = await ensureDefaultUserStructure(db);
     const loans = db.users[DEFAULT_USER_ID]?.loans || [];
-    // Sort by start date, then by creation date for tie-breaking
     return loans.sort((a, b) => {
       const startDateComparison = parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime();
       if (startDateComparison !== 0) {
@@ -452,3 +460,4 @@ export const deleteLoan = async (loanId: string): Promise<DeleteResult> => {
     return { success: false, error: "An error occurred while deleting the loan." };
   }
 };
+

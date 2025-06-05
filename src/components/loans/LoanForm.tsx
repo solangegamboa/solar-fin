@@ -31,10 +31,11 @@ const loanFormSchema = z.object({
     .positive({ message: 'O valor da parcela deve ser positivo.' })
     .min(0.01, { message: 'O valor deve ser maior que zero.' }),
   startDate: z.date({ required_error: 'A data de início é obrigatória.' }),
-  endDate: z.date({ required_error: 'A data de término é obrigatória.' }),
-}).refine(data => data.endDate >= data.startDate, {
-  message: "A data de término não pode ser anterior à data de início.",
-  path: ["endDate"], 
+  installmentsCount: z.coerce
+    .number({ invalid_type_error: 'A quantidade de parcelas deve ser um número.', required_error: 'A quantidade de parcelas é obrigatória.' })
+    .int({ message: 'A quantidade de parcelas deve ser um número inteiro.' })
+    .min(1, { message: 'A quantidade de parcelas deve ser no mínimo 1.' })
+    .max(360, { message: 'A quantidade de parcelas não pode exceder 360 (30 anos).'}) // Max 30 years
 });
 
 type LoanFormValues = z.infer<typeof loanFormSchema>;
@@ -54,25 +55,29 @@ export function LoanForm({ onSuccess, setOpen, existingLoan }: LoanFormProps) {
     defaultValues: existingLoan ? {
         ...existingLoan,
         startDate: parseISO(existingLoan.startDate),
-        endDate: parseISO(existingLoan.endDate),
         installmentAmount: existingLoan.installmentAmount || '' as unknown as number,
+        installmentsCount: existingLoan.installmentsCount || '' as unknown as number,
       } : {
       bankName: '',
       description: '',
       installmentAmount: '' as unknown as number,
       startDate: new Date(),
-      endDate: new Date(),
+      installmentsCount: '' as unknown as number,
     },
   });
 
   const onSubmit = async (values: LoanFormValues) => {
     setIsSubmitting(true);
 
+    // Editing is not yet supported, this form currently only adds new loans.
+    // If editing were supported, we'd calculate endDate for existingLoan too.
+    // For new loans, endDate is calculated in addLoan server action.
     const loanData: NewLoanData = {
-      ...values,
-      startDate: format(values.startDate, 'yyyy-MM-dd'),
-      endDate: format(values.endDate, 'yyyy-MM-dd'),
+      bankName: values.bankName,
+      description: values.description,
       installmentAmount: Number(values.installmentAmount),
+      startDate: format(values.startDate, 'yyyy-MM-dd'),
+      installmentsCount: Number(values.installmentsCount),
     };
 
     try {
@@ -80,11 +85,11 @@ export function LoanForm({ onSuccess, setOpen, existingLoan }: LoanFormProps) {
       // if (existingLoan) {
       // Call updateLoan if it existed
       // } else {
-      const result = await addLoan(loanData);
+      const result = await addLoan(loanData); // addLoan now calculates endDate
       if (result.success && result.loanId) {
         toast({
           title: 'Sucesso!',
-          description: 'Empréstimo adicionado com sucesso.',
+          description: existingLoan ? 'Empréstimo atualizado com sucesso.' : 'Empréstimo adicionado com sucesso.',
         });
         form.reset();
         if (onSuccess) onSuccess();
@@ -92,14 +97,14 @@ export function LoanForm({ onSuccess, setOpen, existingLoan }: LoanFormProps) {
       } else {
         toast({
           variant: 'destructive',
-          title: 'Erro ao Adicionar Empréstimo',
+          title: existingLoan ? 'Erro ao Atualizar Empréstimo' : 'Erro ao Adicionar Empréstimo',
           description: result.error || 'Ocorreu um erro desconhecido.',
         });
       }
       // }
     } catch (error: any) {
       const errorMessage = (error && typeof error.message === 'string') ? error.message : 'Ocorreu um erro ao salvar o empréstimo.';
-      console.error('Client-side error calling addLoan:', errorMessage);
+      console.error('Client-side error calling addLoan/updateLoan:', errorMessage);
       toast({
         variant: 'destructive',
         title: 'Erro de Comunicação',
@@ -161,19 +166,21 @@ export function LoanForm({ onSuccess, setOpen, existingLoan }: LoanFormProps) {
             name="startDate"
             render={({ field }) => (
               <FormItem className="flex flex-col">
-                <FormLabel>Data de Início</FormLabel>
+                <FormLabel>Data de Início da Primeira Parcela</FormLabel>
                 <DatePicker value={field.value} onChange={field.onChange} />
                 <FormMessage />
               </FormItem>
             )}
           />
-          <FormField
+           <FormField
             control={form.control}
-            name="endDate"
+            name="installmentsCount"
             render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>Data de Término</FormLabel>
-                <DatePicker value={field.value} onChange={field.onChange} />
+              <FormItem>
+                <FormLabel>Quantidade de Parcelas</FormLabel>
+                <FormControl>
+                  <Input type="number" placeholder="Ex: 12" {...field} min="1" />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -184,18 +191,20 @@ export function LoanForm({ onSuccess, setOpen, existingLoan }: LoanFormProps) {
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || !!existingLoan}> {/* Disable submit for existingLoan until edit is implemented */}
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Salvando...
               </>
             ) : (
-              existingLoan ? 'Salvar Alterações' : 'Salvar Empréstimo'
+              existingLoan ? 'Salvar Alterações (Desabilitado)' : 'Salvar Empréstimo'
             )}
           </Button>
         </div>
+         {existingLoan && <p className="text-sm text-muted-foreground text-center">A edição de empréstimos ainda não está implementada.</p>}
       </form>
     </Form>
   );
 }
+
