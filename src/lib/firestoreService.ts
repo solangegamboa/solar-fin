@@ -65,20 +65,34 @@ export interface NewTransactionData {
   description?: string;
 }
 
-export const addTransaction = async (userId: string, transactionData: NewTransactionData): Promise<string> => {
+export interface AddTransactionResult {
+  success: boolean;
+  transactionId?: string;
+  error?: string;
+}
+
+export const addTransaction = async (userId: string, transactionData: NewTransactionData): Promise<AddTransactionResult> => {
   if (!userId) {
-    throw new Error("User ID is required to add a transaction.");
+    return { success: false, error: "User ID is required to add a transaction." };
   }
   try {
-    const docRef = await addDoc(collection(db, 'users', userId, 'transactions'), {
+    const transactionsCollectionRef = collection(db, 'users', userId, 'transactions');
+    const docRef = await addDoc(transactionsCollectionRef, {
       ...transactionData,
-      // userId is already part of the path, but can be stored for easier querying if needed
-      // userId: userId, 
       createdAt: serverTimestamp(),
     });
-    return docRef.id;
-  } catch (error) {
+    return { success: true, transactionId: docRef.id };
+  } catch (error: any) {
     console.error("Error adding transaction to Firestore:", error);
-    throw new Error("Failed to add transaction.");
+    let errorMessage = "Failed to add transaction due to an unknown error.";
+    if (error instanceof Error) {
+      errorMessage = `Failed to add transaction: ${error.message}`;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    } else if (error && typeof error.message === 'string') {
+      errorMessage = `Failed to add transaction: ${error.message}`;
+    }
+    return { success: false, error: errorMessage };
   }
 };
+

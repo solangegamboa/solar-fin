@@ -24,7 +24,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useAuth } from '@/contexts/AuthContext';
-import { addTransaction, type NewTransactionData } from '@/lib/firestoreService';
+import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -87,21 +87,29 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
     };
 
     try {
-      await addTransaction(user.uid, transactionData);
-      toast({
-        title: 'Sucesso!',
-        description: 'Transação adicionada com sucesso.',
-      });
-      form.reset();
-      if (onSuccess) onSuccess();
-      setOpen(false); // Close dialog on success
-    } catch (error) {
-      console.error('Erro ao adicionar transação:', error);
+      const result: AddTransactionResult = await addTransaction(user.uid, transactionData);
+
+      if (result.success && result.transactionId) {
+        toast({
+          title: 'Sucesso!',
+          description: `Transação adicionada com sucesso.`,
+        });
+        form.reset();
+        if (onSuccess) onSuccess();
+        setOpen(false); // Close dialog on success
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao Adicionar Transação',
+          description: result.error || 'Ocorreu um erro desconhecido.',
+        });
+      }
+    } catch (error) { // This catch is for network errors or if the action truly crashes in an unrecoverable way
+      console.error('Erro na chamada da action de transação:', error);
       toast({
         variant: 'destructive',
-        title: 'Erro ao Adicionar Transação',
-        description:
-          error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.',
+        title: 'Erro de Comunicação',
+        description: 'Não foi possível conectar ao servidor para adicionar a transação.',
       });
     } finally {
       setIsSubmitting(false);
@@ -210,3 +218,4 @@ export function TransactionForm({ onSuccess, setOpen }: TransactionFormProps) {
     </Form>
   );
 }
+
