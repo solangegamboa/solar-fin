@@ -29,18 +29,6 @@ const Logo = (props: SVGProps<SVGSVGElement>) => (
         className="stroke-yellow-400 dark:stroke-yellow-500"
       />
     ))}
-     {[22.5, 67.5, 112.5, 157.5, 202.5, 247.5, 292.5, 337.5].map((angle) => (
-      <line
-        key={angle}
-        x1="50"
-        y1="50"
-        x2={50 + 30 * Math.cos((angle * Math.PI) / 180)}
-        y2={50 + 30 * Math.sin((angle * Math.PI) / 180)}
-        strokeWidth="3"
-        strokeLinecap="round"
-         className="stroke-orange-400 dark:stroke-orange-500"
-      />
-    ))}
   </svg>
 );
 
