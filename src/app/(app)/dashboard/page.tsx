@@ -377,10 +377,10 @@ export default function DashboardPage() {
 
 
   const summaryCardsData = [
-    { title: "Saldo Atual (Total)", value: summary.balance, icon: DollarSign, currency: true, color: "text-primary" },
-    { title: `Receitas de ${selectedMonthNameCapitalized}`, value: summary.selectedMonthIncome, icon: TrendingUp, currency: true, color: "text-positive" },
-    { title: `Despesas de ${selectedMonthNameCapitalized}`, value: summary.selectedMonthExpenses, icon: TrendingDown, currency: true, color: "text-negative" },
-    { title: `Cartões ${selectedMonthNameCapitalized}`, value: summary.selectedMonthCardSpending, icon: CreditCardIcon, currency: true, color: "text-blue-500", link: "/credit-cards" },
+    { title: "Saldo Atual", value: summary.balance, icon: DollarSign, currency: true, color: "text-primary" },
+    { title: "Receitas", value: summary.selectedMonthIncome, icon: TrendingUp, currency: true, color: "text-positive" },
+    { title: "Despesas", value: summary.selectedMonthExpenses, icon: TrendingDown, currency: true, color: "text-negative" },
+    { title: "Cartões", value: summary.selectedMonthCardSpending, icon: CreditCardIcon, currency: true, color: "text-blue-500", link: "/credit-cards" },
   ];
 
 
@@ -463,7 +463,7 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle className="font-headline">Despesas por Categoria ({selectedMonthNameCapitalized})</CardTitle>
+            <CardTitle className="font-headline">Por Categoria</CardTitle>
             <CardDescription>Distribuição dos seus gastos mensais diretos (sem cartão, sem empréstimos).</CardDescription>
           </CardHeader>
           <CardContent>
