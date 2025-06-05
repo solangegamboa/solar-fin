@@ -3,7 +3,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData } from '@/types';
+import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData, UserCategory, NewUserCategoryData } from '@/types';
 import { randomUUID } from 'crypto';
 import { parseISO, addMonths, format as formatDateFns } from 'date-fns';
 import { Pool, type QueryResult } from 'pg';
@@ -11,75 +11,41 @@ import bcrypt from 'bcryptjs';
 
 const DB_PATH = path.join(process.cwd(), 'src', 'data', 'db.json');
 
-// --- PostgreSQL Schemas (Conceptual) ---
-// CREATE TABLE app_users (
-//   id UUID PRIMARY KEY,
-//   email TEXT UNIQUE NOT NULL,
-//   display_name TEXT,
-//   hashed_password TEXT NOT NULL,
-//   photo_url TEXT,
-//   created_at TIMESTAMPTZ DEFAULT NOW(),
-//   last_login_at TIMESTAMPTZ DEFAULT NOW()
-// );
-
-// CREATE TABLE transactions (
-//   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-//   user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
-//   type TEXT NOT NULL, -- 'income' or 'expense'
-//   amount NUMERIC(12, 2) NOT NULL,
-//   category TEXT NOT NULL,
-//   date DATE NOT NULL,
-//   description TEXT,
-//   is_recurring BOOLEAN DEFAULT FALSE,
-//   created_at TIMESTAMPTZ DEFAULT NOW()
-// );
-
-// CREATE TABLE loans (
-//   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-//   user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
-//   bank_name TEXT NOT NULL,
-//   description TEXT,
-//   installment_amount NUMERIC(12, 2) NOT NULL,
-//   installments_count INTEGER NOT NULL,
-//   start_date DATE NOT NULL,
-//   end_date DATE NOT NULL, -- Calculated
-//   created_at TIMESTAMPTZ DEFAULT NOW()
-// );
-
-// CREATE TABLE credit_cards (
-//   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-//   user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
-//   name TEXT NOT NULL,
-//   limit_amount NUMERIC(12, 2) NOT NULL,
-//   due_date_day INTEGER NOT NULL,
-//   closing_date_day INTEGER NOT NULL,
-//   created_at TIMESTAMPTZ DEFAULT NOW()
-// );
-
-// CREATE TABLE credit_card_purchases (
-//   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-//   user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
-//   card_id UUID REFERENCES credit_cards(id) ON DELETE CASCADE,
-//   purchase_date DATE NOT NULL,
-//   description TEXT NOT NULL,
-//   category TEXT NOT NULL,
-//   total_amount NUMERIC(12, 2) NOT NULL,
-//   installments INTEGER NOT NULL,
-//   created_at TIMESTAMPTZ DEFAULT NOW()
-// );
-
 interface UserRecord extends UserProfile {
   hashedPassword?: string;
   transactions: Transaction[];
   loans: Loan[];
   creditCards: CreditCard[];
   creditCardPurchases: CreditCardPurchase[];
+  categories: UserCategory[];
 }
 interface LocalDB {
   users: {
     [userId: string]: UserRecord;
   };
 }
+
+const defaultCategories: Omit<NewUserCategoryData, 'userId'>[] = [
+  { name: 'Alimentação', isSystemDefined: true },
+  { name: 'Transporte', isSystemDefined: true },
+  { name: 'Moradia', isSystemDefined: true },
+  { name: 'Saúde', isSystemDefined: true },
+  { name: 'Educação', isSystemDefined: true },
+  { name: 'Lazer', isSystemDefined: true },
+  { name: 'Vestuário', isSystemDefined: true },
+  { name: 'Contas Fixas', isSystemDefined: true },
+  { name: 'Compras Online', isSystemDefined: true },
+  { name: 'Salário', isSystemDefined: true },
+  { name: 'Investimentos', isSystemDefined: true },
+  { name: 'Presentes', isSystemDefined: true },
+  { name: 'Cuidados Pessoais', isSystemDefined: true },
+  { name: 'Viagens', isSystemDefined: true },
+  { name: 'Serviços (Assinaturas)', isSystemDefined: true },
+  { name: 'Impostos', isSystemDefined: true },
+  { name: 'Outras Receitas', isSystemDefined: true },
+  { name: 'Outras Despesas', isSystemDefined: true },
+];
+
 
 const DATABASE_MODE = process.env.DATABASE_MODE || 'local';
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -119,6 +85,12 @@ async function writeDB(data: LocalDB): Promise<void> {
   }
 }
 
+async function addDefaultCategoriesForUser(userId: string) {
+  for (const catData of defaultCategories) {
+    await addCategoryForUser(userId, catData.name, true);
+  }
+}
+
 export async function createUser(email: string, password_plain: string, displayName?: string): Promise<UserProfile | null> {
   const hashedPassword = await bcrypt.hash(password_plain, 10);
   const userId = randomUUID();
@@ -133,12 +105,23 @@ export async function createUser(email: string, password_plain: string, displayN
   };
 
   if (DATABASE_MODE === 'postgres' && pool) {
+    const client = await pool.connect();
     try {
-      const res = await pool.query(
+      await client.query('BEGIN');
+      const res = await client.query(
         'INSERT INTO app_users (id, email, hashed_password, display_name, created_at, last_login_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, display_name, created_at, last_login_at',
         [userId, email, hashedPassword, displayName || null, new Date(now), new Date(now)]
       );
       const dbUser = res.rows[0];
+      
+      for (const catData of defaultCategories) {
+          const categoryId = randomUUID();
+          await client.query(
+              'INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at) VALUES ($1, $2, $3, $4, $5)',
+              [categoryId, userId, catData.name, catData.isSystemDefined || false, new Date()]
+          );
+      }
+      await client.query('COMMIT');
       return {
         id: dbUser.id,
         email: dbUser.email,
@@ -147,11 +130,14 @@ export async function createUser(email: string, password_plain: string, displayN
         lastLoginAt: new Date(dbUser.last_login_at).getTime(),
       };
     } catch (error: any) {
+      await client.query('ROLLBACK');
       console.error('Error creating user in PostgreSQL:', error.message);
-      if (error.code === '23505') {
+      if (error.code === '23505' && error.constraint === 'app_users_email_key') { // Check specific constraint for email
         throw new Error('User with this email already exists.');
       }
       throw new Error('Could not create user in PostgreSQL.');
+    } finally {
+      client.release();
     }
   } else {
     const db = await readDB();
@@ -165,8 +151,10 @@ export async function createUser(email: string, password_plain: string, displayN
       loans: [],
       creditCards: [],
       creditCardPurchases: [],
+      categories: [], // Initialize empty, then populate
     };
-    await writeDB(db);
+    await writeDB(db); // Write first to ensure user exists
+    await addDefaultCategoriesForUser(userId); // Then add categories (which also writes to DB)
     return newUserProfile;
   }
 }
@@ -260,8 +248,7 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
         console.error(`User ${userId} not found in local DB for addTransaction.`);
         return { success: false, error: "User not found." };
     }
-    // createUser initializes .transactions, so it should exist.
-    // For extra safety: if (!db.users[userId].transactions) db.users[userId].transactions = [];
+    if (!db.users[userId].transactions) db.users[userId].transactions = [];
     const newTransaction: Transaction = {
       id: randomUUID(), userId, ...transactionData,
       isRecurring: transactionData.isRecurring || false, createdAt: Date.now(),
@@ -403,7 +390,7 @@ export const addLoan = async (userId: string, loanData: NewLoanData): Promise<Ad
              console.error(`User ${userId} not found in local DB for addLoan.`);
              return { success: false, error: "User not found." };
         }
-        // createUser initializes .loans
+        if (!db.users[userId].loans) db.users[userId].loans = [];
         const newLoan: Loan = {
             id: newLoanId, userId, ...loanData, endDate: calculatedEndDate, createdAt: Date.now(),
         };
@@ -482,7 +469,7 @@ export const addCreditCard = async (userId: string, cardData: NewCreditCardData)
             console.error(`User ${userId} not found in local DB for addCreditCard.`);
             return { success: false, error: "User not found." };
         }
-        // createUser initializes .creditCards
+        if (!db.users[userId].creditCards) db.users[userId].creditCards = [];
         const newCard: CreditCard = { id: newCardId, userId, ...cardData, createdAt: Date.now() };
         db.users[userId].creditCards.push(newCard);
         await writeDB(db);
@@ -528,7 +515,7 @@ export const addCreditCardPurchase = async (userId: string, purchaseData: NewCre
             console.error(`User ${userId} not found in local DB for addCreditCardPurchase.`);
             return { success: false, error: "User not found." };
         }
-        // createUser initializes .creditCardPurchases
+        if (!db.users[userId].creditCardPurchases) db.users[userId].creditCardPurchases = [];
         const newPurchase: CreditCardPurchase = { id: newPurchaseId, userId, ...purchaseData, createdAt: Date.now() };
         db.users[userId].creditCardPurchases.push(newPurchase);
         await writeDB(db);
@@ -575,42 +562,148 @@ export const deleteCreditCardPurchase = async (userId: string, purchaseId: strin
     }
 };
 
+
+export async function getCategoriesForUser(userId: string): Promise<UserCategory[]> {
+    if (!userId) return [];
+    if (DATABASE_MODE === 'postgres' && pool) {
+        try {
+            const res = await pool.query<UserCategory>(
+                'SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt" FROM user_categories WHERE user_id = $1 ORDER BY name ASC',
+                [userId]
+            );
+            return res.rows.map(cat => ({...cat, createdAt: new Date(cat.createdAt).getTime() }));
+        } catch (error: any) {
+            console.error(`Error fetching categories for user ${userId} from PostgreSQL:`, error.message);
+            return [];
+        }
+    } else {
+        const db = await readDB();
+        const userData = db.users[userId];
+        if (!userData || !userData.categories) return [];
+        return [...userData.categories].sort((a, b) => a.name.localeCompare(b.name));
+    }
+}
+
+export interface AddCategoryResult { success: boolean; category?: UserCategory; error?: string; }
+export const addCategoryForUser = async (userId: string, categoryName: string, isSystemDefined: boolean = false): Promise<AddCategoryResult> => {
+    if (!userId) return { success: false, error: "User ID is required." };
+    if (!categoryName.trim()) return { success: false, error: "Category name cannot be empty." };
+
+    const newCategoryId = randomUUID();
+    const now = Date.now();
+
+    if (DATABASE_MODE === 'postgres' && pool) {
+        try {
+            const res = await pool.query(
+                'INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id, name) DO NOTHING RETURNING id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt"',
+                [newCategoryId, userId, categoryName.trim(), isSystemDefined, new Date(now)]
+            );
+            if (res.rows.length > 0) {
+                 const cat = res.rows[0];
+                 return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime()} };
+            } else {
+                // If ON CONFLICT DO NOTHING happened, fetch the existing one
+                const existingRes = await pool.query('SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt" FROM user_categories WHERE user_id = $1 AND name = $2', [userId, categoryName.trim()]);
+                if (existingRes.rows.length > 0) {
+                    const cat = existingRes.rows[0];
+                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime()}, error: "Category already exists." }; // technically success as it exists
+                }
+                return { success: false, error: "Category already exists, but failed to retrieve." };
+            }
+        } catch (error: any) {
+            console.error("Error adding category to PostgreSQL:", error.message);
+             if (error.code === '23505') { // Unique violation (should be caught by ON CONFLICT)
+                return { success: false, error: "Category already exists." };
+            }
+            return { success: false, error: "Database error adding category." };
+        }
+    } else {
+        const db = await readDB();
+        if (!db.users[userId]) {
+            console.error(`User ${userId} not found in local DB for addCategoryForUser.`);
+            return { success: false, error: "User not found." };
+        }
+        if (!db.users[userId].categories) db.users[userId].categories = [];
+
+        const existingCategory = db.users[userId].categories.find(c => c.name.toLowerCase() === categoryName.trim().toLowerCase());
+        if (existingCategory) {
+            return { success: true, category: existingCategory, error: "Category already exists." };
+        }
+
+        const newCategory: UserCategory = {
+            id: newCategoryId,
+            userId,
+            name: categoryName.trim(),
+            isSystemDefined,
+            createdAt: now,
+        };
+        db.users[userId].categories.push(newCategory);
+        await writeDB(db);
+        return { success: true, category: newCategory };
+    }
+};
+
+
 async function migrateOldDbStructure() {
-    // This migration might be less relevant now that user creation is explicit.
-    // However, it can be kept if there's a possibility of running against very old db.json files.
     if (DATABASE_MODE === 'local') {
         try {
             const rawData = await fs.readFile(DB_PATH, 'utf-8');
             const db = JSON.parse(rawData);
             
-            // Check if the old single-user structure (without distinct user IDs as keys in 'users') exists
-            if (!db.users || (db.users && !Object.keys(db.users).every(key => typeof db.users[key].profile === 'object'))) {
-                 if (db.transactions || db.loans || db.creditCards || db.creditCardPurchases) { // Heuristic for old structure
+            if (!db.users || (db.users && !Object.keys(db.users).every(key => typeof db.users[key]?.profile === 'object'))) {
+                 if (db.transactions || db.loans || db.creditCards || db.creditCardPurchases) { 
                     console.log("Old db.json structure detected. Migrating to multi-user structure...");
-                    const defaultUserId = "default-user-migrated-id"; // A fixed ID for the migrated data
+                    const defaultUserId = "default-user-migrated-id"; 
                     const newDb: LocalDB = {
                         users: {
                             [defaultUserId]: {
                                 profile: {
                                     id: defaultUserId,
-                                    email: "migrated@example.local", // Assign a placeholder email
+                                    email: "migrated@example.local",
                                     displayName: "Migrated User",
                                     createdAt: Date.now(),
                                     lastLoginAt: Date.now(),
                                 },
-                                hashedPassword: await bcrypt.hash("password", 10), // Placeholder password
+                                hashedPassword: await bcrypt.hash("password", 10),
                                 transactions: (db.transactions || []).map((tx: any) => ({...tx, userId: defaultUserId})),
                                 loans: (db.loans || []).map((l: any) => ({...l, userId: defaultUserId})),
                                 creditCards: (db.creditCards || []).map((cc: any) => ({...cc, userId: defaultUserId})),
                                 creditCardPurchases: (db.creditCardPurchases || []).map((p: any) => ({...p, userId: defaultUserId})),
+                                categories: (defaultCategories.map(cat => ({id: randomUUID(), userId: defaultUserId, name: cat.name, isSystemDefined: cat.isSystemDefined || false, createdAt: Date.now() }))) // Add default categories during migration
                             }
                         }
                     };
                     await writeDB(newDb);
                     console.log("db.json migrated. Data moved under 'migrated@example.local'. Please update password or create new users.");
-                 } else if (!db.users) {
+                 } else if (!db.users) { // If db.json is completely empty or malformed to not have users key
                     await writeDB({ users: {} });
+                    console.log("Initialized empty users object in db.json.");
                  }
+            } else {
+                // New structure already in place, ensure all users have categories array
+                let modified = false;
+                for (const userId in db.users) {
+                    if (!db.users[userId].categories) {
+                        db.users[userId].categories = [];
+                        // Populate with defaults if it's an existing user without categories
+                         defaultCategories.forEach(cat => {
+                             if (!db.users[userId].categories.find(c => c.name === cat.name)) {
+                                db.users[userId].categories.push({
+                                    id: randomUUID(),
+                                    userId: userId,
+                                    name: cat.name,
+                                    isSystemDefined: cat.isSystemDefined || false,
+                                    createdAt: Date.now()
+                                });
+                             }
+                        });
+                        modified = true;
+                    }
+                }
+                if (modified) {
+                    await writeDB(db);
+                    console.log("Ensured all users have a categories array, populated defaults where missing.");
+                }
             }
         } catch (error: any) {
             if (error.code === 'ENOENT') {
@@ -622,4 +715,5 @@ async function migrateOldDbStructure() {
     }
 }
 
-migrateOldDbStructure();
+// Run migration check on server start
+migrateOldDbStructure().catch(err => console.error("Migration check failed:", err));

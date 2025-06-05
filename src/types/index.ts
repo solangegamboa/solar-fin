@@ -16,7 +16,7 @@ export interface Transaction {
   userId: string;
   type: TransactionType;
   amount: number;
-  category: string;
+  category: string; // This will now reference a UserCategory.name
   date: string;
   description?: string;
   isRecurring?: boolean;
@@ -51,9 +51,17 @@ export interface CreditCardPurchase {
   cardId: string;
   date: string;
   description: string;
-  category: string;
+  category: string; // This will now reference a UserCategory.name
   totalAmount: number;
   installments: number;
+  createdAt: number;
+}
+
+export interface UserCategory {
+  id: string;
+  userId: string;
+  name: string;
+  isSystemDefined: boolean; // To differentiate default from user-added
   createdAt: number;
 }
 
@@ -69,7 +77,7 @@ export interface FinancialDataInput {
 export interface NewTransactionData {
   type: TransactionType;
   amount: number;
-  category: string;
+  category: string; // Will be the category name string
   date: string;
   description?: string;
   isRecurring?: boolean;
@@ -86,7 +94,7 @@ export interface NewCreditCardPurchaseData {
   cardId: string;
   date: string;
   description: string;
-  category: string;
+  category: string; // Will be the category name string
   totalAmount: number;
   installments: number;
 }
@@ -98,6 +106,12 @@ export interface NewLoanData {
   installmentsCount: number;
   startDate: string;
 }
+
+export interface NewUserCategoryData {
+  name: string;
+  isSystemDefined?: boolean;
+}
+
 
 // API response types
 export interface AuthApiResponse {

@@ -24,11 +24,15 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Checkbox } from '@/components/ui/checkbox';
-import { addTransaction, type NewTransactionData, type AddTransactionResult } from '@/lib/databaseService';
+import { addTransaction, type NewTransactionData, type AddTransactionResult, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
 import { useToast } from '@/hooks/use-toast';
 import { Sun } from 'lucide-react';
 import { format } from 'date-fns';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import type { UserCategory } from '@/types';
+import { Combobox } from '@/components/ui/combobox';
+import { useAuth } from '@/contexts/AuthContext';
+
 
 const transactionFormSchema = z.object({
   type: z.enum(['income', 'expense'], {
@@ -51,12 +55,33 @@ type TransactionFormValues = z.infer<typeof transactionFormSchema>;
 interface TransactionFormProps {
   onSuccess?: () => void;
   setOpen: (open: boolean) => void;
-  userId: string; // Added userId prop
+  userId: string; 
 }
 
 export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [categories, setCategories] = useState<UserCategory[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+
+  const fetchCategories = useCallback(async () => {
+    if (!userId) return;
+    setIsLoadingCategories(true);
+    try {
+      const userCategories = await getCategoriesForUser(userId);
+      setCategories(userCategories);
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível carregar as categorias." });
+    } finally {
+      setIsLoadingCategories(false);
+    }
+  }, [userId, toast]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema),
@@ -70,6 +95,22 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
     },
   });
 
+  const handleAddNewCategory = async (categoryName: string): Promise<UserCategory | null> => {
+    if (!userId) {
+      toast({ variant: "destructive", title: "Erro", description: "Usuário não identificado." });
+      return null;
+    }
+    const result = await addCategoryForUser(userId, categoryName);
+    if (result.success && result.category) {
+      // Add to local state to update Combobox immediately
+      setCategories(prev => [...prev, result.category!].sort((a, b) => a.name.localeCompare(b.name)));
+      return result.category;
+    } else {
+      toast({ variant: "destructive", title: "Erro ao Adicionar Categoria", description: result.error || "Não foi possível salvar a nova categoria." });
+      return null;
+    }
+  };
+
   const onSubmit = async (values: TransactionFormValues) => {
     setIsSubmitting(true);
 
@@ -81,7 +122,6 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
     };
 
     try {
-      // Pass userId to addTransaction
       const result: AddTransactionResult = await addTransaction(userId, transactionData);
 
       if (result.success && result.transactionId) {
@@ -89,7 +129,14 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
           title: 'Sucesso!',
           description: `Transação adicionada com sucesso.`,
         });
-        form.reset();
+        form.reset({ 
+            type: undefined, 
+            amount: '' as unknown as number, 
+            category: '', 
+            date: new Date(), 
+            description: '', 
+            isRecurring: false 
+        });
         if (onSuccess) onSuccess();
         setOpen(false);
       } else {
@@ -122,7 +169,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
           render={({ field }) => (
             <FormItem>
               <FormLabel>Tipo</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o tipo da transação" />
@@ -145,7 +192,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
             <FormItem>
               <FormLabel>Valor (R$)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="0.00" {...field} step="0.01" />
+                <Input type="number" placeholder="0.00" {...field} step="0.01" disabled={isSubmitting} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -156,11 +203,18 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
           control={form.control}
           name="category"
           render={({ field }) => (
-            <FormItem>
+            <FormItem className="flex flex-col">
               <FormLabel>Categoria</FormLabel>
-              <FormControl>
-                <Input placeholder="Ex: Alimentação, Salário" {...field} />
-              </FormControl>
+                <Combobox
+                    items={categories}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onAddNewCategory={handleAddNewCategory}
+                    placeholder="Selecione ou crie uma categoria"
+                    searchPlaceholder="Buscar ou criar nova..."
+                    emptyMessage={isLoadingCategories ? "Carregando categorias..." : "Nenhuma categoria. Digite para criar."}
+                    disabled={isSubmitting || isLoadingCategories || !user}
+                />
               <FormMessage />
             </FormItem>
           )}
@@ -172,7 +226,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
           render={({ field }) => (
             <FormItem className="flex flex-col">
               <FormLabel>Data</FormLabel>
-                <DatePicker value={field.value} onChange={field.onChange} />
+                <DatePicker value={field.value} onChange={field.onChange} disabled={isSubmitting} />
               <FormMessage />
             </FormItem>
           )}
@@ -189,6 +243,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
                   placeholder="Adicione uma breve descrição..."
                   className="resize-none"
                   {...field}
+                  disabled={isSubmitting}
                 />
               </FormControl>
               <FormMessage />
@@ -200,18 +255,18 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
           control={form.control}
           name="isRecurring"
           render={({ field }) => (
-            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow">
+            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
               <FormControl>
                 <Checkbox
                   checked={field.value}
                   onCheckedChange={field.onChange}
+                  disabled={isSubmitting}
                 />
               </FormControl>
               <div className="space-y-1 leading-none">
-                <FormLabel>
+                <FormLabel className="font-normal">
                   Transação Recorrente?
                 </FormLabel>
-                <FormMessage />
               </div>
             </FormItem>
           )}
@@ -222,11 +277,11 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? (
+          <Button type="submit" disabled={isSubmitting || isLoadingCategories || !user}>
+            {isSubmitting || isLoadingCategories ? (
               <>
                 <Sun className="mr-2 h-4 w-4 animate-spin" />
-                Salvando...
+                {isLoadingCategories ? 'Carregando...' : 'Salvando...'}
               </>
             ) : (
               'Salvar Transação'

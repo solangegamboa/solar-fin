@@ -24,10 +24,12 @@ import {
 import { DatePicker } from '@/components/ui/date-picker';
 import { useToast } from '@/hooks/use-toast';
 import { Sun } from 'lucide-react';
-import { useState } from 'react';
-import { addCreditCardPurchase, type AddCreditCardPurchaseResult } from '@/lib/databaseService';
-import type { CreditCard, NewCreditCardPurchaseData } from '@/types';
+import { useState, useEffect, useCallback } from 'react';
+import { addCreditCardPurchase, type AddCreditCardPurchaseResult, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
+import type { CreditCard, NewCreditCardPurchaseData, UserCategory } from '@/types';
 import { format } from 'date-fns';
+import { Combobox } from '@/components/ui/combobox';
+import { useAuth } from '@/contexts/AuthContext';
 
 const purchaseSchema = z.object({
   cardId: z.string().min(1, { message: 'Selecione um cartão de crédito.' }),
@@ -42,7 +44,7 @@ const purchaseSchema = z.object({
     .number({ invalid_type_error: 'O número de parcelas deve ser um número.', required_error: 'O número de parcelas é obrigatório.' })
     .int({ message: 'O número de parcelas deve ser inteiro.' })
     .min(1, { message: 'Mínimo de 1 parcela.' })
-    .max(24, { message: 'Máximo de 24 parcelas.' }),
+    .max(24, { message: 'Máximo de 24 parcelas.' }), // Consider increasing if needed
 });
 
 type PurchaseFormValues = z.infer<typeof purchaseSchema>;
@@ -51,17 +53,38 @@ interface CreditCardTransactionFormProps {
   userCreditCards: CreditCard[];
   onSuccess?: () => void;
   setOpen: (open: boolean) => void;
-  userId: string; // Added userId prop
+  userId: string; 
 }
 
 export function CreditCardTransactionForm({
   userCreditCards,
   onSuccess,
   setOpen,
-  userId, // Destructure userId
+  userId, 
 }: CreditCardTransactionFormProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [categories, setCategories] = useState<UserCategory[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+
+  const fetchCategories = useCallback(async () => {
+    if (!userId) return;
+    setIsLoadingCategories(true);
+    try {
+      const userCategories = await getCategoriesForUser(userId);
+      setCategories(userCategories);
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível carregar as categorias." });
+    } finally {
+      setIsLoadingCategories(false);
+    }
+  }, [userId, toast]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   const form = useForm<PurchaseFormValues>({
     resolver: zodResolver(purchaseSchema),
@@ -74,6 +97,21 @@ export function CreditCardTransactionForm({
       installments: 1,
     },
   });
+  
+  const handleAddNewCategory = async (categoryName: string): Promise<UserCategory | null> => {
+    if (!userId) {
+      toast({ variant: "destructive", title: "Erro", description: "Usuário não identificado." });
+      return null;
+    }
+    const result = await addCategoryForUser(userId, categoryName);
+    if (result.success && result.category) {
+      setCategories(prev => [...prev, result.category!].sort((a,b) => a.name.localeCompare(b.name)));
+      return result.category;
+    } else {
+      toast({ variant: "destructive", title: "Erro ao Adicionar Categoria", description: result.error || "Não foi possível salvar a nova categoria." });
+      return null;
+    }
+  };
 
   const onSubmit = async (values: PurchaseFormValues) => {
     setIsSubmitting(true);
@@ -84,7 +122,6 @@ export function CreditCardTransactionForm({
     };
 
     try {
-      // Pass userId to addCreditCardPurchase
       const result: AddCreditCardPurchaseResult = await addCreditCardPurchase(userId, purchaseData);
 
       if (result.success && result.purchaseId) {
@@ -92,7 +129,14 @@ export function CreditCardTransactionForm({
           title: 'Sucesso!',
           description: 'Compra no cartão de crédito adicionada.',
         });
-        form.reset();
+        form.reset({
+            cardId: '',
+            date: new Date(),
+            description: '',
+            category: '',
+            totalAmount: '' as unknown as number,
+            installments: 1,
+        });
         if (onSuccess) onSuccess();
         setOpen(false);
       } else {
@@ -124,10 +168,10 @@ export function CreditCardTransactionForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Cartão de Crédito</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting || userCreditCards.length === 0}>
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione o cartão" />
+                    <SelectValue placeholder={userCreditCards.length > 0 ? "Selecione o cartão" : "Nenhum cartão cadastrado"} />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -149,7 +193,7 @@ export function CreditCardTransactionForm({
           render={({ field }) => (
             <FormItem className="flex flex-col">
               <FormLabel>Data da Compra</FormLabel>
-              <DatePicker value={field.value} onChange={field.onChange} />
+              <DatePicker value={field.value} onChange={field.onChange} disabled={isSubmitting} />
               <FormMessage />
             </FormItem>
           )}
@@ -162,7 +206,7 @@ export function CreditCardTransactionForm({
             <FormItem>
               <FormLabel>Descrição</FormLabel>
               <FormControl>
-                <Input placeholder="Ex: Compra Online Amazon" {...field} />
+                <Input placeholder="Ex: Compra Online Amazon" {...field} disabled={isSubmitting} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -173,11 +217,18 @@ export function CreditCardTransactionForm({
           control={form.control}
           name="category"
           render={({ field }) => (
-            <FormItem>
+            <FormItem className="flex flex-col">
               <FormLabel>Categoria</FormLabel>
-              <FormControl>
-                <Input placeholder="Ex: Eletrônicos, Supermercado" {...field} />
-              </FormControl>
+                <Combobox
+                    items={categories}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onAddNewCategory={handleAddNewCategory}
+                    placeholder="Selecione ou crie uma categoria"
+                    searchPlaceholder="Buscar ou criar nova..."
+                    emptyMessage={isLoadingCategories ? "Carregando categorias..." : "Nenhuma categoria. Digite para criar."}
+                    disabled={isSubmitting || isLoadingCategories || !user}
+                />
               <FormMessage />
             </FormItem>
           )}
@@ -191,7 +242,7 @@ export function CreditCardTransactionForm({
               <FormItem>
                 <FormLabel>Valor Total (R$)</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="300.00" {...field} step="0.01" />
+                  <Input type="number" placeholder="300.00" {...field} step="0.01" disabled={isSubmitting} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -205,7 +256,7 @@ export function CreditCardTransactionForm({
               <FormItem>
                 <FormLabel>Nº de Parcelas</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="1" {...field} min="1" max="24"/>
+                  <Input type="number" placeholder="1" {...field} min="1" max="24" disabled={isSubmitting}/>
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -217,11 +268,11 @@ export function CreditCardTransactionForm({
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isSubmitting || userCreditCards.length === 0}>
-            {isSubmitting ? (
+          <Button type="submit" disabled={isSubmitting || isLoadingCategories || userCreditCards.length === 0 || !user}>
+            {isSubmitting || isLoadingCategories ? (
               <>
                 <Sun className="mr-2 h-4 w-4 animate-spin" />
-                Salvando...
+                {isLoadingCategories ? 'Carregando...' : 'Salvando...'}
               </>
             ) : (
               'Salvar Compra'
@@ -229,7 +280,7 @@ export function CreditCardTransactionForm({
           </Button>
         </div>
          {userCreditCards.length === 0 && (
-          <p className="text-sm text-destructive text-center">Adicione um cartão de crédito antes de registrar uma compra.</p>
+          <p className="text-sm text-destructive text-center pt-2">Adicione um cartão de crédito antes de registrar uma compra.</p>
         )}
       </form>
     </Form>
