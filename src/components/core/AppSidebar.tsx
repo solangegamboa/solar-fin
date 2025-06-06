@@ -11,6 +11,7 @@ import {
   Repeat,
   Sparkles,
   Settings,
+  Target, // Added Target icon
 } from 'lucide-react';
 import Logo from './Logo';
 import {
@@ -32,6 +33,7 @@ const navItems = [
   { href: '/transactions', label: 'Transações', icon: Repeat },
   { href: '/loans', label: 'Empréstimos', icon: Landmark },
   { href: '/credit-cards', label: 'Cartões', icon: CreditCard },
+  { href: '/goals', label: 'Metas', icon: Target }, // Added Goals item
   { href: '/insights', label: 'Insights IA', icon: Sparkles },
 ];
 

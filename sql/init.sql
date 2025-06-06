@@ -1,100 +1,169 @@
 
--- Script to initialize the Solar Fin PostgreSQL database
+-- Function to update the updated_at column
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = NOW();
+   RETURN NEW;
+END;
+$$ language 'plpgsql';
 
--- Drop tables if they exist to start fresh (optional, use with caution in dev)
--- DROP TABLE IF EXISTS credit_card_purchases CASCADE;
--- DROP TABLE IF EXISTS credit_cards CASCADE;
--- DROP TABLE IF EXISTS loans CASCADE;
--- DROP TABLE IF EXISTS transactions CASCADE;
--- DROP TABLE IF EXISTS user_categories CASCADE;
--- DROP TABLE IF EXISTS app_users CASCADE;
-
--- Table for Users
+-- Create app_users table
 CREATE TABLE IF NOT EXISTS app_users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
-    hashed_password VARCHAR(255) NOT NULL,
+    hashed_password TEXT NOT NULL,
     display_name VARCHAR(100),
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMPTZ
 );
+CREATE INDEX IF NOT EXISTS idx_app_users_email ON app_users(email);
 
--- Table for User Categories
+-- Create user_categories table
 CREATE TABLE IF NOT EXISTS user_categories (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
-    is_system_defined BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, name) -- Each user has unique category names
+    is_system_defined BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, name) -- Ensure category names are unique per user
 );
+CREATE INDEX IF NOT EXISTS idx_user_categories_user_id ON user_categories(user_id);
 
--- Table for Transactions
+-- Create transactions table
 CREATE TABLE IF NOT EXISTS transactions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
-    type VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense')), -- 'income' or 'expense'
+    type VARCHAR(10) NOT NULL, -- 'income' or 'expense'
     amount DECIMAL(12, 2) NOT NULL,
-    category VARCHAR(100) NOT NULL, -- References name in user_categories, not a strict FK for simplicity now but could be
+    category VARCHAR(100) NOT NULL, -- Should match a name in user_categories
     date DATE NOT NULL,
     description TEXT,
     is_recurring BOOLEAN DEFAULT FALSE,
-    receipt_image_uri TEXT, -- Store Data URI or path to image
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    receipt_image_uri TEXT, -- Store as Data URI or path/URL
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
+CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
 
--- Table for Loans
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trigger_transactions_updated_at') THEN
+        CREATE TRIGGER trigger_transactions_updated_at
+        BEFORE UPDATE ON transactions
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END
+$$;
+
+-- Create loans table
 CREATE TABLE IF NOT EXISTS loans (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
     bank_name VARCHAR(100) NOT NULL,
-    description TEXT NOT NULL,
+    description TEXT,
     installment_amount DECIMAL(12, 2) NOT NULL,
     installments_count INTEGER NOT NULL,
     start_date DATE NOT NULL,
-    end_date DATE NOT NULL, -- Calculated: startDate + installmentsCount months
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    end_date DATE NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_loans_user_id ON loans(user_id);
 
--- Table for Credit Cards
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trigger_loans_updated_at') THEN
+        CREATE TRIGGER trigger_loans_updated_at
+        BEFORE UPDATE ON loans
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END
+$$;
+
+-- Create credit_cards table
 CREATE TABLE IF NOT EXISTS credit_cards (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     limit_amount DECIMAL(12, 2) NOT NULL,
-    due_date_day INTEGER NOT NULL CHECK (due_date_day >= 1 AND due_date_day <= 31),
-    closing_date_day INTEGER NOT NULL CHECK (closing_date_day >= 1 AND closing_date_day <= 31),
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    due_date_day INTEGER NOT NULL,
+    closing_date_day INTEGER NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_credit_cards_user_id ON credit_cards(user_id);
 
--- Table for Credit Card Purchases
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trigger_credit_cards_updated_at') THEN
+        CREATE TRIGGER trigger_credit_cards_updated_at
+        BEFORE UPDATE ON credit_cards
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END
+$$;
+
+-- Create credit_card_purchases table
 CREATE TABLE IF NOT EXISTS credit_card_purchases (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
     card_id UUID NOT NULL REFERENCES credit_cards(id) ON DELETE CASCADE,
     purchase_date DATE NOT NULL,
     description TEXT NOT NULL,
-    category VARCHAR(100) NOT NULL, -- References name in user_categories
+    category VARCHAR(100) NOT NULL,
     total_amount DECIMAL(12, 2) NOT NULL,
-    installments INTEGER NOT NULL DEFAULT 1,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    installments INTEGER NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_credit_card_purchases_user_id ON credit_card_purchases(user_id);
+CREATE INDEX IF NOT EXISTS idx_credit_card_purchases_card_id ON credit_card_purchases(card_id);
 
--- Indexes for faster queries (optional but recommended)
-CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date DESC);
-CREATE INDEX IF NOT EXISTS idx_loans_user_start_date ON loans(user_id, start_date ASC);
-CREATE INDEX IF NOT EXISTS idx_credit_cards_user ON credit_cards(user_id);
-CREATE INDEX IF NOT EXISTS idx_credit_card_purchases_user_date ON credit_card_purchases(user_id, purchase_date DESC);
-CREATE INDEX IF NOT EXISTS idx_user_categories_user_name ON user_categories(user_id, name);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trigger_credit_card_purchases_updated_at') THEN
+        CREATE TRIGGER trigger_credit_card_purchases_updated_at
+        BEFORE UPDATE ON credit_card_purchases
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END
+$$;
 
--- Note on Categories:
--- For simplicity, 'category' fields in transactions and credit_card_purchases are VARCHAR.
--- In a more complex setup, you might make these foreign keys to user_categories(id).
--- However, managing category renames/deletions becomes more complex then.
--- Storing the name directly is simpler for this application's current scope.
+-- Create financial_goals table
+CREATE TABLE IF NOT EXISTS financial_goals (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    target_amount DECIMAL(12, 2) NOT NULL,
+    current_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+    target_date DATE NULL,
+    description TEXT NULL,
+    icon VARCHAR(50) NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'active', -- active, achieved, abandoned
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_financial_goals_user_id ON financial_goals(user_id);
+CREATE INDEX IF NOT EXISTS idx_financial_goals_status ON financial_goals(status);
 
--- Default categories will be added by the application logic (createUser function in databaseService.ts)
--- when a new user is created.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trigger_financial_goals_updated_at') THEN
+        CREATE TRIGGER trigger_financial_goals_updated_at
+        BEFORE UPDATE ON financial_goals
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END
+$$;
 
--- End of script
-SELECT 'Database schema initialized successfully (if tables did not exist or were empty).' AS status;
+-- Note: Default categories are added via databaseService.ts upon user creation.
+-- If migrating an existing PG database without this logic, you might need to manually add categories or run a script.
+-- For local db.json, the default categories are also handled by databaseService.ts during user creation.

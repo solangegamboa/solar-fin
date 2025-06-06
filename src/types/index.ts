@@ -66,6 +66,22 @@ export interface UserCategory {
   createdAt: number;
 }
 
+export type FinancialGoalStatus = 'active' | 'achieved' | 'abandoned';
+
+export interface FinancialGoal {
+  id: string;
+  userId: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  targetDate?: string | null; // ISO string like 'YYYY-MM-DD'
+  description?: string | null;
+  icon?: string | null; // Lucide icon name
+  status: FinancialGoalStatus;
+  createdAt: number; // Timestamp
+  updatedAt: number; // Timestamp
+}
+
 // For AI Flow - this might need adjustment if AI needs password or other auth details (it shouldn't)
 export interface FinancialDataInput {
   income: number;
@@ -114,6 +130,26 @@ export interface NewUserCategoryData {
   isSystemDefined?: boolean;
 }
 
+export interface NewFinancialGoalData {
+  name: string;
+  targetAmount: number;
+  currentAmount?: number; // Defaults to 0
+  targetDate?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  status?: FinancialGoalStatus; // Defaults to 'active'
+}
+
+export interface UpdateFinancialGoalData {
+  name?: string;
+  targetAmount?: number;
+  currentAmount?: number;
+  targetDate?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  status?: FinancialGoalStatus;
+}
+
 
 // API response types
 export interface AuthApiResponse {
@@ -153,6 +189,7 @@ export interface UserBackupData {
   creditCards: CreditCard[];
   creditCardPurchases: CreditCardPurchase[];
   categories: UserCategory[];
+  financialGoals: FinancialGoal[]; // Added financial goals
   // Note: We don't backup password or user ID directly from backup.
   // The restore will apply to the currently logged-in user.
 }
