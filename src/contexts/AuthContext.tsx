@@ -12,6 +12,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<AuthApiResponse>;
   signup: (email: string, password: string, displayName?: string) => Promise<AuthApiResponse>;
   logout: () => Promise<void>;
+  updateUserContext: (updatedUserFields: Partial<UserProfile>) => void; // Renamed for clarity
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -20,6 +21,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => ({ success: false, message: 'Not implemented' }),
   signup: async () => ({ success: false, message: 'Not implemented' }),
   logout: async () => {},
+  updateUserContext: () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -112,8 +114,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  const updateUserContext = (updatedUserFields: Partial<UserProfile>) => {
+    setUser(prevUser => prevUser ? { ...prevUser, ...updatedUserFields } : null);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, updateUserContext }}>
       {children}
     </AuthContext.Provider>
   );

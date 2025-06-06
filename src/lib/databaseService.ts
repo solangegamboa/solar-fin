@@ -218,6 +218,81 @@ export async function updateUserLastLogin(userId: string): Promise<void> {
     }
 }
 
+export interface UpdateUserDisplayNameResult { success: boolean; user?: UserProfile; error?: string; }
+export async function updateUserDisplayName(userId: string, newDisplayName: string): Promise<UpdateUserDisplayNameResult> {
+  if (!userId) return { success: false, error: "User ID is required." };
+  if (!newDisplayName.trim()) return { success: false, error: "Display name cannot be empty." };
+
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const res = await pool.query(
+        'UPDATE app_users SET display_name = $1 WHERE id = $2 RETURNING id, email, display_name, created_at, last_login_at',
+        [newDisplayName.trim(), userId]
+      );
+      if (res.rowCount === 0) return { success: false, error: "User not found." };
+      const dbUser = res.rows[0];
+      return {
+        success: true,
+        user: {
+          id: dbUser.id,
+          email: dbUser.email,
+          displayName: dbUser.display_name,
+          createdAt: new Date(dbUser.created_at).getTime(),
+          lastLoginAt: new Date(dbUser.last_login_at).getTime(),
+        }
+      };
+    } catch (error: any) {
+      console.error("Error updating display name in PostgreSQL:", error.message);
+      return { success: false, error: "Database error updating display name." };
+    }
+  } else {
+    const db = await readDB();
+    if (!db.users[userId] || !db.users[userId].profile) {
+      return { success: false, error: "User not found." };
+    }
+    db.users[userId].profile.displayName = newDisplayName.trim();
+    await writeDB(db);
+    return { success: true, user: db.users[userId].profile };
+  }
+}
+
+export interface UpdateUserPasswordResult { success: boolean; error?: string; }
+export async function updateUserPassword(userId: string, currentPasswordPlain: string, newPasswordPlain: string): Promise<UpdateUserPasswordResult> {
+  if (!userId) return { success: false, error: "User ID is required." };
+
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const userRes = await pool.query('SELECT hashed_password FROM app_users WHERE id = $1', [userId]);
+      if (userRes.rowCount === 0) return { success: false, error: "User not found." };
+      
+      const hashedPasswordFromDb = userRes.rows[0].hashed_password;
+      const isCurrentPasswordValid = await bcrypt.compare(currentPasswordPlain, hashedPasswordFromDb);
+      if (!isCurrentPasswordValid) return { success: false, error: "Invalid current password." };
+
+      const newHashedPassword = await bcrypt.hash(newPasswordPlain, 10);
+      await pool.query('UPDATE app_users SET hashed_password = $1 WHERE id = $2', [newHashedPassword, userId]);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error updating password in PostgreSQL:", error.message);
+      return { success: false, error: "Database error updating password." };
+    }
+  } else {
+    const db = await readDB();
+    const userRecord = db.users[userId];
+    if (!userRecord || !userRecord.profile || !userRecord.hashedPassword) {
+      return { success: false, error: "User not found or no password set." };
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(currentPasswordPlain, userRecord.hashedPassword);
+    if (!isCurrentPasswordValid) return { success: false, error: "Invalid current password." };
+
+    userRecord.hashedPassword = await bcrypt.hash(newPasswordPlain, 10);
+    await writeDB(db);
+    return { success: true };
+  }
+}
+
+
 export interface AddTransactionResult {
   success: boolean;
   transactionId?: string;
