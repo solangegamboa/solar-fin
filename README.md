@@ -8,19 +8,21 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
 *   **Painel Financeiro:** Uma visão geral da sua saúde financeira, incluindo saldo atual, receitas e despesas do mês selecionado (com navegação entre meses), um calendário financeiro interativo com resumo diário das movimentações, e lembretes de transações recorrentes agendadas.
 *   **Gerenciamento de Transações:**
     *   Registre suas receitas e despesas, categorizando-as para melhor organização e permitindo a criação de novas categorias.
+    *   Edite transações existentes para corrigir ou atualizar informações.
     *   Opção de anexar imagem de comprovante com extração automática de valor por IA.
     *   Marque transações como recorrentes e duplique-as facilmente para o mês atual.
+    *   Importe múltiplas transações a partir de uma imagem de extrato bancário com auxílio de IA (Beta).
 *   **Controle de Empréstimos:**
     *   Cadastre seus empréstimos e acompanhe o progresso de pagamento, visualizando o valor total, parcelas pagas, restantes e o status atual.
 *   **Gerenciamento de Cartões de Crédito:**
     *   Cadastre seus cartões de crédito, com auxílio de IA para extrair informações como emissor e bandeira a partir de uma imagem do cartão.
-    *   Registre compras parceladas e visualize um resumo consolidado das suas futuras faturas, mês a mês.
-    *   Acompanhe estimativas das faturas atuais e próximas para cada cartão.
+    *   Registre compras parceladas, visualize um resumo consolidado das suas futuras faturas (mês a mês) e acompanhe estimativas das faturas atuais e próximas para cada cartão.
+    *   Edite compras parceladas existentes.
 *   **Gerenciamento de Metas Financeiras:**
-    *   Cadastre, acompanhe e gerencie suas metas financeiras de curto e longo prazo.
+    *   Cadastre, acompanhe, edite e gerencie suas metas financeiras de curto e longo prazo.
     *   Visualize o progresso de cada meta e defina datas alvo para alcançá-las.
 *   **Acompanhamento de Investimentos:**
-    *   Cadastre seus investimentos em diferentes categorias (Ações, Poupança, Criptomoedas, Outros).
+    *   Cadastre, edite e acompanhe seus investimentos em diferentes categorias (Ações, Poupança, Criptomoedas, Outros).
     *   Acompanhe o valor atual, valor inicial, quantidade, símbolo, instituição e performance.
 *   **Calculadoras Financeiras:**
     *   Utilize calculadoras integradas para Juros Simples e Juros Compostos.
@@ -253,6 +255,16 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
     *   `(app)/`: Rotas protegidas da aplicação principal (Dashboard, Transações, Empréstimos, Cartões, Metas, Investimentos, Calculadoras, etc.).
     *   `(auth)/`: Rotas de autenticação (Login, Signup).
     *   `api/`: Rotas de API (backend).
+        *   `auth/`: Endpoints para login, signup, logout, e verificação de sessão (`me`).
+        *   `transactions/`: Endpoint para adicionar transações.
+        *   `transactions/[transactionId]/`: Endpoint para atualizar e excluir transações específicas.
+        *   `goals/`: Endpoints para criar e listar metas financeiras.
+        *   `goals/[goalId]/`: Endpoints para atualizar e excluir metas específicas.
+        *   `investments/`: Endpoints para criar e listar investimentos.
+        *   `investments/[investmentId]/`: Endpoints para atualizar e excluir investimentos específicos.
+        *   `credit-card-purchases/[purchaseId]/`: Endpoint para atualizar e excluir compras de cartão específicas (se não for gerenciado via um endpoint de cartão mais geral).
+        *   `user/`: Endpoints para gerenciamento de perfil do usuário (atualizar nome, senha, backup, restauração, preferências de e-mail).
+        *   `system/`: Endpoint para informações do sistema (ex: modo do banco de dados).
 *   `src/components/`: Componentes React reutilizáveis.
     *   `core/`: Componentes centrais da aplicação (Header, Sidebar, Logo, NotificationBell).
     *   `ui/`: Componentes ShadCN UI.
@@ -264,8 +276,8 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
 *   `src/ai/`: Lógica relacionada à Inteligência Artificial com Genkit.
     *   `flows/`: Definições dos fluxos de IA.
 *   `src/data/`: (Para modo local) Arquivo `db.json` que armazena os dados.
-*   `sql/`: Scripts SQL para configuração do banco de dados PostgreSQL.
-*   `public/`: Arquivos estáticos.
+*   `sql/`: Scripts SQL para configuração do banco de dados PostgreSQL (contém `init.sql`).
+*   `public/`: Arquivos estáticos (incluindo `manifest.json` e ícones).
 *   `docker-compose.yml`: Define os serviços Docker para a aplicação e o banco de dados.
 *   `Dockerfile`: Define como construir a imagem Docker para a aplicação Next.js.
 
