@@ -49,7 +49,7 @@ const investmentTypeLabelMap: Record<InvestmentType, string> = {
 
 
 export default function InvestmentsPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, getToken } = useAuth();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,17 +64,25 @@ export default function InvestmentsPage() {
 
   const fetchInvestments = useCallback(async () => {
     if (!user) {
-        // If user is not available in AuthContext, set loading to false and don't fetch.
-        // The AppLayout should redirect to login if user is truly not authenticated.
-        // This check prevents an API call if AuthContext hasn't initialized user yet but isn't loading.
         setIsLoading(false);
         return;
     }
     setIsLoading(true);
     setError(null);
+    const token = getToken();
+    if (!token) {
+      setError("Sessão inválida. Faça login novamente.");
+      setIsLoading(false);
+      toast({ variant: "destructive", title: "Erro de Autenticação", description: "Sessão inválida." });
+      return;
+    }
+
     try {
-      // Ensure credentials: 'include' is present for sending cookies
-      const response = await fetch('/api/investments', { credentials: 'include' });
+      const response = await fetch('/api/investments', { 
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
       const data = await response.json();
       if (response.ok && data.success) {
         setInvestments(data.investments);
@@ -88,16 +96,16 @@ export default function InvestmentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast]);
+  }, [user, toast, getToken]);
 
   useEffect(() => {
-    if (!authLoading) { // Only fetch if auth loading is complete
+    if (!authLoading) { 
       fetchInvestments();
     }
   }, [authLoading, fetchInvestments]);
 
   const handleInvestmentUpserted = (upsertedInvestment: Investment) => {
-    fetchInvestments(); // Refetch to update the list
+    fetchInvestments(); 
     setIsModalOpen(false);
     setInvestmentToEdit(null);
   };
@@ -121,11 +129,20 @@ export default function InvestmentsPage() {
     if (!investmentToDelete || !user) return;
     setIsDeletingId(investmentToDelete.id);
     setShowDeleteConfirmDialog(false);
+    const token = getToken();
+    if (!token) {
+      toast({ variant: "destructive", title: "Erro de Autenticação", description: "Sessão inválida." });
+      setIsDeletingId(null);
+      setInvestmentToDelete(null);
+      return;
+    }
 
     try {
       const response = await fetch(`/api/investments/${investmentToDelete.id}`, { 
         method: 'DELETE',
-        credentials: 'include' // Ensure cookie is sent
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
       });
       const result = await response.json();
 
@@ -231,7 +248,7 @@ export default function InvestmentsPage() {
   if (authLoading) {
     return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
   }
-  if (!user && !authLoading) { // This case should ideally be caught by AppLayout or a higher-level redirect
+  if (!user && !authLoading) { 
      return <div className="flex flex-col items-center justify-center h-64 text-muted-foreground"><AlertTriangleIcon className="h-12 w-12 mb-3" /><p className="text-lg">Por favor, faça login para acessar esta página.</p></div>;
   }
 
@@ -294,5 +311,3 @@ export default function InvestmentsPage() {
     </div>
   );
 }
-
-    

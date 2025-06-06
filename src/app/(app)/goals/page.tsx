@@ -48,7 +48,7 @@ const iconMap: { [key: string]: React.ElementType } = {
 };
 
 export default function FinancialGoalsPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, getToken } = useAuth();
   const [goals, setGoals] = useState<FinancialGoal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,8 +69,20 @@ export default function FinancialGoalsPage() {
     }
     setIsLoading(true);
     setError(null);
+    const token = getToken();
+    if (!token) {
+      setError("Sessão inválida. Faça login novamente.");
+      setIsLoading(false);
+      toast({ variant: "destructive", title: "Erro de Autenticação", description: "Sessão inválida." });
+      return;
+    }
+
     try {
-      const response = await fetch('/api/goals', { credentials: 'include' });
+      const response = await fetch('/api/goals', { 
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
       const data = await response.json();
       if (response.ok && data.success) {
         setGoals(data.goals);
@@ -84,7 +96,7 @@ export default function FinancialGoalsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast]); // Alterado de user?.id para user
+  }, [user, toast, getToken]);
 
   useEffect(() => {
     if (!authLoading) { 
@@ -123,11 +135,20 @@ export default function FinancialGoalsPage() {
     if (!goalToDelete || !user) return;
     setIsDeletingId(goalToDelete.id);
     setShowDeleteConfirmDialog(false);
+    const token = getToken();
+    if (!token) {
+      toast({ variant: "destructive", title: "Erro de Autenticação", description: "Sessão inválida." });
+      setIsDeletingId(null);
+      setGoalToDelete(null);
+      return;
+    }
 
     try {
       const response = await fetch(`/api/goals/${goalToDelete.id}`, { 
         method: 'DELETE',
-        credentials: 'include' 
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
       });
       const result = await response.json();
 
