@@ -31,7 +31,21 @@ import { getCreditCardsForUser, getCreditCardPurchasesForUser, deleteCreditCardP
 import type { CreditCard, CreditCardPurchase } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import { format, parseISO, addMonths, getMonth, getYear, getDate, setDate } from 'date-fns';
+import { 
+  format, 
+  parseISO, 
+  addMonths, 
+  getMonth, 
+  getYear, 
+  getDate, 
+  setDate,
+  startOfMonth, // Added
+  subMonths,    // Added
+  isSameMonth,  // Added
+  isSameYear,   // Added
+  isAfter,      // Added
+  isSameDay     // Added
+} from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -228,7 +242,30 @@ export default function CreditCardsPage() {
     });
   }, [purchases, creditCards]);
 
-  const monthlySummaries = calculateMonthlySummaries();
+  const allCalculatedSummaries = calculateMonthlySummaries();
+
+  const currentDateForFilter = new Date();
+  const startOfCurrentMonthForFilter = startOfMonth(currentDateForFilter);
+  const startOfPreviousMonthForFilter = startOfMonth(subMonths(currentDateForFilter, 1));
+
+  const monthlySummaries = allCalculatedSummaries.filter(summary => {
+      const [monthName, yearStr] = summary.monthYear.split('/');
+      const year = parseInt(yearStr);
+      const monthIndex = ptBRMonthNames.indexOf(monthName.toLowerCase());
+
+      if (monthIndex === -1) {
+          console.error("Invalid month name in summary for filtering:", monthName, summary.monthYear);
+          return false; 
+      }
+      const summaryDate = startOfMonth(new Date(year, monthIndex, 1));
+
+      const isPrev = isSameDay(summaryDate, startOfPreviousMonthForFilter);
+      const isCurr = isSameDay(summaryDate, startOfCurrentMonthForFilter);
+      const isFuture = isAfter(summaryDate, startOfCurrentMonthForFilter);
+      
+      return isPrev || isCurr || isFuture;
+  });
+
 
   const handleDeleteCreditCardPurchase = (purchase: CreditCardPurchase) => {
     setPurchaseToDelete(purchase);
@@ -547,6 +584,3 @@ export default function CreditCardsPage() {
     </div>
   );
 }
-
-
-    
