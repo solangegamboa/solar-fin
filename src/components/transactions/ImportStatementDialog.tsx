@@ -32,6 +32,7 @@ import { extractStatementTransactionsFromImage } from '@/ai/flows/extract-statem
 import type { ExtractStatementTransactionsOutput, ExtractedTransaction, UserCategory, NewTransactionData, TransactionType } from '@/types';
 import { addTransaction, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
 import { format, parseISO, isValid as isValidDate } from 'date-fns';
+import { Card } from '@/components/ui/card'; // Added Card import
 
 interface EditableExtractedTransaction extends ExtractedTransaction {
   id: string; // For unique key in UI
@@ -186,10 +187,16 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
 
     let allValid = true;
     for (const tx of transactionsToSave) {
-      if (!tx.userAmount || tx.userAmount <= 0) {
-        toast({ variant: 'destructive', title: 'Valor Inválido', description: `Transação "${tx.userDescription}" tem valor inválido.` });
+      if (!tx.userAmount || tx.userAmount === 0) { // Allow negative for income, positive for expense
+        toast({ variant: 'destructive', title: 'Valor Inválido', description: `Transação "${tx.userDescription}" tem valor inválido. Deve ser diferente de zero.` });
         allValid = false; break;
       }
+      if (tx.userSelectedType === 'expense' && tx.userAmount > 0) {
+        tx.userAmount = -Math.abs(tx.userAmount); // Ensure expense is negative
+      } else if (tx.userSelectedType === 'income' && tx.userAmount < 0) {
+         tx.userAmount = Math.abs(tx.userAmount); // Ensure income is positive
+      }
+
       if (!tx.userSelectedDate) {
         toast({ variant: 'destructive', title: 'Data Inválida', description: `Transação "${tx.userDescription}" não tem data.` });
         allValid = false; break;
@@ -212,12 +219,12 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
 
     for (const tx of transactionsToSave) {
       const newTxData: NewTransactionData = {
-        amount: tx.userAmount!,
+        amount: Math.abs(tx.userAmount!), // API expects positive amount, type dictates sign
         date: format(tx.userSelectedDate!, 'yyyy-MM-dd'),
-        type: tx.userSelectedType as TransactionType, // Cast after validation
+        type: tx.userSelectedType as TransactionType, 
         category: tx.userSelectedCategory,
         description: tx.userDescription,
-        recurrenceFrequency: 'none', // Default for imported
+        recurrenceFrequency: 'none', 
       };
       try {
         const result = await addTransaction(userId, newTxData);
@@ -242,12 +249,12 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
       toast({ variant: 'destructive', title: 'Erros na Importação', description: `${errorCount} transações não puderam ser salvas. Verifique o console para detalhes.` });
     }
     if (successCount > 0 && errorCount === 0) {
-      setOpen(false); // Close dialog only if all selected were successful or some were successful and no errors.
+      setOpen(false); 
     } else if (successCount === 0 && errorCount > 0) {
-       // Keep dialog open if only errors occurred
+       
     } else if (successCount > 0 && errorCount > 0) {
-      // Some success, some errors, keep dialog open for user to see remaining
-      setEditableTransactions(prev => prev.filter(tx => !tx.isSelected || transactionsToSave.find(saved => saved.id === tx.id && errorCount > 0 /* an error occurred for this one */ )));
+      
+      setEditableTransactions(prev => prev.filter(tx => !tx.isSelected || transactionsToSave.find(saved => saved.id === tx.id && errorCount > 0 )));
     }
 
   };
@@ -309,7 +316,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
                 <AlertTitle>Revise com Atenção!</AlertTitle>
                 <AlertDescription>
                     Verifique os dados extraídos e ajuste o tipo, data e categoria antes de importar.
-                    A IA pode cometer erros.
+                    A IA pode cometer erros. Certifique-se que os valores de despesa são negativos e receitas positivos.
                 </AlertDescription>
             </Alert>
 
@@ -326,7 +333,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
                       />
                       <div className="flex-grow">
                         <Label htmlFor={`desc-${tx.id}`} className="text-xs font-normal">Descrição Original</Label>
-                        <p className="text-xs text-muted-foreground truncate" title={tx.rawText}>{tx.rawText}</p>
+                        <p className="text-xs text-muted-foreground truncate" title={tx.rawText || undefined}>{tx.rawText}</p>
                         <Input
                           id={`desc-${tx.id}`}
                           value={tx.userDescription}
@@ -418,3 +425,4 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
     </>
   );
 }
+
