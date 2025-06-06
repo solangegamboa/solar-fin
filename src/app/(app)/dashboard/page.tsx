@@ -13,8 +13,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // Adicionado Alert
-import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Sun, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock, PlusCircle, ShoppingBag, ListChecks, Clock, CheckCircle2, Minus, Info } from "lucide-react"; // Adicionado Info
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { DollarSign, CreditCardIcon, TrendingUp, TrendingDown, Sun, AlertTriangleIcon, SearchX, ChevronLeft, ChevronRight, CalendarClock, PlusCircle, ShoppingBag, ListChecks, Clock, CheckCircle2, Minus, Info } from "lucide-react";
 import { getTransactionsForUser, getCreditCardsForUser, getCreditCardPurchasesForUser, getLoansForUser } from '@/lib/databaseService';
 import type { Transaction, CreditCard, CreditCardPurchase, Loan } from '@/types';
 import { formatCurrency, cn } from "@/lib/utils";
@@ -34,11 +34,12 @@ import {
   addWeeks,
   addYears,
   isBefore,
+  isAfter,
   isSameDay,
   startOfDay,
   lastDayOfMonth,
   addDays,
-  setDate, // Adicionado setDate
+  setDate,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
@@ -61,8 +62,8 @@ interface DashboardSummary {
 interface CategoryExpense {
   category: string;
   total: number;
-  previousMonthTotal?: number; // Adicionado para comparativo
-  percentageChange?: number;  // Adicionado para comparativo
+  previousMonthTotal?: number;
+  percentageChange?: number;
 }
 
 interface DailyTransactionSummary {
@@ -84,7 +85,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [expensesByCategory, setExpensesByCategory] = useState<CategoryExpense[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [allUserTransactions, setAllUserTransactions] = useState<Transaction[]>([]); // Raw transactions from DB
+  const [allUserTransactions, setAllUserTransactions] = useState<Transaction[]>([]);
   const [projectedTransactionsForMonth, setProjectedTransactionsForMonth] = useState<ProjectedTransaction[]>([]);
   const [userCreditCards, setUserCreditCards] = useState<CreditCard[]>([]);
   const [spendingPaceAlert, setSpendingPaceAlert] = useState<{ message: string; type: 'warning' | 'info' } | null>(null);
@@ -301,7 +302,7 @@ export default function DashboardPage() {
     setIsLoading(true);
     setIsLoadingProjections(true);
     setError(null);
-    setSpendingPaceAlert(null); // Reset spending pace alert
+    setSpendingPaceAlert(null);
 
     try {
       const [fetchedTransactions, fetchedCreditCards, creditCardPurchases, loans] = await Promise.all([
@@ -313,10 +314,10 @@ export default function DashboardPage() {
       setAllUserTransactions(fetchedTransactions);
       setUserCreditCards(fetchedCreditCards);
 
-      let lifetimeBalance = 0;
+      let baseLifetimeBalance = 0;
       fetchedTransactions.forEach(tx => {
-        if (tx.type === 'income') lifetimeBalance += tx.amount;
-        else lifetimeBalance -= tx.amount;
+        if (tx.type === 'income') baseLifetimeBalance += tx.amount;
+        else baseLifetimeBalance -= tx.amount;
       });
 
       const selectedMonthStart = startOfMonth(selectedDate);
@@ -333,7 +334,6 @@ export default function DashboardPage() {
       const previousSelectedMonthEnd = endOfMonth(subMonths(selectedDate, 1));
 
       fetchedTransactions.forEach(tx => {
-        // Calculate for selected month projections and category totals
         const occurrencesSelectedMonth = getProjectedOccurrences(tx, selectedMonthStart, selectedMonthEnd);
         occurrencesSelectedMonth.forEach(occDate => {
           if (tx.type === 'income') {
@@ -351,10 +351,9 @@ export default function DashboardPage() {
           }
         });
 
-        // Calculate for previous month category totals (for comparison)
         if (tx.type === 'expense') {
             const occurrencesPreviousMonth = getProjectedOccurrences(tx, previousSelectedMonthStart, previousSelectedMonthEnd);
-            occurrencesPreviousMonth.forEach(_ => { // We just need to sum the amount for each occurrence
+            occurrencesPreviousMonth.forEach(_ => { 
                 previousMonthExpensesByCategory[tx.category] = (previousMonthExpensesByCategory[tx.category] || 0) + tx.amount;
             });
         }
@@ -370,8 +369,8 @@ export default function DashboardPage() {
             let percentageChange: number | undefined = undefined;
             if (prevTotal > 0) {
                 percentageChange = ((total - prevTotal) / prevTotal) * 100;
-            } else if (total > 0) { // No previous expenses, but current expenses exist
-                percentageChange = Infinity; // Represent as a large positive change
+            } else if (total > 0) {
+                percentageChange = Infinity;
             }
             return { category, total, previousMonthTotal: prevTotal, percentageChange };
         })
@@ -391,26 +390,28 @@ export default function DashboardPage() {
         );
       });
 
-      let loanPaymentsThisMonth = 0;
+      let loanPaymentsForSelectedMonth = 0;
       loans.forEach(loan => {
         const loanStartDate = parseISO(loan.startDate);
         const loanEndDate = parseISO(loan.endDate);
-        if (!isBefore(selectedMonthStart, loanStartDate) && !isBefore(loanEndDate,selectedMonthEnd)) {
-            let paymentDate = loanStartDate;
-            while(isBefore(paymentDate, loanEndDate) || isSameDay(paymentDate, loanEndDate)){
-                if(isWithinInterval(paymentDate, {start: selectedMonthStart, end: selectedMonthEnd})){
-                    loanPaymentsThisMonth += loan.installmentAmount;
+        if (loanStartDate <= selectedMonthEnd && loanEndDate >= selectedMonthStart) {
+            for (let i = 0; i < loan.installmentsCount; i++) {
+                const installmentBaseDate = addMonths(loanStartDate, i);
+                const dayOfOriginalStart = getDate(loanStartDate);
+                const lastDayOfInstallmentMonth = getDate(lastDayOfMonth(installmentBaseDate));
+                const actualPaymentDayInInstallmentMonth = Math.min(dayOfOriginalStart, lastDayOfInstallmentMonth);
+                const paymentDateForThisInstallment = new Date(getYear(installmentBaseDate), getMonth(installmentBaseDate), actualPaymentDayInInstallmentMonth);
+
+                if (isWithinInterval(paymentDateForThisInstallment, { start: selectedMonthStart, end: selectedMonthEnd })) {
+                    loanPaymentsForSelectedMonth += loan.installmentAmount;
                     break; 
                 }
-                paymentDate = addMonths(paymentDate, 1);
-                const dayOfMonth = getDate(loanStartDate);
-                const lastDay = getDate(lastDayOfMonth(paymentDate));
-                paymentDate = new Date(getYear(paymentDate), getMonth(paymentDate), Math.min(dayOfMonth, lastDay));
+                if (isAfter(paymentDateForThisInstallment, selectedMonthEnd)) break;
             }
         }
       });
 
-      const totalSelectedMonthExpensesWithLoansAndOldCC = projectedMonthExpenses + ccBillsClosedLastMonth + loanPaymentsThisMonth;
+      const totalSelectedMonthExpensesWithLoansAndOldCC = projectedMonthExpenses + ccBillsClosedLastMonth + loanPaymentsForSelectedMonth;
 
 
       let cardSpendingForSelectedMonthBills = 0;
@@ -425,14 +426,38 @@ export default function DashboardPage() {
         );
       });
 
+      // Calculate loan payments due in the *actual current real-world month* for Saldo Atual
+      const actualCurrentDate = new Date();
+      const actualCurrentMonthStart = startOfMonth(actualCurrentDate);
+      const actualCurrentMonthEnd = endOfMonth(actualCurrentDate);
+      let loanPaymentsDueInActualCurrentMonth = 0;
+      loans.forEach(loan => {
+        const loanStartDate = parseISO(loan.startDate);
+        const loanEndDate = parseISO(loan.endDate);
+        if (loanStartDate <= actualCurrentMonthEnd && loanEndDate >= actualCurrentMonthStart) {
+            for (let i = 0; i < loan.installmentsCount; i++) {
+                const installmentBaseDate = addMonths(loanStartDate, i);
+                const dayOfOriginalStart = getDate(loanStartDate);
+                const lastDayOfInstallmentMonth = getDate(lastDayOfMonth(installmentBaseDate));
+                const actualPaymentDayInInstallmentMonth = Math.min(dayOfOriginalStart, lastDayOfInstallmentMonth);
+                const paymentDateForThisInstallment = new Date(getYear(installmentBaseDate), getMonth(installmentBaseDate), actualPaymentDayInInstallmentMonth);
+
+                if (isWithinInterval(paymentDateForThisInstallment, { start: actualCurrentMonthStart, end: actualCurrentMonthEnd })) {
+                    loanPaymentsDueInActualCurrentMonth += loan.installmentAmount;
+                    break; 
+                }
+                if (isAfter(paymentDateForThisInstallment, actualCurrentMonthEnd)) break;
+            }
+        }
+      });
+
       setSummary({
-        balance: lifetimeBalance,
+        balance: baseLifetimeBalance - loanPaymentsDueInActualCurrentMonth,
         selectedMonthIncome: projectedMonthIncome,
         selectedMonthExpenses: totalSelectedMonthExpensesWithLoansAndOldCC,
         selectedMonthCardSpending: cardSpendingForSelectedMonthBills,
       });
 
-      // Calculate and set spending pace alert
       if (isSameMonth(selectedDate, today) && isSameYear(selectedDate, today) && getDate(today) > 1) {
         const daysIntoMonth = getDate(today);
         const currentPeriodStart = startOfMonth(today);
@@ -444,13 +469,12 @@ export default function DashboardPage() {
         const prevMonthPeriodEnd = setDate(prevMonthDate, Math.min(daysIntoMonth, lastDayOfPrevMonth));
 
         let currentMonthPaceExpenses = 0;
-        fetchedTransactions.forEach(tx => { // Use all fetched transactions, not just 'allUserTransactions' if it's filtered
+        fetchedTransactions.forEach(tx => {
           const txDate = parseISO(tx.date);
           if (tx.type === 'expense' && isWithinInterval(txDate, { start: currentPeriodStart, end: currentPeriodEnd }) && (!tx.recurrenceFrequency || tx.recurrenceFrequency === 'none')) {
             currentMonthPaceExpenses += tx.amount;
           }
         });
-         // Add credit card spending that would fall into this period's bill
         fetchedCreditCards.forEach(card => {
             creditCardPurchases.filter(p => p.cardId === card.id).forEach(purchase => {
                 const purchaseDate = parseISO(purchase.date);
@@ -494,13 +518,13 @@ export default function DashboardPage() {
         });
 
 
-        if (prevMonthPaceExpenses > 0 && currentMonthPaceExpenses > (prevMonthPaceExpenses * 1.3)) { // 30% threshold
+        if (prevMonthPaceExpenses > 0 && currentMonthPaceExpenses > (prevMonthPaceExpenses * 1.3)) {
           const percentageIncrease = ((currentMonthPaceExpenses - prevMonthPaceExpenses) / prevMonthPaceExpenses) * 100;
           setSpendingPaceAlert({
             message: `Suas despesas até o dia ${daysIntoMonth} deste mês (${formatCurrency(currentMonthPaceExpenses)}) estão ${percentageIncrease.toFixed(0)}% maiores que no mesmo período do mês passado (${formatCurrency(prevMonthPaceExpenses)}).`,
             type: 'warning',
           });
-        } else if (prevMonthPaceExpenses > 0 && currentMonthPaceExpenses < (prevMonthPaceExpenses * 0.7) && currentMonthPaceExpenses > 0) { // 30% decrease, but still some spending
+        } else if (prevMonthPaceExpenses > 0 && currentMonthPaceExpenses < (prevMonthPaceExpenses * 0.7) && currentMonthPaceExpenses > 0) {
            const percentageDecrease = ((prevMonthPaceExpenses - currentMonthPaceExpenses) / prevMonthPaceExpenses) * 100;
            setSpendingPaceAlert({
             message: `Bom trabalho! Suas despesas até o dia ${daysIntoMonth} deste mês (${formatCurrency(currentMonthPaceExpenses)}) estão ${percentageDecrease.toFixed(0)}% menores que no mesmo período do mês passado (${formatCurrency(prevMonthPaceExpenses)}).`,
@@ -529,7 +553,6 @@ export default function DashboardPage() {
     }
   }, [fetchDashboardData, user, authLoading]);
 
-  // Effect for upcoming transaction notifications
   useEffect(() => {
     if (!user || !projectedTransactionsForMonth.length || isLoadingProjections) {
       return;
@@ -562,7 +585,7 @@ export default function DashboardPage() {
                     </span>
                     </div>
                 ),
-                duration: 10000, // 10 segundos
+                duration: 10000,
                 });
             });
             localStorage.setItem(storageKey, 'true');
@@ -572,7 +595,6 @@ export default function DashboardPage() {
         }
       }
 
-      // Clean up old notification flags from localStorage
       try {
         const todayFormatted = formatDateFns(today, 'yyyy-MM-dd');
         for (let i = 0; i < localStorage.length; i++) {
@@ -588,7 +610,6 @@ export default function DashboardPage() {
       }
     };
 
-    // Run check after a short delay to ensure UI is stable
     const timerId = setTimeout(checkNotifications, 500);
     return () => clearTimeout(timerId);
 
@@ -669,7 +690,7 @@ export default function DashboardPage() {
               <ChevronLeft className="h-5 w-5" />
           </Button>
           <h2 className="text-xl font-semibold text-center whitespace-nowrap tabular-nums mx-2">
-              {formatDateFns(selectedDate, 'MMMM/yyyy', { locale: ptBR })}
+              {formatDateFns(selectedDate, 'MMMM/yyyy', { locale: ptBR }).replace(/^\w/, (c) => c.toUpperCase())}
           </h2>
           <Button onClick={handleNextMonth} variant="outline" size="icon" aria-label="Próximo mês">
               <ChevronRight className="h-5 w-5" />
@@ -756,7 +777,7 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="shadow-lg md:col-span-1">
           <CardHeader>
-            <CardTitle className="font-headline">Análise de Despesas ({selectedMonthName})</CardTitle>
+            <CardTitle className="font-headline">Análise de Despesas ({selectedMonthName.replace(/^\w/, (c) => c.toUpperCase())})</CardTitle>
             <CardDescription>Comparativo com o mês anterior.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -808,7 +829,7 @@ export default function DashboardPage() {
 
         <Card className="shadow-lg md:col-span-2">
            <CardHeader>
-            <CardTitle className="font-headline flex items-center"><ListChecks className="mr-2 h-6 w-6 text-primary"/>Agendamentos para {selectedMonthName}</CardTitle>
+            <CardTitle className="font-headline flex items-center"><ListChecks className="mr-2 h-6 w-6 text-primary"/>Agendamentos para {selectedMonthName.replace(/^\w/, (c) => c.toUpperCase())}</CardTitle>
             <CardDescription>Transações recorrentes previstas para este mês.</CardDescription>
           </CardHeader>
           <CardContent>
