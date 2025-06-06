@@ -88,12 +88,32 @@ export interface FinancialGoal {
   updatedAt: number; // Timestamp
 }
 
+export type InvestmentType = 'stock' | 'savings' | 'crypto' | 'other';
+
+export interface Investment {
+  id: string;
+  userId: string;
+  name: string;
+  type: InvestmentType;
+  initialAmount?: number | null;
+  currentValue: number;
+  quantity?: number | null;
+  symbol?: string | null;
+  institution?: string | null;
+  acquisitionDate?: string | null; // ISO date string 'YYYY-MM-DD'
+  notes?: string | null;
+  createdAt: number; // Timestamp
+  updatedAt: number; // Timestamp
+}
+
+
 // For AI Flow - this might need adjustment if AI needs password or other auth details (it shouldn't)
 export interface FinancialDataInput {
   income: number;
   expenses: Array<{ category: string; amount: number }>;
   loans: Array<{ description: string; amount: number; interestRate: number; monthlyPayment: number }>;
   creditCards: Array<{ name: string; limit: number; balance: number; dueDate: string }>;
+  investments?: Array<{ name: string; type: string; currentValue: number; initialAmount?: number | null; symbol?: string | null }>;
 }
 
 // Data for creating new entities
@@ -156,6 +176,30 @@ export interface UpdateFinancialGoalData {
   status?: FinancialGoalStatus;
 }
 
+export interface NewInvestmentData {
+  name: string;
+  type: InvestmentType;
+  initialAmount?: number | null;
+  currentValue: number;
+  quantity?: number | null;
+  symbol?: string | null;
+  institution?: string | null;
+  acquisitionDate?: string | null;
+  notes?: string | null;
+}
+
+export interface UpdateInvestmentData {
+  name?: string;
+  type?: InvestmentType;
+  initialAmount?: number | null;
+  currentValue?: number;
+  quantity?: number | null;
+  symbol?: string | null;
+  institution?: string | null;
+  acquisitionDate?: string | null;
+  notes?: string | null;
+}
+
 
 // API response types
 export interface AuthApiResponse {
@@ -196,6 +240,7 @@ export interface UserBackupData {
   creditCardPurchases: CreditCardPurchase[];
   categories: UserCategory[];
   financialGoals: FinancialGoal[]; 
+  investments: Investment[];
 }
 
 export interface UpdateEmailNotificationPrefsData {
@@ -207,7 +252,7 @@ export interface NotificationItem {
   id: string; // Unique ID for the notification instance, e.g., `tx-${originalTx.id}-${projectedDate}`
   type: 'scheduled_transaction'; // More specific type
   relatedId: string; // Original transaction ID (from Transaction.id)
-  message: string; // Formatted message, e.g., "Agendamento: Salário - R$ 5.000,00"
+  message: string; // Formatted message
   projectedDate: string; // Projected date of the occurrence (ISO string, e.g., "2023-10-27")
   isRead: boolean;
   isPast: boolean; // True if the projected date is in the past relative to today

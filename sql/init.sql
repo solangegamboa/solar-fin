@@ -1,5 +1,14 @@
 
--- Tabela de Usuários
+-- Function to update 'updated_at' timestamp
+CREATE OR REPLACE FUNCTION set_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Users Table
 CREATE TABLE IF NOT EXISTS app_users (
     id UUID PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -7,38 +16,55 @@ CREATE TABLE IF NOT EXISTS app_users (
     display_name VARCHAR(100),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMPTZ,
-    notify_by_email BOOLEAN DEFAULT FALSE -- Added for email notification preference
+    notify_by_email BOOLEAN DEFAULT FALSE,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TRIGGER trigger_set_timestamp_app_users
+BEFORE UPDATE ON app_users
+FOR EACH ROW
+EXECUTE PROCEDURE set_updated_at_column();
 
--- Tabela de Categorias do Usuário
+-- Categories Table
 CREATE TABLE IF NOT EXISTS user_categories (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     is_system_defined BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, name) -- Garante que o nome da categoria seja único por usuário
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, name)
 );
+CREATE INDEX idx_user_categories_user_id ON user_categories(user_id);
+CREATE TRIGGER trigger_set_timestamp_user_categories
+BEFORE UPDATE ON user_categories
+FOR EACH ROW
+EXECUTE PROCEDURE set_updated_at_column();
 
--- Tabela de Transações
+-- Transactions Table
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
-    type VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense')),
+    user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
+    type VARCHAR(10) NOT NULL, -- 'income' or 'expense'
     amount NUMERIC(15, 2) NOT NULL,
-    category VARCHAR(100) NOT NULL, -- No futuro, pode referenciar user_categories(name) ou id
+    category VARCHAR(100) NOT NULL, -- Should match a name in user_categories
     date DATE NOT NULL,
     description TEXT,
-    recurrence_frequency VARCHAR(10) DEFAULT 'none' NOT NULL CHECK (recurrence_frequency IN ('none', 'monthly', 'weekly', 'annually')),
-    receipt_image_uri TEXT, -- Armazena a Data URI da imagem
+    recurrence_frequency VARCHAR(20) DEFAULT 'none', -- 'none', 'monthly', 'weekly', 'annually'
+    receipt_image_uri TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_transactions_user_id ON transactions(user_id);
+CREATE INDEX idx_transactions_date ON transactions(date);
+CREATE TRIGGER trigger_set_timestamp_transactions
+BEFORE UPDATE ON transactions
+FOR EACH ROW
+EXECUTE PROCEDURE set_updated_at_column();
 
--- Tabela de Empréstimos
+-- Loans Table
 CREATE TABLE IF NOT EXISTS loans (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
     bank_name VARCHAR(100) NOT NULL,
     description TEXT,
     installment_amount NUMERIC(15, 2) NOT NULL,
@@ -48,89 +74,94 @@ CREATE TABLE IF NOT EXISTS loans (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_loans_user_id ON loans(user_id);
+CREATE TRIGGER trigger_set_timestamp_loans
+BEFORE UPDATE ON loans
+FOR EACH ROW
+EXECUTE PROCEDURE set_updated_at_column();
 
--- Tabela de Cartões de Crédito
+-- Credit Cards Table
 CREATE TABLE IF NOT EXISTS credit_cards (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     limit_amount NUMERIC(15, 2) NOT NULL,
-    due_date_day INTEGER NOT NULL CHECK (due_date_day >= 1 AND due_date_day <= 31),
-    closing_date_day INTEGER NOT NULL CHECK (closing_date_day >= 1 AND closing_date_day <= 31),
+    due_date_day INTEGER NOT NULL,
+    closing_date_day INTEGER NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_credit_cards_user_id ON credit_cards(user_id);
+CREATE TRIGGER trigger_set_timestamp_credit_cards
+BEFORE UPDATE ON credit_cards
+FOR EACH ROW
+EXECUTE PROCEDURE set_updated_at_column();
 
--- Tabela de Compras no Cartão de Crédito
+-- Credit Card Purchases Table
 CREATE TABLE IF NOT EXISTS credit_card_purchases (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
-    card_id UUID NOT NULL REFERENCES credit_cards(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
+    card_id UUID REFERENCES credit_cards(id) ON DELETE CASCADE,
     purchase_date DATE NOT NULL,
     description TEXT NOT NULL,
-    category VARCHAR(100) NOT NULL, -- No futuro, pode referenciar user_categories(name) ou id
+    category VARCHAR(100) NOT NULL, -- Should match a name in user_categories
     total_amount NUMERIC(15, 2) NOT NULL,
-    installments INTEGER NOT NULL DEFAULT 1,
+    installments INTEGER NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_credit_card_purchases_user_id ON credit_card_purchases(user_id);
+CREATE INDEX idx_credit_card_purchases_card_id ON credit_card_purchases(card_id);
+CREATE TRIGGER trigger_set_timestamp_credit_card_purchases
+BEFORE UPDATE ON credit_card_purchases
+FOR EACH ROW
+EXECUTE PROCEDURE set_updated_at_column();
 
--- Tabela de Metas Financeiras
+-- Financial Goals Table
 CREATE TABLE IF NOT EXISTS financial_goals (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     target_amount NUMERIC(15, 2) NOT NULL,
-    current_amount NUMERIC(15, 2) DEFAULT 0.00,
+    current_amount NUMERIC(15, 2) DEFAULT 0,
     target_date DATE,
     description TEXT,
-    icon VARCHAR(50), -- Nome do ícone (ex: Lucide icon name)
-    status VARCHAR(20) DEFAULT 'active' NOT NULL CHECK (status IN ('active', 'achieved', 'abandoned')),
+    icon VARCHAR(50),
+    status VARCHAR(20) DEFAULT 'active', -- 'active', 'achieved', 'abandoned'
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_financial_goals_user_id ON financial_goals(user_id);
+CREATE TRIGGER trigger_set_timestamp_financial_goals
+BEFORE UPDATE ON financial_goals
+FOR EACH ROW
+EXECUTE PROCEDURE set_updated_at_column();
 
--- Função para atualizar 'updated_at'
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-   NEW.updated_at = CURRENT_TIMESTAMP;
-   RETURN NEW;
-END;
-$$ language 'plpgsql';
+-- Investments Table (NEW)
+CREATE TABLE IF NOT EXISTS investments (
+    id UUID PRIMARY KEY,
+    user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(50) NOT NULL, -- 'stock', 'savings', 'crypto', 'other'
+    initial_amount NUMERIC(15, 2),
+    current_value NUMERIC(15, 2) NOT NULL,
+    quantity NUMERIC(20, 8), -- Increased precision for crypto
+    symbol VARCHAR(20),
+    institution VARCHAR(100),
+    acquisition_date DATE,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_investments_user_id ON investments(user_id);
+CREATE TRIGGER trigger_set_timestamp_investments
+BEFORE UPDATE ON investments
+FOR EACH ROW
+EXECUTE PROCEDURE set_updated_at_column();
 
--- Gatilhos para 'updated_at'
-DO $$
-DECLARE
-    t_name TEXT;
-BEGIN
-    FOR t_name IN 
-        SELECT table_name 
-        FROM information_schema.columns 
-        WHERE column_name = 'updated_at' 
-          AND table_schema = current_schema() -- or your specific schema
-          AND table_name IN ('app_users', 'transactions', 'loans', 'credit_cards', 'credit_card_purchases', 'financial_goals', 'user_categories') -- Adicionar 'app_users' e 'user_categories' se tiverem 'updated_at'
-    LOOP
-        EXECUTE format('DROP TRIGGER IF EXISTS set_timestamp ON %I;', t_name);
-        EXECUTE format('CREATE TRIGGER set_timestamp BEFORE UPDATE ON %I FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();', t_name);
-    END LOOP;
-END;
-$$;
-
--- Adicionar um usuário padrão (opcional, para desenvolvimento local)
--- Verifique se o usuário já existe antes de tentar inserir para evitar erros em execuções repetidas.
--- INSERT INTO app_users (id, email, hashed_password, display_name)
--- VALUES ('your-uuid-here', 'user@example.com', 'hashed_password_here', 'Default User')
+-- Default user for local development (if you reset db.json and use Docker)
+-- INSERT INTO app_users (id, email, hashed_password, display_name, created_at, last_login_at)
+-- VALUES ('2a141a58-983f-4d63-83d5-605943ff7596', 'user@example.local', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'Usuário Local Padrão', NOW(), NOW())
 -- ON CONFLICT (email) DO NOTHING;
 
--- Adicionar categorias padrão para o usuário padrão (se ele foi inserido)
--- INSERT INTO user_categories (id, user_id, name, is_system_defined)
--- SELECT gen_random_uuid(), (SELECT id FROM app_users WHERE email = 'user@example.com'), category_name, TRUE
--- FROM (VALUES
---   ('Alimentação'), ('Transporte'), ('Moradia'), ('Saúde'), ('Educação'),
---   ('Lazer'), ('Vestuário'), ('Contas Fixas'), ('Compras Online'), ('Salário'),
---   ('Investimentos'), ('Presentes'), ('Cuidados Pessoais'), ('Viagens'),
---   ('Serviços (Assinaturas)'), ('Impostos'), ('Outras Receitas'), ('Outras Despesas')
--- ) AS c(category_name)
--- WHERE EXISTS (SELECT 1 FROM app_users WHERE email = 'user@example.com') -- só insere se o usuário existir
--- ON CONFLICT (user_id, name) DO NOTHING;
+-- Note: Default categories will be added by the application logic if missing for a user.

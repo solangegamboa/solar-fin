@@ -11,7 +11,8 @@ import {
   Repeat,
   Sparkles,
   Settings,
-  Target, // Added Target icon
+  Target, 
+  Briefcase, // Added Briefcase icon
 } from 'lucide-react';
 import Logo from './Logo';
 import {
@@ -25,7 +26,7 @@ import {
   useSidebar,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { SheetTitle } from '@/components/ui/sheet'; // Correctly SheetTitle from ui/sheet
+import { SheetTitle } from '@/components/ui/sheet'; 
 import * as React from "react"; 
 
 const navItems = [
@@ -33,7 +34,8 @@ const navItems = [
   { href: '/transactions', label: 'Transações', icon: Repeat },
   { href: '/loans', label: 'Empréstimos', icon: Landmark },
   { href: '/credit-cards', label: 'Cartões', icon: CreditCard },
-  { href: '/goals', label: 'Metas', icon: Target }, // Added Goals item
+  { href: '/goals', label: 'Metas', icon: Target },
+  { href: '/investments', label: 'Investimentos', icon: Briefcase }, // Added Investments item
   { href: '/insights', label: 'Insights IA', icon: Sparkles },
 ];
 
@@ -44,17 +46,14 @@ const secondaryNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  // Directly use isMobile from the context. Removed local clientIsMobile state.
   const { open, isMobile, setOpenMobile } = useSidebar(); 
 
   const titleClassName = cn(
     "font-bold text-2xl font-headline whitespace-nowrap transition-opacity duration-300 ease-in-out",
-    // Use `isMobile` from context directly here
     (!isMobile && !open) ? "opacity-0 pointer-events-none" : "opacity-100"
   );
 
   const handleMenuItemClick = () => {
-    // Use `isMobile` from context directly here
     if (isMobile) {
       setOpenMobile(false);
     }
@@ -65,7 +64,6 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <Link href="/dashboard" className="flex items-center gap-2" onClick={handleMenuItemClick}>
           <Logo className={cn("transition-all duration-300 ease-in-out", open ? "h-10 w-10" : "h-8 w-8")} />
-          {/* Use `isMobile` from context directly here */}
           {isMobile ? (
             <SheetTitle className={titleClassName}>
               Solar Fin
