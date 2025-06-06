@@ -18,6 +18,7 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
     *   Cadastre seus cartões de crédito, com auxílio de IA para extrair informações como emissor e bandeira a partir de uma imagem do cartão.
     *   Registre compras parceladas, visualize um resumo consolidado das suas futuras faturas (mês a mês) e acompanhe estimativas das faturas atuais e próximas para cada cartão.
     *   Edite compras parceladas existentes.
+    *   Importe múltiplas transações de uma fatura de cartão de crédito a partir de uma imagem com auxílio de IA (Beta).
 *   **Gerenciamento de Metas Financeiras:**
     *   Cadastre, acompanhe, edite e gerencie suas metas financeiras de curto e longo prazo.
     *   Visualize o progresso de cada meta e defina datas alvo para alcançá-las.
@@ -262,7 +263,7 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
         *   `goals/[goalId]/`: Endpoints para atualizar e excluir metas específicas.
         *   `investments/`: Endpoints para criar e listar investimentos.
         *   `investments/[investmentId]/`: Endpoints para atualizar e excluir investimentos específicos.
-        *   `credit-card-purchases/[purchaseId]/`: Endpoint para atualizar e excluir compras de cartão específicas (se não for gerenciado via um endpoint de cartão mais geral).
+        *   `credit-card-purchases/[purchaseId]/`: Endpoint para atualizar e excluir compras de cartão específicas.
         *   `user/`: Endpoints para gerenciamento de perfil do usuário (atualizar nome, senha, backup, restauração, preferências de e-mail).
         *   `system/`: Endpoint para informações do sistema (ex: modo do banco de dados).
 *   `src/components/`: Componentes React reutilizáveis.
@@ -281,4 +282,49 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
 *   `docker-compose.yml`: Define os serviços Docker para a aplicação e o banco de dados.
 *   `Dockerfile`: Define como construir a imagem Docker para a aplicação Next.js.
 
+## Testes Unitários
+
+Este projeto visa incluir testes unitários para garantir a qualidade e a estabilidade do código. Os exemplos de testes e a estrutura sugerida utilizam ferramentas comuns no ecossistema JavaScript/React.
+
+### Ferramentas Sugeridas
+
+*   **Framework de Teste:** [Jest](https://jestjs.io/) ou [Vitest](https://vitest.dev/) são escolhas populares para testar aplicações React e Node.js.
+*   **Testes de Componentes React:** [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) é recomendada para testar componentes React de uma forma que se assemelha a como os usuários interagem com eles.
+*   **Mocks:** Para isolar unidades de código, você precisará mockar (simular) dependências, como chamadas de API (`fetch`), módulos de banco de dados, ou outros serviços. Jest e Vitest possuem funcionalidades de mocking embutidas.
+
+### Rodando os Testes
+
+Para executar os testes unitários, você normalmente usará um script definido no seu arquivo `package.json`. Se ainda não estiver configurado, você pode adicionar um script como:
+
+```json
+// package.json
+"scripts": {
+  // ... outros scripts
+  "test": "jest" // ou "vitest", dependendo do framework escolhido
+},
 ```
+
+Depois, você pode rodar os testes com o comando:
+
+```bash
+npm test
+# ou
+yarn test
+```
+
+### Dependências de Desenvolvimento
+
+Certifique-se de instalar as dependências de desenvolvimento necessárias para os testes. Por exemplo, para Jest:
+
+```bash
+npm install --save-dev jest @types/jest ts-jest @testing-library/react @testing-library/jest-dom
+# ou com yarn
+yarn add --dev jest @types/jest ts-jest @testing-library/react @testing-library/jest-dom
+```
+(Adapte os pacotes conforme o framework escolhido, por exemplo, `vitest` e `@vitest/ui` para Vitest).
+
+### Nota sobre os Exemplos de Teste
+
+Os exemplos de código de teste fornecidos nas interações com o AI são conceituais e servem como um guia. Eles podem precisar de adaptações para se integrarem perfeitamente à sua configuração de teste específica, incluindo a configuração de mocks e a interação detalhada com os componentes da UI (especialmente componentes ShadCN UI que podem ter estruturas DOM específicas).
+
+  
