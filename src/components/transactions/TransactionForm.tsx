@@ -23,12 +23,12 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-import { addTransaction, type NewTransactionData, type AddTransactionResult, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
+import { addTransaction, type NewTransactionData, type AddTransactionResult, getCategoriesForUser, addCategoryForUser, updateTransaction } from '@/lib/databaseService';
 import { useToast } from '@/hooks/use-toast';
 import { Sun, Camera, Paperclip, ScanLine, Trash2, AlertTriangle } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { UserCategory, RecurrenceFrequency } from '@/types';
+import type { UserCategory, RecurrenceFrequency, Transaction, UpdateTransactionData } from '@/types';
 import { Combobox } from '@/components/ui/combobox';
 import { useAuth } from '@/contexts/AuthContext';
 import { extractTransactionDetailsFromImage } from '@/ai/flows/extract-transaction-details-flow';
@@ -58,10 +58,11 @@ type TransactionFormValues = z.infer<typeof transactionFormSchema>;
 interface TransactionFormProps {
   onSuccess?: () => void;
   setOpen: (open: boolean) => void;
-  userId: string; 
+  userId: string;
+  existingTransaction?: Transaction | null;
 }
 
-export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormProps) {
+export function TransactionForm({ onSuccess, setOpen, userId, existingTransaction }: TransactionFormProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -114,6 +115,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
       }
       setIsCameraMode(true);
       setImagePreviewUrl(null); 
+      form.setValue('receiptImageUri', null);
     } catch (error) {
       console.error('Error accessing camera:', error);
       setHasCameraPermission(false);
@@ -140,8 +142,9 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImagePreviewUrl(reader.result as string);
-        form.setValue('receiptImageUri', reader.result as string);
+        const result = reader.result as string;
+        setImagePreviewUrl(result);
+        form.setValue('receiptImageUri', result);
       };
       reader.readAsDataURL(file);
     }
@@ -197,16 +200,39 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
 
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema),
-    defaultValues: {
-      type: undefined,
-      amount: '' as unknown as number,
-      category: '',
-      date: new Date(),
-      description: '',
-      recurrenceFrequency: 'none',
-      receiptImageUri: null,
-    },
+    // Default values are set in the useEffect based on existingTransaction
   });
+
+  useEffect(() => {
+    if (existingTransaction) {
+      form.reset({
+        type: existingTransaction.type,
+        amount: existingTransaction.amount,
+        category: existingTransaction.category,
+        date: existingTransaction.date ? parseISO(existingTransaction.date) : new Date(),
+        description: existingTransaction.description || '',
+        recurrenceFrequency: existingTransaction.recurrenceFrequency || 'none',
+        receiptImageUri: existingTransaction.receiptImageUri || null,
+      });
+      if (existingTransaction.receiptImageUri) {
+        setImagePreviewUrl(existingTransaction.receiptImageUri);
+      } else {
+        setImagePreviewUrl(null);
+      }
+    } else {
+      form.reset({
+        type: undefined,
+        amount: '' as unknown as number,
+        category: '',
+        date: new Date(),
+        description: '',
+        recurrenceFrequency: 'none',
+        receiptImageUri: null,
+      });
+      setImagePreviewUrl(null);
+    }
+  }, [existingTransaction, form]);
+
 
   const handleAddNewCategory = async (categoryName: string): Promise<UserCategory | null> => {
     if (!userId) {
@@ -226,22 +252,43 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
   const onSubmit = async (values: TransactionFormValues) => {
     setIsSubmitting(true);
 
-    const transactionData: NewTransactionData = {
-      ...values,
-      date: format(values.date, 'yyyy-MM-dd'),
-      amount: Number(values.amount),
-      recurrenceFrequency: values.recurrenceFrequency || 'none',
-      receiptImageUri: imagePreviewUrl, 
-    };
-
     try {
-      const result: AddTransactionResult = await addTransaction(userId, transactionData);
+      let result;
+      if (existingTransaction) {
+        const updateData: UpdateTransactionData = {
+            type: values.type,
+            amount: Number(values.amount),
+            category: values.category,
+            date: format(values.date, 'yyyy-MM-dd'),
+            description: values.description || undefined,
+            recurrenceFrequency: values.recurrenceFrequency || 'none',
+            receiptImageUri: imagePreviewUrl, // Use the state which holds the latest image URI
+        };
+        result = await updateTransaction(userId, existingTransaction.id, updateData);
+        if (result.success) {
+            toast({
+            title: 'Sucesso!',
+            description: 'Transação atualizada com sucesso.',
+            });
+        }
+      } else {
+        const transactionData: NewTransactionData = {
+          ...values,
+          date: format(values.date, 'yyyy-MM-dd'),
+          amount: Number(values.amount),
+          recurrenceFrequency: values.recurrenceFrequency || 'none',
+          receiptImageUri: imagePreviewUrl, // Use the state for new transactions as well
+        };
+        result = await addTransaction(userId, transactionData);
+        if (result.success && (result as AddTransactionResult).transactionId) {
+          toast({
+            title: 'Sucesso!',
+            description: `Transação adicionada com sucesso.`,
+          });
+        }
+      }
 
-      if (result.success && result.transactionId) {
-        toast({
-          title: 'Sucesso!',
-          description: `Transação adicionada com sucesso.`,
-        });
+      if (result.success) {
         form.reset({ 
             type: undefined, 
             amount: '' as unknown as number, 
@@ -257,14 +304,14 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
       } else {
         toast({
           variant: 'destructive',
-          title: 'Erro ao Adicionar Transação',
-          description: result.error || 'Ocorreu um erro desconhecido.',
+          title: existingTransaction ? 'Erro ao Atualizar' : 'Erro ao Adicionar',
+          description: (result as any).error || 'Ocorreu um erro desconhecido.',
         });
       }
     } catch (error: any) {
-      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
-      console.error('Client-side error calling addTransaction:', errorMessage);
-      const displayMessage = 'Ocorreu um erro ao salvar a transação. Tente novamente.';
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'Ocorreu um erro desconhecido.';
+      console.error('Client-side error during transaction submission:', errorMessage);
+      const displayMessage = `Ocorreu um erro ao ${existingTransaction ? 'atualizar' : 'salvar'} a transação. Tente novamente.`;
       toast({
         variant: 'destructive',
         title: 'Erro de Comunicação',
@@ -284,7 +331,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
           render={({ field }) => (
             <FormItem>
               <FormLabel>Tipo</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting || isProcessingImage}>
+              <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting || isProcessingImage}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o tipo da transação" />
@@ -414,6 +461,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
                   className="resize-none"
                   {...field}
                   disabled={isSubmitting || isProcessingImage}
+                  value={field.value || ''} // Ensure textarea doesn't receive null
                 />
               </FormControl>
               <FormMessage />
@@ -427,7 +475,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
           render={({ field }) => (
             <FormItem>
               <FormLabel>Frequência da Recorrência</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting || isProcessingImage}>
+              <Select onValueChange={field.onChange} value={field.value || 'none'} disabled={isSubmitting || isProcessingImage}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a frequência" />
@@ -457,7 +505,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
                 {isLoadingCategories ? 'Carregando...' : (isProcessingImage ? 'Processando...' : 'Salvando...')}
               </>
             ) : (
-              'Salvar Transação'
+              existingTransaction ? 'Salvar Alterações' : 'Salvar Transação'
             )}
           </Button>
         </div>
@@ -465,3 +513,5 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
     </Form>
   );
 }
+
+    
