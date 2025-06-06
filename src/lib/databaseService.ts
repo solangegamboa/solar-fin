@@ -3,7 +3,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData, UserCategory, NewUserCategoryData } from '@/types';
+import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData, UserCategory, NewUserCategoryData, UserBackupData } from '@/types';
 import { randomUUID } from 'crypto';
 import { parseISO, addMonths, format as formatDateFns } from 'date-fns';
 import { Pool, type QueryResult } from 'pg';
@@ -792,5 +792,119 @@ async function migrateOldDbStructure() {
     }
 }
 
+export async function getUserBackupData(userId: string): Promise<UserBackupData | null> {
+  if (!userId) return null;
+  const userProfile = await findUserById(userId);
+  if (!userProfile) return null;
+
+  // For PostgreSQL, you would query each table. For local, you read from the user's record.
+  if (DATABASE_MODE === 'postgres' && pool) {
+    // This is a simplified example. In a real PG setup, you'd make separate queries.
+    const transactions = await getTransactionsForUser(userId);
+    const loans = await getLoansForUser(userId);
+    const creditCards = await getCreditCardsForUser(userId);
+    const creditCardPurchases = await getCreditCardPurchasesForUser(userId);
+    const categories = await getCategoriesForUser(userId);
+    return {
+      profile: { email: userProfile.email, displayName: userProfile.displayName || undefined },
+      transactions,
+      loans,
+      creditCards,
+      creditCardPurchases,
+      categories,
+    };
+  } else {
+    // Local db.json mode
+    const db = await readDB();
+    const userData = db.users[userId];
+    if (!userData) return null;
+    return {
+      profile: { email: userData.profile.email, displayName: userData.profile.displayName || undefined },
+      transactions: userData.transactions || [],
+      loans: userData.loans || [],
+      creditCards: userData.creditCards || [],
+      creditCardPurchases: userData.creditCardPurchases || [],
+      categories: userData.categories || [],
+    };
+  }
+}
+
+export async function restoreUserBackupData(userId: string, backupData: UserBackupData): Promise<DeleteResult> {
+  if (!userId) return { success: false, error: "User ID is required for restore." };
+
+  // Validate backupData structure (basic check)
+  if (!backupData || typeof backupData.profile !== 'object' || !Array.isArray(backupData.transactions) || !Array.isArray(backupData.loans) || !Array.isArray(backupData.creditCards) || !Array.isArray(backupData.creditCardPurchases) || !Array.isArray(backupData.categories)) {
+    return { success: false, error: "Invalid backup file structure." };
+  }
+  
+  if (DATABASE_MODE === 'postgres' && pool) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Clear existing user data - BE VERY CAREFUL WITH THESE QUERIES
+      await client.query('DELETE FROM transactions WHERE user_id = $1', [userId]);
+      await client.query('DELETE FROM loans WHERE user_id = $1', [userId]);
+      await client.query('DELETE FROM credit_card_purchases WHERE user_id = $1', [userId]);
+      await client.query('DELETE FROM credit_cards WHERE user_id = $1', [userId]);
+      await client.query('DELETE FROM user_categories WHERE user_id = $1', [userId]);
+      // User profile (displayName) can be updated if needed, email is key.
+      if (backupData.profile.displayName) {
+        await client.query('UPDATE app_users SET display_name = $1 WHERE id = $2', [backupData.profile.displayName, userId]);
+      }
+
+      // Insert new data from backup
+      for (const tx of backupData.transactions) {
+        await client.query('INSERT INTO transactions (id, user_id, type, amount, category, date, description, is_recurring, created_at, receipt_image_uri) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+          [tx.id, userId, tx.type, tx.amount, tx.category, tx.date, tx.description, tx.isRecurring, new Date(tx.createdAt), tx.receiptImageUri]);
+      }
+      for (const loan of backupData.loans) {
+         await client.query('INSERT INTO loans (id, user_id, bank_name, description, installment_amount, installments_count, start_date, end_date, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          [loan.id, userId, loan.bankName, loan.description, loan.installmentAmount, loan.installmentsCount, loan.startDate, loan.endDate, new Date(loan.createdAt)]);
+      }
+      for (const card of backupData.creditCards) {
+         await client.query('INSERT INTO credit_cards (id, user_id, name, limit_amount, due_date_day, closing_date_day, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [card.id, userId, card.name, card.limit, card.dueDateDay, card.closingDateDay, new Date(card.createdAt)]);
+      }
+      for (const purchase of backupData.creditCardPurchases) {
+        await client.query('INSERT INTO credit_card_purchases (id, user_id, card_id, purchase_date, description, category, total_amount, installments, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          [purchase.id, userId, purchase.cardId, purchase.date, purchase.description, purchase.category, purchase.totalAmount, purchase.installments, new Date(purchase.createdAt)]);
+      }
+      for (const category of backupData.categories) {
+         await client.query('INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at) VALUES ($1, $2, $3, $4, $5)',
+          [category.id, userId, category.name, category.isSystemDefined, new Date(category.createdAt)]);
+      }
+      await client.query('COMMIT');
+      return { success: true };
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      console.error("Error restoring user data in PostgreSQL:", error.message);
+      return { success: false, error: "Database error during restore." };
+    } finally {
+      client.release();
+    }
+  } else {
+    // Local db.json mode
+    const db = await readDB();
+    const userRecord = db.users[userId];
+    if (!userRecord) return { success: false, error: "User not found." };
+
+    // Update profile details from backup if they exist
+    if (backupData.profile.displayName) {
+        userRecord.profile.displayName = backupData.profile.displayName;
+    }
+    // We don't update email from backup as it's the primary identifier.
+
+    userRecord.transactions = backupData.transactions.map(t => ({...t, userId}));
+    userRecord.loans = backupData.loans.map(l => ({...l, userId}));
+    userRecord.creditCards = backupData.creditCards.map(cc => ({...cc, userId}));
+    userRecord.creditCardPurchases = backupData.creditCardPurchases.map(p => ({...p, userId}));
+    userRecord.categories = backupData.categories.map(cat => ({...cat, userId}));
+
+    await writeDB(db);
+    return { success: true };
+  }
+}
+
 // Run migration check on server start
 migrateOldDbStructure().catch(err => console.error("Migration check failed:", err));
+

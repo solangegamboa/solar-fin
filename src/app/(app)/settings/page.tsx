@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,8 +16,21 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Info, Sun, KeyRound, UserCircle2 } from 'lucide-react';
-import type { AuthApiResponse } from '@/types';
+import { Info, Sun, KeyRound, UserCircle2, Download, Upload, AlertTriangle as AlertTriangleIcon } from 'lucide-react';
+import type { AuthApiResponse, UserBackupData } from '@/types';
+import { format } from 'date-fns';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
 
 type DataStorageMode = "local" | "postgres";
 
@@ -38,11 +51,15 @@ type PasswordChangeFormValues = z.infer<typeof passwordChangeSchema>;
 
 
 export default function SettingsPage() {
-  const { user, loading: authLoading, updateUserContext } = useAuth();
+  const { user, loading: authLoading, updateUserContext, logout } = useAuth();
   const { toast } = useToast();
   const [selectedDbMode, setSelectedDbMode] = useState<DataStorageMode>("local");
   const [isDisplayNameSubmitting, setIsDisplayNameSubmitting] = useState(false);
   const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
+  const [isBackupLoading, setIsBackupLoading] = useState(false);
+  const [isRestoreLoading, setIsRestoreLoading] = useState(false);
+  const [selectedRestoreFile, setSelectedRestoreFile] = useState<File | null>(null);
+  const restoreFileInputRef = useRef<HTMLInputElement>(null);
 
   const displayNameForm = useForm<DisplayNameFormValues>({
     resolver: zodResolver(displayNameSchema),
@@ -116,12 +133,96 @@ export default function SettingsPage() {
     }
   };
 
+  const handleBackup = async () => {
+    if (!user) return;
+    setIsBackupLoading(true);
+    try {
+      const response = await fetch('/api/user/backup');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Falha ao gerar backup.');
+      }
+      const backupData: UserBackupData = await response.json();
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const userEmailPrefix = user.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '_');
+      const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
+      a.download = `solar_fin_backup_${userEmailPrefix}_${timestamp}.json`;
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: 'Backup Gerado', description: 'O arquivo de backup foi baixado.' });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Erro no Backup', description: error.message || 'Não foi possível gerar o backup.' });
+    } finally {
+      setIsBackupLoading(false);
+    }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setSelectedRestoreFile(event.target.files[0]);
+    } else {
+      setSelectedRestoreFile(null);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!user || !selectedRestoreFile) return;
+    setIsRestoreLoading(true);
+    try {
+      const fileReader = new FileReader();
+      fileReader.onload = async (e) => {
+        try {
+          const backupData = JSON.parse(e.target?.result as string) as UserBackupData;
+          // Basic validation client-side
+          if (!backupData.profile || !backupData.transactions) {
+            throw new Error("Formato de arquivo de backup inválido.");
+          }
+
+          const response = await fetch('/api/user/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(backupData),
+          });
+          const result = await response.json();
+          if (response.ok && result.success) {
+            toast({ title: 'Restauração Concluída', description: 'Seus dados foram restaurados. Você será deslogado para aplicar as mudanças.' });
+            setSelectedRestoreFile(null);
+            if (restoreFileInputRef.current) restoreFileInputRef.current.value = "";
+            // Force logout/reload for changes to take effect fully and avoid inconsistent state
+            setTimeout(() => {
+                 logout(); // Use logout from AuthContext
+            }, 2000);
+          } else {
+            throw new Error(result.message || 'Falha ao restaurar os dados.');
+          }
+        } catch (restoreError: any) {
+          toast({ variant: 'destructive', title: 'Erro na Restauração', description: restoreError.message || 'Não foi possível restaurar os dados.' });
+        } finally {
+          setIsRestoreLoading(false);
+        }
+      };
+      fileReader.onerror = () => {
+        toast({ variant: 'destructive', title: 'Erro ao Ler Arquivo', description: 'Não foi possível ler o arquivo de backup.' });
+        setIsRestoreLoading(false);
+      };
+      fileReader.readAsText(selectedRestoreFile);
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Erro na Restauração', description: error.message || 'Ocorreu um erro inesperado.' });
+      setIsRestoreLoading(false);
+    }
+  };
+
 
   if (authLoading) {
     return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
   }
   if (!user && !authLoading) {
-     return <div className="flex flex-col items-center justify-center h-64 text-muted-foreground"><AlertTriangle className="h-12 w-12 mb-3" /><p className="text-lg">Por favor, faça login para acessar esta página.</p></div>;
+     return <div className="flex flex-col items-center justify-center h-64 text-muted-foreground"><AlertTriangleIcon className="h-12 w-12 mb-3" /><p className="text-lg">Por favor, faça login para acessar esta página.</p></div>;
   }
 
 
@@ -251,6 +352,73 @@ export default function SettingsPage() {
 
       <Card className="shadow-lg">
         <CardHeader>
+            <CardTitle className="flex items-center"><Download className="mr-2 h-5 w-5 text-primary"/>Backup e Restauração de Dados</CardTitle>
+            <CardDescription>Faça backup ou restaure os dados da sua conta. A restauração substituirá seus dados atuais.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+            <div>
+                <h3 className="text-md font-medium mb-2">Backup Local</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                    Salve uma cópia de todos os seus dados (transações, empréstimos, cartões, etc.) em um arquivo JSON no seu computador.
+                </p>
+                <Button onClick={handleBackup} disabled={isBackupLoading || !user}>
+                    {isBackupLoading ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                    Fazer Backup Local
+                </Button>
+            </div>
+            <Separator />
+            <div>
+                <h3 className="text-md font-medium mb-2">Restaurar Backup Local</h3>
+                <Alert variant="destructive" className="mb-3">
+                    <AlertTriangleIcon className="h-4 w-4" />
+                    <AlertTitle>Atenção!</AlertTitle>
+                    <AlertDescription>
+                        Restaurar um backup substituirá todos os seus dados financeiros atuais (transações, empréstimos, cartões, etc.) pelos dados do arquivo. Esta ação não pode ser desfeita.
+                    </AlertDescription>
+                </Alert>
+                <div className="space-y-3">
+                    <Input
+                        type="file"
+                        accept=".json"
+                        onChange={handleFileSelect}
+                        disabled={isRestoreLoading || !user}
+                        ref={restoreFileInputRef}
+                        className="max-w-sm"
+                    />
+                    {selectedRestoreFile && <p className="text-xs text-muted-foreground">Arquivo selecionado: {selectedRestoreFile.name}</p>}
+                     <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                           <Button variant="destructive" disabled={isRestoreLoading || !selectedRestoreFile || !user}>
+                                {isRestoreLoading ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                                Restaurar do Arquivo
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmar Restauração</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Tem certeza que deseja restaurar os dados do arquivo "{selectedRestoreFile?.name || 'selecionado'}"? Todos os seus dados financeiros atuais serão substituídos. Esta ação é irreversível.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel disabled={isRestoreLoading}>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleRestore} disabled={isRestoreLoading} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                    {isRestoreLoading ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                    Confirmar Restauração
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </div>
+            </div>
+        </CardContent>
+      </Card>
+
+
+      <Separator />
+
+      <Card className="shadow-lg">
+        <CardHeader>
           <CardTitle>Armazenamento de Dados</CardTitle>
           <CardDescription>
             Escolha como seus dados são armazenados. A alteração real requer configuração de variáveis de ambiente e reinício do servidor.
@@ -300,3 +468,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

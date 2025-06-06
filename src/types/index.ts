@@ -144,3 +144,15 @@ export interface ExtractCardInfoOutput {
   cardProductName: string | null; // e.g., "Platinum", "Ultravioleta", "Black"
   suggestedCardName: string | null; // A combined suggestion
 }
+
+// Backup and Restore types
+export interface UserBackupData {
+  profile: Pick<UserProfile, 'email' | 'displayName'>; // Only backup non-sensitive profile parts
+  transactions: Transaction[];
+  loans: Loan[];
+  creditCards: CreditCard[];
+  creditCardPurchases: CreditCardPurchase[];
+  categories: UserCategory[];
+  // Note: We don't backup password or user ID directly from backup.
+  // The restore will apply to the currently logged-in user.
+}
