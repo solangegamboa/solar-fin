@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNotifications } from '@/hooks/useNotifications';
-import { format, parseISO, isToday, isYesterday, formatDistanceToNowStrict } from 'date-fns';
+import { format, parseISO, isToday, isYesterday } from 'date-fns'; // Removed formatDistanceToNowStrict as it wasn't used and ensured 'format' is here
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { NotificationItem } from '@/types';
@@ -119,7 +119,7 @@ export function NotificationBell() {
                     Data Agendada: {formatProjectedDate(notification.projectedDate)}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                     Original: {notification.originalTransaction.category} ({formatDateFns(parseISO(notification.originalTransaction.date), 'dd/MM/yy', { locale: ptBR})})
+                     Original: {notification.originalTransaction.category} ({format(parseISO(notification.originalTransaction.date), 'dd/MM/yy', { locale: ptBR})})
                   </p>
                 </div>
               </DropdownMenuItem>
