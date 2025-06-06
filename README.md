@@ -1,7 +1,7 @@
 
 # Solar Fin - Seu Aplicativo de Controle Financeiro Pessoal
 
-Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a gerenciar suas finanças pessoais de forma eficaz. Com ele, você pode registrar transações, acompanhar empréstimos, gerenciar cartões de crédito, definir metas financeiras e obter insights com a ajuda de inteligência artificial.
+Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a gerenciar suas finanças pessoais de forma eficaz. Com ele, você pode registrar transações, acompanhar empréstimos, gerenciar cartões de crédito, definir metas financeiras, acompanhar investimentos e obter insights com a ajuda de inteligência artificial.
 
 ## Funcionalidades Principais
 
@@ -19,6 +19,11 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
 *   **Gerenciamento de Metas Financeiras:**
     *   Cadastre, acompanhe e gerencie suas metas financeiras de curto e longo prazo.
     *   Visualize o progresso de cada meta e defina datas alvo para alcançá-las.
+*   **Acompanhamento de Investimentos:**
+    *   Cadastre seus investimentos em diferentes categorias (Ações, Poupança, Criptomoedas, Outros).
+    *   Acompanhe o valor atual, valor inicial, quantidade, símbolo, instituição e performance.
+*   **Calculadoras Financeiras:**
+    *   Utilize calculadoras integradas para Juros Simples e Juros Compostos.
 *   **Insights Financeiros com IA:**
     *   Utilize a inteligência artificial (Genkit) para obter um resumo da sua situação financeira e dicas personalizadas para economizar, baseado nos seus dados registrados.
 *   **Notificações:**
@@ -28,7 +33,7 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
     *   Sistema de cadastro e login para que múltiplos usuários possam gerenciar suas finanças de forma independente e segura (usando JWT com Cookies HTTPOnly).
     *   Altere seu nome de exibição e senha diretamente nas configurações.
     *   Opção para configurar preferência de recebimento de notificações por e-mail sobre transações agendadas (o envio real de e-mails requer configuração adicional no servidor e um sistema de cron job).
-    *   Funcionalidade de backup local para salvar todos os seus dados (perfil, transações, cartões, empréstimos, categorias, metas) em um arquivo JSON.
+    *   Funcionalidade de backup local para salvar todos os seus dados (perfil, transações, cartões, empréstimos, categorias, metas, investimentos) em um arquivo JSON.
     *   Restaure seus dados a partir de um arquivo de backup local (substituindo os dados atuais).
 *   **Personalização:**
     *   Escolha entre os temas Claro, Escuro ou o padrão do Sistema para ajustar a aparência do aplicativo.
@@ -124,9 +129,9 @@ Esta é a maneira mais fácil de ter a aplicação e o banco de dados PostgreSQL
     *   Construir a imagem Docker para a aplicação Next.js.
     *   Iniciar um contêiner para a aplicação.
     *   Iniciar um contêiner para o banco de dados PostgreSQL.
-    *   Na primeira vez que o contêiner do banco de dados for iniciado, o script `sql/init.sql` será executado para criar as tabelas.
+    *   Na primeira vez que o contêiner do banco de dados for iniciado com um volume de dados vazio, o script `sql/init.sql` será executado para criar as tabelas.
 
-    Consulte a seção **"Usando com Docker"** abaixo para mais detalhes sobre como interagir com os serviços.
+    Consulte a seção **"Usando com Docker"** abaixo para mais detalhes sobre como interagir com os serviços e como atualizar o schema do banco.
 
 #### Opção B: Rodando o App Localmente e o Banco de Dados PostgreSQL Separado (Manualmente ou Docker)
 
@@ -218,6 +223,26 @@ Se você utilizou `docker-compose up --build` (Opção 4A):
 *   **Desenvolvimento Genkit (IA):**
     *   O servidor de desenvolvimento do Genkit (`npm run genkit:dev`) ainda precisa ser rodado separadamente na sua máquina local, pois ele não está incluído na configuração do Docker Compose. A aplicação dentro do Docker se conectará ao servidor Genkit rodando em `localhost:3400` da sua máquina host (o Docker geralmente permite essa conexão por padrão).
 
+*   **Atualizando o Schema do Banco de Dados com Docker:**
+    *   O script `sql/init.sql` é executado pela imagem do PostgreSQL apenas quando o volume de dados (definido como `pgdata` no `docker-compose.yml`) está vazio, ou seja, na primeira vez que o contêiner do banco (`db`) é iniciado e cria esse volume.
+    *   Se você fizer alterações no `sql/init.sql` (por exemplo, adicionar novas tabelas, alterar colunas) e o volume `pgdata` já existir de uma execução anterior, o script **não será executado novamente de forma automática**.
+    *   **Para aplicar as alterações do `sql/init.sql` a um banco de dados PostgreSQL rodando com Docker e recriar as tabelas com o novo schema:**
+        1.  Pare todos os contêineres:
+            ```bash
+            docker-compose down
+            ```
+        2.  **Importante:** Remova o volume de dados do PostgreSQL. Isso apagará todos os dados existentes no banco.
+            ```bash
+            docker-compose down -v
+            ```
+            Alternativamente, você pode remover o volume nomeado `pgdata` manualmente se ele não for anônimo (no `docker-compose.yml` atual, ele é um bind mount para `./pgdata`, então `docker-compose down -v` é o correto).
+        3.  Inicie os contêineres novamente, reconstruindo a imagem do app se necessário:
+            ```bash
+            docker-compose up --build
+            ```
+        Isso fará com que o PostgreSQL inicialize com um volume de dados vazio, e o script `sql/init.sql` será executado, criando as tabelas com a estrutura mais recente.
+    *   **Atenção:** Este processo **apaga todos os dados** do banco. Para ambientes de produção ou desenvolvimento onde os dados precisam ser preservados, seria necessário usar um sistema de migração de banco de dados (como Flyway, Liquibase, ou migrações de ORM), que está fora do escopo da configuração atual deste projeto.
+
 ### Pronto!
 
 Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se for seu primeiro acesso, crie uma conta através da página de cadastro.
@@ -225,15 +250,15 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
 ## Estrutura do Projeto (Simplificada)
 
 *   `src/app/`: Contém as rotas da aplicação (App Router).
-    *   `(app)/`: Rotas protegidas da aplicação principal (Dashboard, Transações, Empréstimos, Cartões, Metas, etc.).
+    *   `(app)/`: Rotas protegidas da aplicação principal (Dashboard, Transações, Empréstimos, Cartões, Metas, Investimentos, Calculadoras, etc.).
     *   `(auth)/`: Rotas de autenticação (Login, Signup).
     *   `api/`: Rotas de API (backend).
 *   `src/components/`: Componentes React reutilizáveis.
     *   `core/`: Componentes centrais da aplicação (Header, Sidebar, Logo, NotificationBell).
     *   `ui/`: Componentes ShadCN UI.
-    *   Outras pastas para componentes específicos de funcionalidades (transações, empréstimos, cartões, metas, etc.).
+    *   Outras pastas para componentes específicos de funcionalidades (transações, empréstimos, cartões, metas, investimentos, calculadoras, etc.).
 *   `src/contexts/`: Contextos React (AuthProvider, ThemeProvider).
-*   `src/hooks/`: Hooks customizados (ex: `useNotifications.ts`).
+*   `src/hooks/`: Hooks customizados (ex: `useNotifications.ts`, `useIsMobile.ts`).
 *   `src/lib/`: Utilitários e lógica de negócios.
     *   `databaseService.ts`: Lógica de acesso ao banco de dados (JSON ou PostgreSQL).
 *   `src/ai/`: Lógica relacionada à Inteligência Artificial com Genkit.
@@ -244,5 +269,4 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
 *   `docker-compose.yml`: Define os serviços Docker para a aplicação e o banco de dados.
 *   `Dockerfile`: Define como construir a imagem Docker para a aplicação Next.js.
 
-
-    
+```
