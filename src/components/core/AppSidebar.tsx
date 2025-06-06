@@ -25,7 +25,7 @@ import {
   useSidebar,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { SheetTitle } from '@/components/ui/sheet';
+import { SheetTitle } from '@/components/ui/sheet'; // Correctly SheetTitle from ui/sheet
 import * as React from "react"; 
 
 const navItems = [
@@ -44,20 +44,18 @@ const secondaryNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { open, isMobile: contextIsMobile, setOpenMobile } = useSidebar(); 
-  const [clientIsMobile, setClientIsMobile] = React.useState(false);
-
-  React.useEffect(() => {
-    setClientIsMobile(contextIsMobile);
-  }, [contextIsMobile]);
+  // Directly use isMobile from the context. Removed local clientIsMobile state.
+  const { open, isMobile, setOpenMobile } = useSidebar(); 
 
   const titleClassName = cn(
     "font-bold text-2xl font-headline whitespace-nowrap transition-opacity duration-300 ease-in-out",
-    (!clientIsMobile && !open) ? "opacity-0 pointer-events-none" : "opacity-100"
+    // Use `isMobile` from context directly here
+    (!isMobile && !open) ? "opacity-0 pointer-events-none" : "opacity-100"
   );
 
   const handleMenuItemClick = () => {
-    if (clientIsMobile) {
+    // Use `isMobile` from context directly here
+    if (isMobile) {
       setOpenMobile(false);
     }
   };
@@ -67,7 +65,8 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <Link href="/dashboard" className="flex items-center gap-2" onClick={handleMenuItemClick}>
           <Logo className={cn("transition-all duration-300 ease-in-out", open ? "h-10 w-10" : "h-8 w-8")} />
-          {clientIsMobile ? (
+          {/* Use `isMobile` from context directly here */}
+          {isMobile ? (
             <SheetTitle className={titleClassName}>
               Solar Fin
             </SheetTitle>

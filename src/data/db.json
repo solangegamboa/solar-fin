@@ -6,7 +6,8 @@
         "email": "user@example.local",
         "displayName": "Usuário Local Padrão",
         "createdAt": 1749089165220,
-        "lastLoginAt": 1749168000000
+        "lastLoginAt": 1749168000000,
+        "notifyByEmail": false
       },
       "hashedPassword": "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy",
       "transactions": [
@@ -382,7 +383,8 @@
         "email": "solange.gamboa@gmail.com",
         "displayName": "Solange Gamboa",
         "createdAt": 1749158998992,
-        "lastLoginAt": 1749173512602
+        "lastLoginAt": 1749173775923,
+        "notifyByEmail": false
       },
       "hashedPassword": "$2a$10$GoGdmUtF2CJ1CveO7PRqDuy6mYmapH1PhHkCwyU8SPQIUCwiUbyrW",
       "transactions": [
@@ -648,7 +650,8 @@
         "email": "novouser@gmail.com",
         "displayName": "teste",
         "createdAt": 1749167625365,
-        "lastLoginAt": 1749167625365
+        "lastLoginAt": 1749167625365,
+        "notifyByEmail": false
       },
       "hashedPassword": "$2a$10$GoGdmUtF2CJ1CveO7PRqDuy6mYmapH1PhHkCwyU8SPQIUCwiUbyrW",
       "transactions": [],
