@@ -4,12 +4,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
   DialogFooter,
   DialogClose,
-} from '@/components/ui/dialog';
+} from '@/components/ui/dialog'; // Removed DialogHeader, Title, Description
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -110,7 +107,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
       toast({ variant: 'destructive', title: 'Nenhuma Imagem', description: 'Por favor, carregue uma imagem do extrato.' });
       return;
     }
-    setExtractionAttemptId(prev => prev + 1); // Increment attempt ID to refresh key
+    setExtractionAttemptId(prev => prev + 1); 
     setIsProcessingImage(true);
     setExtractionResult(null);
     setEditableTransactions([]);
@@ -263,21 +260,13 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
       
       setEditableTransactions(prev => prev.filter(tx => !tx.isSelected || transactionsToSave.find(saved => saved.id === tx.id && errorCount > 0 )));
     }
-
   };
 
-
   return (
-    <div className="flex flex-col h-full w-full">
-      <DialogHeader>
-        <DialogTitle>Importar Transações de Extrato Bancário</DialogTitle>
-        <DialogDescription>
-            Envie uma imagem (printscreen) do seu extrato. A IA tentará identificar as transações.
-            Revise e ajuste as informações antes de importar.
-        </DialogDescription>
-      </DialogHeader>
-      <div className="flex-grow space-y-4 p-1 overflow-y-auto min-h-0">
-        <div className="space-y-2">
+    <div className="flex flex-col w-full flex-grow min-h-0"> {/* Changed from h-full */}
+      {/* Main content area - this will grow and allow internal scrolling via ScrollArea */}
+      <div className="flex flex-col flex-grow min-h-0 space-y-4"> {/* Removed p-1 and overflow-y-auto */}
+        <div className="space-y-2 px-0 pt-0"> {/* Content above results now has its own padding control if needed, or relies on DialogContent's p-6 */}
           <Label htmlFor="statement-image">Imagem do Extrato</Label>
           <div className="flex items-center gap-2">
             <Input
@@ -309,8 +298,9 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
           </Button>
         )}
 
+        {/* Results Section */}
         {extractionResult && editableTransactions.length > 0 && (
-          <div key={extractionAttemptId} className="space-y-4 flex-grow min-h-0 flex flex-col"> 
+          <div key={extractionAttemptId} className="flex flex-col flex-grow min-h-0 space-y-4"> 
             <div className="p-2 border rounded-md bg-muted/20 text-sm">
               {extractionResult.accountName && <p><strong>Conta/Banco:</strong> {extractionResult.accountName}</p>}
               {extractionResult.statementPeriod && <p><strong>Período do Extrato:</strong> {extractionResult.statementPeriod}</p>}
@@ -322,6 +312,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
                 value={defaultDate}
                 onChange={(date) => setDefaultDate(date)}
                 buttonClassName="w-full sm:w-auto"
+                disabled={isSaving || isProcessingImage}
               />
             </div>
 
@@ -334,7 +325,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
                 </AlertDescription>
             </Alert>
 
-            <ScrollArea className="flex-grow min-h-0 border rounded-md">
+            <ScrollArea className="flex-grow border rounded-md">
               <div className="space-y-3 p-3">
                 {editableTransactions.map((tx) => (
                   <Card key={tx.id} className="p-3 space-y-2 text-xs shadow-sm">
@@ -422,9 +413,9 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
         {extractionResult && editableTransactions.length === 0 && !isProcessingImage && (
              <p className="text-center text-muted-foreground py-4">Nenhuma transação foi identificada na imagem fornecida. Tente uma imagem mais nítida ou com formato diferente.</p>
         )}
-
       </div>
-      <DialogFooter className="pt-4 border-t mt-auto p-6 bg-background sticky bottom-0">
+
+      <DialogFooter className="pt-4 border-t"> {/* Rely on DialogContent for p-6 */}
         <DialogClose asChild>
           <Button variant="outline" disabled={isProcessingImage || isSaving}>Cancelar</Button>
         </DialogClose>

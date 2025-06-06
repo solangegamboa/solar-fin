@@ -4,12 +4,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
   DialogFooter,
   DialogClose,
-} from '@/components/ui/dialog';
+} from '@/components/ui/dialog'; // Removed DialogHeader, Title, Description
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -119,7 +116,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
       toast({ variant: 'destructive', title: 'Nenhum Cartão Selecionado', description: 'Selecione um cartão de crédito para associar as compras.' });
       return;
     }
-    setExtractionAttemptId(prev => prev + 1); // Increment attempt ID
+    setExtractionAttemptId(prev => prev + 1);
     setIsProcessingImage(true);
     setExtractionResult(null);
     setEditableItems([]);
@@ -275,66 +272,63 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
   };
 
   return (
-    <div className="flex flex-col h-full w-full">
-      <DialogHeader>
-        <DialogTitle>Importar Itens da Fatura do Cartão</DialogTitle>
-        <DialogDescription>
-          Envie uma imagem da sua fatura de cartão de crédito. A IA tentará identificar os itens.
-          Revise e ajuste as informações antes de importar.
-        </DialogDescription>
-      </DialogHeader>
-      <div className="flex-grow space-y-4 p-1 overflow-y-auto min-h-0">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-                <Label htmlFor="credit-card-select">Cartão de Crédito</Label>
-                <Select value={selectedCardId} onValueChange={setSelectedCardId} disabled={isProcessingImage || isSaving || userCreditCards.length === 0}>
-                    <SelectTrigger id="credit-card-select">
-                    <SelectValue placeholder={userCreditCards.length > 0 ? "Selecione um cartão" : "Nenhum cartão cadastrado"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                    {userCreditCards.map(card => (
-                        <SelectItem key={card.id} value={card.id}>{card.name}</SelectItem>
-                    ))}
-                    </SelectContent>
-                </Select>
-                {userCreditCards.length === 0 && <p className="text-xs text-destructive mt-1">Adicione um cartão de crédito primeiro.</p>}
-            </div>
-            <div>
-                <Label htmlFor="default-date-import">Data de Referência da Fatura</Label>
-                <DatePicker
-                    value={defaultDate}
-                    onChange={(date) => setDefaultDate(date)}
-                    buttonClassName="w-full"
-                    disabled={isProcessingImage || isSaving}
-                />
-                 <p className="text-xs text-muted-foreground mt-1">Usada para ajudar a IA a inferir o ano/mês das compras.</p>
-            </div>
-        </div>
+    <div className="flex flex-col w-full flex-grow min-h-0"> {/* Changed from h-full */}
+      {/* Main content area */}
+      <div className="flex flex-col flex-grow min-h-0 space-y-4"> {/* Removed p-1 and overflow-y-auto */}
+        <div className="space-y-4 px-0 pt-0"> {/* Content above results */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                  <Label htmlFor="credit-card-select">Cartão de Crédito</Label>
+                  <Select value={selectedCardId} onValueChange={setSelectedCardId} disabled={isProcessingImage || isSaving || userCreditCards.length === 0}>
+                      <SelectTrigger id="credit-card-select">
+                      <SelectValue placeholder={userCreditCards.length > 0 ? "Selecione um cartão" : "Nenhum cartão cadastrado"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                      {userCreditCards.map(card => (
+                          <SelectItem key={card.id} value={card.id}>{card.name}</SelectItem>
+                      ))}
+                      </SelectContent>
+                  </Select>
+                  {userCreditCards.length === 0 && <p className="text-xs text-destructive mt-1">Adicione um cartão de crédito primeiro.</p>}
+              </div>
+              <div>
+                  <Label htmlFor="default-date-import">Data de Referência da Fatura</Label>
+                  <DatePicker
+                      value={defaultDate}
+                      onChange={(date) => setDefaultDate(date)}
+                      buttonClassName="w-full"
+                      disabled={isProcessingImage || isSaving}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Usada para ajudar a IA a inferir o ano/mês das compras.</p>
+              </div>
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="invoice-image">Imagem da Fatura</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="invoice-image"
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              ref={fileInputRef}
-              className="flex-grow"
-              disabled={isProcessingImage || isSaving}
-            />
+          <div className="space-y-2">
+            <Label htmlFor="invoice-image">Imagem da Fatura</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="invoice-image"
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                ref={fileInputRef}
+                className="flex-grow"
+                disabled={isProcessingImage || isSaving}
+              />
+              {imagePreviewUrl && (
+                <Button variant="outline" size="icon" onClick={handleClearImage} disabled={isProcessingImage || isSaving} title="Limpar imagem">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
             {imagePreviewUrl && (
-              <Button variant="outline" size="icon" onClick={handleClearImage} disabled={isProcessingImage || isSaving} title="Limpar imagem">
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <div className="mt-2 border rounded-md p-2 flex justify-center bg-muted/30">
+                <img src={imagePreviewUrl} alt="Prévia da Fatura" className="max-h-40 object-contain" />
+              </div>
             )}
           </div>
-          {imagePreviewUrl && (
-            <div className="mt-2 border rounded-md p-2 flex justify-center bg-muted/30">
-              <img src={imagePreviewUrl} alt="Prévia da Fatura" className="max-h-40 object-contain" />
-            </div>
-          )}
         </div>
+
 
         {imageFile && (
           <Button onClick={handleExtractItems} disabled={isProcessingImage || isSaving || !imageFile || !selectedCardId} className="w-full">
@@ -343,8 +337,9 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
           </Button>
         )}
 
+        {/* Results Section */}
         {extractionResult && editableItems.length > 0 && (
-          <div key={extractionAttemptId} className="space-y-4 flex-grow min-h-0 flex flex-col">
+          <div key={extractionAttemptId} className="flex flex-col flex-grow min-h-0 space-y-4">
             <div className="p-2 border rounded-md bg-muted/20 text-sm">
               {extractionResult.cardNameHint && <p><strong>Cartão (Extrato):</strong> {extractionResult.cardNameHint}</p>}
               {extractionResult.cardLastDigits && <p><strong>Final:</strong> {extractionResult.cardLastDigits}</p>}
@@ -359,7 +354,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
                 </AlertDescription>
             </Alert>
 
-            <ScrollArea className="flex-grow min-h-0 border rounded-md">
+            <ScrollArea className="flex-grow border rounded-md">
               <div className="space-y-3 p-3">
                 {editableItems.map((item) => (
                   <Card key={item.id} className="p-3 space-y-2 text-xs shadow-sm">
@@ -444,7 +439,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
              <p className="text-center text-muted-foreground py-4">Nenhum item foi identificado na imagem da fatura. Tente uma imagem mais nítida.</p>
         )}
       </div>
-      <DialogFooter className="pt-4 border-t mt-auto p-6 bg-background sticky bottom-0">
+      <DialogFooter className="pt-4 border-t"> {/* Rely on DialogContent for p-6 */}
         <DialogClose asChild>
           <Button variant="outline" disabled={isProcessingImage || isSaving}>Cancelar</Button>
         </DialogClose>
