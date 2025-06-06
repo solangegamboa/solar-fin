@@ -19,7 +19,7 @@ interface UserRecord extends UserProfile {
   creditCardPurchases: CreditCardPurchase[];
   categories: UserCategory[];
   financialGoals: FinancialGoal[];
-  investments: Investment[]; // Added
+  investments: Investment[];
 }
 interface LocalDB {
   users: {
@@ -97,6 +97,7 @@ export async function createUser(email: string, password_plain: string, displayN
   const hashedPassword = await bcrypt.hash(password_plain, 10);
   const userId = randomUUID();
   const now = Date.now();
+  const notifyByEmailDefault = false; // Default for new users
 
   const newUserProfile: UserProfile = {
     id: userId,
@@ -104,7 +105,7 @@ export async function createUser(email: string, password_plain: string, displayN
     displayName: displayName || email.split('@')[0],
     createdAt: now,
     lastLoginAt: now,
-    notifyByEmail: false, // Default notification preference
+    notifyByEmail: notifyByEmailDefault,
   };
 
   if (DATABASE_MODE === 'postgres' && pool) {
@@ -113,14 +114,14 @@ export async function createUser(email: string, password_plain: string, displayN
       await client.query('BEGIN');
       const res = await client.query(
         'INSERT INTO app_users (id, email, hashed_password, display_name, created_at, last_login_at, notify_by_email) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, display_name, created_at, last_login_at, notify_by_email',
-        [userId, email, hashedPassword, displayName || null, new Date(now), new Date(now), false]
+        [userId, email, hashedPassword, displayName || null, new Date(now), new Date(now), notifyByEmailDefault]
       );
       const dbUser = res.rows[0];
       
       for (const catData of defaultCategories) {
           const categoryId = randomUUID();
           await client.query(
-              'INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at) VALUES ($1, $2, $3, $4, $5)',
+              'INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)', // Use same for created_at and updated_at on insert
               [categoryId, userId, catData.name, catData.isSystemDefined || false, new Date()]
           );
       }
@@ -136,7 +137,7 @@ export async function createUser(email: string, password_plain: string, displayN
     } catch (error: any) {
       await client.query('ROLLBACK');
       console.error('Error creating user in PostgreSQL:', error.message);
-      if (error.code === '23505' && error.constraint === 'app_users_email_key') { // Check specific constraint for email
+      if (error.code === '23505' && error.constraint === 'app_users_email_key') {
         throw new Error('User with this email already exists.');
       }
       throw new Error('Could not create user in PostgreSQL.');
@@ -157,7 +158,7 @@ export async function createUser(email: string, password_plain: string, displayN
       creditCardPurchases: [],
       categories: [],
       financialGoals: [],
-      investments: [], // Added
+      investments: [],
     };
     await writeDB(db);
     await addDefaultCategoriesForUser(userId); 
@@ -171,9 +172,11 @@ export async function findUserByEmail(email: string): Promise<(UserProfile & { h
       const res = await pool.query('SELECT id, email, display_name as "displayName", hashed_password as "hashedPassword", created_at as "createdAt", last_login_at as "lastLoginAt", notify_by_email as "notifyByEmail" FROM app_users WHERE email = $1', [email]);
       if (res.rows.length === 0) return null;
       const user = res.rows[0];
-      user.createdAt = new Date(user.createdAt).getTime();
-      user.lastLoginAt = new Date(user.lastLoginAt).getTime();
-      return user;
+      return {
+        ...user,
+        createdAt: new Date(user.createdAt).getTime(),
+        lastLoginAt: new Date(user.lastLoginAt).getTime(),
+      };
     } catch (error: any) {
       console.error('Error finding user by email in PostgreSQL:', error.message);
       throw error;
@@ -192,9 +195,11 @@ export async function findUserById(userId: string): Promise<UserProfile | null> 
       const res = await pool.query('SELECT id, email, display_name as "displayName", created_at as "createdAt", last_login_at as "lastLoginAt", notify_by_email as "notifyByEmail" FROM app_users WHERE id = $1', [userId]);
       if (res.rows.length === 0) return null;
       const user = res.rows[0];
-      user.createdAt = new Date(user.createdAt).getTime();
-      user.lastLoginAt = new Date(user.lastLoginAt).getTime();
-      return user;
+      return {
+        ...user,
+        createdAt: new Date(user.createdAt).getTime(),
+        lastLoginAt: new Date(user.lastLoginAt).getTime(),
+      };
     } catch (error: any) {
       console.error('Error finding user by ID in PostgreSQL:', error.message);
       throw error;
@@ -211,7 +216,7 @@ export async function updateUserLastLogin(userId: string): Promise<void> {
     const now = new Date();
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
-            await pool.query('UPDATE app_users SET last_login_at = $1 WHERE id = $2', [now, userId]);
+            await pool.query('UPDATE app_users SET last_login_at = $1, updated_at = $1 WHERE id = $2', [now, userId]);
         } catch (error: any) {
             console.error('Error updating last login in PostgreSQL:', error.message);
         }
@@ -219,6 +224,7 @@ export async function updateUserLastLogin(userId: string): Promise<void> {
         const db = await readDB();
         if (db.users[userId] && db.users[userId].profile) {
             db.users[userId].profile.lastLoginAt = now.getTime();
+            // db.users[userId].profile.updatedAt = now.getTime(); // Assuming UserProfile has updatedAt
             await writeDB(db);
         }
     }
@@ -232,7 +238,7 @@ export async function updateUserDisplayName(userId: string, newDisplayName: stri
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       const res = await pool.query(
-        'UPDATE app_users SET display_name = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, display_name, created_at, last_login_at, notify_by_email, updated_at',
+        'UPDATE app_users SET display_name = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, display_name, created_at, last_login_at, notify_by_email',
         [newDisplayName.trim(), userId]
       );
       if (res.rowCount === 0) return { success: false, error: "User not found." };
@@ -258,7 +264,6 @@ export async function updateUserDisplayName(userId: string, newDisplayName: stri
       return { success: false, error: "User not found." };
     }
     db.users[userId].profile.displayName = newDisplayName.trim();
-    // db.users[userId].profile.updatedAt = Date.now(); // Assuming UserProfile has updatedAt
     await writeDB(db);
     return { success: true, user: db.users[userId].profile };
   }
@@ -307,7 +312,7 @@ export async function updateUserEmailNotificationPreference(userId: string, noti
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       const res = await pool.query(
-        'UPDATE app_users SET notify_by_email = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, display_name, created_at, last_login_at, notify_by_email, updated_at',
+        'UPDATE app_users SET notify_by_email = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, display_name, created_at, last_login_at, notify_by_email',
         [notifyByEmail, userId]
       );
       if (res.rowCount === 0) return { success: false, error: "User not found." };
@@ -333,7 +338,6 @@ export async function updateUserEmailNotificationPreference(userId: string, noti
       return { success: false, error: "User not found." };
     }
     db.users[userId].profile.notifyByEmail = notifyByEmail;
-    // db.users[userId].profile.updatedAt = Date.now();
     await writeDB(db);
     return { success: true, user: db.users[userId].profile };
   }
@@ -355,11 +359,11 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       const res = await pool.query(
-        'INSERT INTO transactions (id, user_id, type, amount, category, date, description, recurrence_frequency, receipt_image_uri, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id',
+        'INSERT INTO transactions (id, user_id, type, amount, category, date, description, recurrence_frequency, receipt_image_uri, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10) RETURNING id', // Use same for created_at and updated_at on insert
         [
           newTransactionId, userId, transactionData.type, transactionData.amount,
           transactionData.category, transactionData.date, transactionData.description || null,
-          recurrenceFrequency, transactionData.receiptImageUri || null, now, now
+          recurrenceFrequency, transactionData.receiptImageUri || null, now
         ]
       );
       return { success: true, transactionId: res.rows[0].id };
@@ -400,7 +404,7 @@ export async function getTransactionsForUser(userId: string): Promise<Transactio
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       const res = await pool.query<Transaction>(
-        'SELECT id, user_id as "userId", type, amount, category, date, description, recurrence_frequency as "recurrenceFrequency", created_at as "createdAt", updated_at as "updatedAt", receipt_image_uri as "receiptImageUri" FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC',
+        'SELECT id, user_id as "userId", type, amount, category, date, description, recurrence_frequency as "recurrenceFrequency", created_at as "createdAt", updated_at, receipt_image_uri as "receiptImageUri" FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC',
         [userId]
       );
       return res.rows.map(tx => ({
@@ -420,10 +424,9 @@ export async function getTransactionsForUser(userId: string): Promise<Transactio
     const userData = db.users[userId];
     if (!userData || !userData.transactions) return [];
     
-    // Migration logic for old 'isRecurring' field
     const migratedTransactions = userData.transactions.map(tx => {
       let frequency = tx.recurrenceFrequency || 'none';
-      const txAsAny = tx as any; // To access old field for migration
+      const txAsAny = tx as any; 
       if (txAsAny.hasOwnProperty('isRecurring') && typeof txAsAny.isRecurring === 'boolean') {
           if (txAsAny.isRecurring && frequency === 'none') {
               frequency = 'monthly'; 
@@ -473,7 +476,7 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
   const userTransactions = await getTransactionsForUser(userId);
   const userLoans = await getLoansForUser(userId); 
   const userCreditCards = await getCreditCardsForUser(userId); 
-  const userInvestments = await getInvestmentsForUser(userId); // Added
+  const userInvestments = await getInvestmentsForUser(userId);
 
   try {
     const expensesByCategory: { [category: string]: number } = {};
@@ -492,18 +495,18 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
       amount,
     }));
     
-    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000; // Default if no income this month
+    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000;
 
     const loansForAI = userLoans.map(loan => ({
       description: `${loan.bankName} - ${loan.description}`,
       amount: loan.installmentAmount * loan.installmentsCount,
-      interestRate: 0, // Placeholder, interest rate isn't stored
+      interestRate: 0, 
       monthlyPayment: loan.installmentAmount,
     }));
 
     const investmentsForAI = userInvestments.map(inv => ({
         name: inv.name,
-        type: inv.type,
+        type: inv.type as string, // Ensure it matches schema type string
         currentValue: inv.currentValue,
         initialAmount: inv.initialAmount,
         symbol: inv.symbol,
@@ -516,10 +519,10 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
       creditCards: userCreditCards.map(cc => ({
         name: cc.name,
         limit: cc.limit,
-        balance: 0, // Placeholder, actual balance not tracked directly here
+        balance: 0, 
         dueDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(cc.dueDateDay).padStart(2, '0')}`
       })),
-      investments: investmentsForAI, // Added
+      investments: investmentsForAI,
     };
   } catch (error: any) {
     console.error(`Error fetching financial data for user ${userId}:`, error.message);
@@ -539,8 +542,8 @@ export const addLoan = async (userId: string, loanData: NewLoanData): Promise<Ad
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
             await pool.query(
-                'INSERT INTO loans (id, user_id, bank_name, description, installment_amount, installments_count, start_date, end_date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-                [newLoanId, userId, loanData.bankName, loanData.description, loanData.installmentAmount, loanData.installmentsCount, loanData.startDate, calculatedEndDate, now, now]
+                'INSERT INTO loans (id, user_id, bank_name, description, installment_amount, installments_count, start_date, end_date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)', // Use same for created_at and updated_at on insert
+                [newLoanId, userId, loanData.bankName, loanData.description, loanData.installmentAmount, loanData.installmentsCount, loanData.startDate, calculatedEndDate, now]
             );
             return { success: true, loanId: newLoanId };
         } catch (error: any) {
@@ -569,7 +572,7 @@ export async function getLoansForUser(userId: string): Promise<Loan[]> {
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
             const res = await pool.query<Loan>(
-                'SELECT id, user_id as "userId", bank_name as "bankName", description, installment_amount as "installmentAmount", installments_count as "installmentsCount", start_date as "startDate", end_date as "endDate", created_at as "createdAt", updated_at as "updatedAt" FROM loans WHERE user_id = $1 ORDER BY start_date ASC, created_at DESC',
+                'SELECT id, user_id as "userId", bank_name as "bankName", description, installment_amount as "installmentAmount", installments_count as "installmentsCount", start_date as "startDate", end_date as "endDate", created_at as "createdAt", updated_at FROM loans WHERE user_id = $1 ORDER BY start_date ASC, created_at DESC',
                 [userId]
             );
             return res.rows.map(loan => ({
@@ -622,8 +625,8 @@ export const addCreditCard = async (userId: string, cardData: NewCreditCardData)
     if (DATABASE_MODE === 'postgres' && pool) {
        try {
             await pool.query(
-                'INSERT INTO credit_cards (id, user_id, name, limit_amount, due_date_day, closing_date_day, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-                [newCardId, userId, cardData.name, cardData.limit, cardData.dueDateDay, cardData.closingDateDay, now, now]
+                'INSERT INTO credit_cards (id, user_id, name, limit_amount, due_date_day, closing_date_day, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)', // Use same for created_at and updated_at on insert
+                [newCardId, userId, cardData.name, cardData.limit, cardData.dueDateDay, cardData.closingDateDay, now]
             );
             return { success: true, creditCardId: newCardId };
         } catch (error: any) {
@@ -649,7 +652,7 @@ export async function getCreditCardsForUser(userId: string): Promise<CreditCard[
      if (!userId) return [];
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
-            const res = await pool.query<CreditCard>('SELECT id, user_id as "userId", name, limit_amount as "limit", due_date_day as "dueDateDay", closing_date_day as "closingDateDay", created_at as "createdAt", updated_at as "updatedAt" FROM credit_cards WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
+            const res = await pool.query<CreditCard>('SELECT id, user_id as "userId", name, limit_amount as "limit", due_date_day as "dueDateDay", closing_date_day as "closingDateDay", created_at as "createdAt", updated_at FROM credit_cards WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
             return res.rows.map(cc => ({ ...cc, limit: Number(cc.limit), createdAt: new Date(cc.createdAt).getTime(), updatedAt: cc.updatedAt ? new Date(cc.updatedAt).getTime() : new Date(cc.createdAt).getTime() }));
         } catch (error: any) {
             console.error(`Error fetching credit cards for user ${userId} from PG:`, error.message); return [];
@@ -670,8 +673,8 @@ export const addCreditCardPurchase = async (userId: string, purchaseData: NewCre
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
             await pool.query(
-                'INSERT INTO credit_card_purchases (id, user_id, card_id, purchase_date, description, category, total_amount, installments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-                [newPurchaseId, userId, purchaseData.cardId, purchaseData.date, purchaseData.description, purchaseData.category, purchaseData.totalAmount, purchaseData.installments, now, now]
+                'INSERT INTO credit_card_purchases (id, user_id, card_id, purchase_date, description, category, total_amount, installments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)', // Use same for created_at and updated_at on insert
+                [newPurchaseId, userId, purchaseData.cardId, purchaseData.date, purchaseData.description, purchaseData.category, purchaseData.totalAmount, purchaseData.installments, now]
             );
             return { success: true, purchaseId: newPurchaseId };
         } catch (error: any) {
@@ -697,7 +700,7 @@ export async function getCreditCardPurchasesForUser(userId: string): Promise<Cre
     if (!userId) return [];
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
-            const res = await pool.query<CreditCardPurchase>('SELECT id, user_id as "userId", card_id as "cardId", purchase_date as "date", description, category, total_amount as "totalAmount", installments, created_at as "createdAt", updated_at as "updatedAt" FROM credit_card_purchases WHERE user_id = $1 ORDER BY purchase_date DESC, created_at DESC', [userId]);
+            const res = await pool.query<CreditCardPurchase>('SELECT id, user_id as "userId", card_id as "cardId", purchase_date as "date", description, category, total_amount as "totalAmount", installments, created_at as "createdAt", updated_at FROM credit_card_purchases WHERE user_id = $1 ORDER BY purchase_date DESC, created_at DESC', [userId]);
             return res.rows.map(p => ({...p, date: formatDateFns(new Date(p.date), 'yyyy-MM-dd'), totalAmount: Number(p.totalAmount), createdAt: new Date(p.createdAt).getTime(), updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : new Date(p.createdAt).getTime()}));
         } catch (error: any) {
             console.error(`Error fetching credit card purchases for user ${userId} from PG:`, error.message); return [];
@@ -738,10 +741,10 @@ export async function getCategoriesForUser(userId: string): Promise<UserCategory
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
             const res = await pool.query<UserCategory>(
-                'SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt" FROM user_categories WHERE user_id = $1 ORDER BY name ASC',
+                'SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at FROM user_categories WHERE user_id = $1 ORDER BY name ASC',
                 [userId]
             );
-            return res.rows.map(cat => ({...cat, createdAt: new Date(cat.createdAt).getTime() }));
+            return res.rows.map(cat => ({...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: cat.updatedAt ? new Date(cat.updatedAt).getTime() : new Date(cat.createdAt).getTime() }));
         } catch (error: any) {
             console.error(`Error fetching categories for user ${userId} from PostgreSQL:`, error.message);
             return [];
@@ -750,7 +753,7 @@ export async function getCategoriesForUser(userId: string): Promise<UserCategory
         const db = await readDB();
         const userData = db.users[userId];
         if (!userData || !userData.categories) return [];
-        return [...userData.categories].sort((a, b) => a.name.localeCompare(b.name));
+        return [...userData.categories].map(cat => ({...cat, updatedAt: cat.updatedAt || cat.createdAt})).sort((a, b) => a.name.localeCompare(b.name));
     }
 }
 
@@ -760,28 +763,28 @@ export const addCategoryForUser = async (userId: string, categoryName: string, i
     if (!categoryName.trim()) return { success: false, error: "Category name cannot be empty." };
 
     const newCategoryId = randomUUID();
-    const now = Date.now();
+    const now = new Date();
 
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
             const res = await pool.query(
-                'INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id, name) DO NOTHING RETURNING id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt"',
-                [newCategoryId, userId, categoryName.trim(), isSystemDefined, new Date(now)]
+                'INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5) ON CONFLICT (user_id, name) DO NOTHING RETURNING id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at', // Use same for created_at and updated_at
+                [newCategoryId, userId, categoryName.trim(), isSystemDefined, now]
             );
             if (res.rows.length > 0) {
                  const cat = res.rows[0];
-                 return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime()} };
-            } else {
-                const existingRes = await pool.query('SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt" FROM user_categories WHERE user_id = $1 AND name = $2', [userId, categoryName.trim()]);
+                 return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()} };
+            } else { // Category already exists, fetch it
+                const existingRes = await pool.query('SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at FROM user_categories WHERE user_id = $1 AND name = $2', [userId, categoryName.trim()]);
                 if (existingRes.rows.length > 0) {
                     const cat = existingRes.rows[0];
-                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime()}, error: "Category already exists." }; 
+                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()}, error: "Category already exists." }; 
                 }
                 return { success: false, error: "Category already exists, but failed to retrieve." };
             }
         } catch (error: any) {
             console.error("Error adding category to PostgreSQL:", error.message);
-             if (error.code === '23505') { 
+             if (error.code === '23505') { // Unique violation
                 return { success: false, error: "Category already exists." };
             }
             return { success: false, error: "Database error adding category." };
@@ -798,13 +801,14 @@ export const addCategoryForUser = async (userId: string, categoryName: string, i
         if (existingCategory) {
             return { success: true, category: existingCategory, error: "Category already exists." };
         }
-
+        const nowTs = now.getTime();
         const newCategory: UserCategory = {
             id: newCategoryId,
             userId,
             name: categoryName.trim(),
             isSystemDefined,
-            createdAt: now,
+            createdAt: nowTs,
+            // updatedAt: nowTs, // Not explicitly adding updatedAt here for local as it's not in UserCategory type for creation
         };
         db.users[userId].categories.push(newCategory);
         await writeDB(db);
@@ -821,12 +825,12 @@ export const addFinancialGoal = async (userId: string, goalData: NewFinancialGoa
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       await pool.query(
-        'INSERT INTO financial_goals (id, user_id, name, target_amount, current_amount, target_date, description, icon, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+        'INSERT INTO financial_goals (id, user_id, name, target_amount, current_amount, target_date, description, icon, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)', // Use same for created_at and updated_at
         [
           newGoalId, userId, goalData.name, goalData.targetAmount,
           goalData.currentAmount || 0, goalData.targetDate || null,
           goalData.description || null, goalData.icon || null,
-          goalData.status || 'active', now, now
+          goalData.status || 'active', now
         ]
       );
       return { success: true, goalId: newGoalId };
@@ -862,7 +866,7 @@ export async function getFinancialGoalsForUser(userId: string): Promise<Financia
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       const res = await pool.query<FinancialGoal>(
-        'SELECT id, user_id AS "userId", name, target_amount AS "targetAmount", current_amount AS "currentAmount", target_date AS "targetDate", description, icon, status, created_at AS "createdAt", updated_at AS "updatedAt" FROM financial_goals WHERE user_id = $1 ORDER BY created_at DESC',
+        'SELECT id, user_id AS "userId", name, target_amount AS "targetAmount", current_amount AS "currentAmount", target_date AS "targetDate", description, icon, status, created_at AS "createdAt", updated_at FROM financial_goals WHERE user_id = $1 ORDER BY created_at DESC',
         [userId]
       );
       return res.rows.map(g => ({
@@ -870,7 +874,7 @@ export async function getFinancialGoalsForUser(userId: string): Promise<Financia
         targetAmount: Number(g.targetAmount),
         currentAmount: Number(g.currentAmount),
         createdAt: new Date(g.createdAt).getTime(),
-        updatedAt: new Date(g.updatedAt).getTime(),
+        updatedAt: g.updatedAt ? new Date(g.updatedAt).getTime() : new Date(g.createdAt).getTime(),
         targetDate: g.targetDate ? formatDateFns(new Date(g.targetDate), 'yyyy-MM-dd') : null,
       }));
     } catch (error: any) {
@@ -893,11 +897,15 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
       const values: any[] = [];
       let queryIndex = 1;
 
-      Object.entries(updateData).forEach(([key, value]) => {
-        if (value !== undefined) { 
-          const dbKey = key === 'targetAmount' ? 'target_amount' : key === 'currentAmount' ? 'current_amount' : key === 'targetDate' ? 'target_date' : key;
+      (Object.keys(updateData) as Array<keyof UpdateFinancialGoalData>).forEach(key => {
+        if (updateData[key] !== undefined) { 
+          const dbKeyMap: Record<keyof UpdateFinancialGoalData, string> = { // Ensure all keys are mapped
+             name: 'name', targetAmount: 'target_amount', currentAmount: 'current_amount',
+             targetDate: 'target_date', description: 'description', icon: 'icon', status: 'status',
+          };
+          const dbKey = dbKeyMap[key] || key; 
           fields.push(`${dbKey} = $${queryIndex++}`);
-          values.push(value);
+          values.push(updateData[key]);
         }
       });
 
@@ -955,7 +963,6 @@ export const deleteFinancialGoal = async (userId: string, goalId: string): Promi
   }
 };
 
-// Investment Functions
 export interface AddInvestmentResult { success: boolean; investmentId?: string; error?: string; }
 export const addInvestment = async (userId: string, investmentData: NewInvestmentData): Promise<AddInvestmentResult> => {
   if (!userId) return { success: false, error: "User ID is required." };
@@ -965,13 +972,13 @@ export const addInvestment = async (userId: string, investmentData: NewInvestmen
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       await pool.query(
-        'INSERT INTO investments (id, user_id, name, type, initial_amount, current_value, quantity, symbol, institution, acquisition_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+        'INSERT INTO investments (id, user_id, name, type, initial_amount, current_value, quantity, symbol, institution, acquisition_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)', // Use same for created_at and updated_at
         [
           newInvestmentId, userId, investmentData.name, investmentData.type,
           investmentData.initialAmount || null, investmentData.currentValue,
           investmentData.quantity || null, investmentData.symbol || null,
           investmentData.institution || null, investmentData.acquisitionDate || null,
-          investmentData.notes || null, now, now
+          investmentData.notes || null, now
         ]
       );
       return { success: true, investmentId: newInvestmentId };
@@ -1001,7 +1008,7 @@ export async function getInvestmentsForUser(userId: string): Promise<Investment[
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       const res = await pool.query<Investment>(
-        'SELECT id, user_id AS "userId", name, type, initial_amount AS "initialAmount", current_value AS "currentValue", quantity, symbol, institution, acquisition_date AS "acquisitionDate", notes, created_at AS "createdAt", updated_at AS "updatedAt" FROM investments WHERE user_id = $1 ORDER BY created_at DESC',
+        'SELECT id, user_id AS "userId", name, type, initial_amount AS "initialAmount", current_value AS "currentValue", quantity, symbol, institution, acquisition_date AS "acquisitionDate", notes, created_at AS "createdAt", updated_at FROM investments WHERE user_id = $1 ORDER BY created_at DESC',
         [userId]
       );
       return res.rows.map(inv => ({
@@ -1010,7 +1017,7 @@ export async function getInvestmentsForUser(userId: string): Promise<Investment[
         currentValue: Number(inv.currentValue),
         quantity: inv.quantity != null ? Number(inv.quantity) : null,
         createdAt: new Date(inv.createdAt).getTime(),
-        updatedAt: new Date(inv.updatedAt).getTime(),
+        updatedAt: inv.updatedAt ? new Date(inv.updatedAt).getTime() : new Date(inv.createdAt).getTime(),
         acquisitionDate: inv.acquisitionDate ? formatDateFns(new Date(inv.acquisitionDate), 'yyyy-MM-dd') : null,
       }));
     } catch (error: any) {
@@ -1040,16 +1047,17 @@ export const updateInvestment = async (userId: string, investmentId: string, upd
             quantity: 'quantity', symbol: 'symbol', institution: 'institution',
             acquisitionDate: 'acquisition_date', notes: 'notes',
           };
-          fields.push(`${dbKeyMap[key]} = $${queryIndex++}`);
+          const dbKey = dbKeyMap[key] || key;
+          fields.push(`${dbKey} = $${queryIndex++}`);
           values.push(updateData[key]);
         }
       });
       
-      if (fields.length === 0) return { success: true }; // No fields to update
+      if (fields.length === 0) return { success: true };
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
-      values.push(investmentId, userId); // For WHERE clause
+      values.push(investmentId, userId);
 
       const query = `UPDATE investments SET ${fields.join(', ')} WHERE id = $${queryIndex++} AND user_id = $${queryIndex++}`;
       const res = await pool.query(query, values);
@@ -1132,7 +1140,7 @@ async function migrateOldDbStructure() {
                                 creditCardPurchases: (db.creditCardPurchases || []).map((p: any) => ({...p, userId: defaultUserId, updatedAt: p.updatedAt || p.createdAt})),
                                 categories: (defaultCategories.map(cat => ({id: randomUUID(), userId: defaultUserId, name: cat.name, isSystemDefined: cat.isSystemDefined || false, createdAt: Date.now() }))),
                                 financialGoals: [],
-                                investments: [], // Added
+                                investments: [],
                             }
                         }
                     };
@@ -1165,7 +1173,7 @@ async function migrateOldDbStructure() {
                           userRecord.financialGoals = [];
                           modified = true;
                       }
-                       if (!userRecord.investments) { // Added
+                       if (!userRecord.investments) {
                           userRecord.investments = [];
                           modified = true;
                       }
@@ -1245,10 +1253,10 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
     const creditCardPurchases = await getCreditCardPurchasesForUser(userId);
     const categories = await getCategoriesForUser(userId);
     const financialGoals = await getFinancialGoalsForUser(userId);
-    const investments = await getInvestmentsForUser(userId); // Added
+    const investments = await getInvestmentsForUser(userId);
     return {
       profile: profileForBackup,
-      transactions, loans, creditCards, creditCardPurchases, categories, financialGoals, investments, // Added
+      transactions, loans, creditCards, creditCardPurchases, categories, financialGoals, investments,
     };
   } else {
     const db = await readDB();
@@ -1276,7 +1284,7 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
       creditCardPurchases: userData.creditCardPurchases || [],
       categories: userData.categories || [],
       financialGoals: userData.financialGoals || [],
-      investments: userData.investments || [], // Added
+      investments: userData.investments || [],
     };
   }
 }
@@ -1284,7 +1292,7 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
 export async function restoreUserBackupData(userId: string, backupData: UserBackupData): Promise<DeleteResult> {
   if (!userId) return { success: false, error: "User ID is required for restore." };
 
-  if (!backupData || typeof backupData.profile !== 'object' || !Array.isArray(backupData.transactions) || !Array.isArray(backupData.loans) || !Array.isArray(backupData.creditCards) || !Array.isArray(backupData.creditCardPurchases) || !Array.isArray(backupData.categories) || !Array.isArray(backupData.financialGoals) || !Array.isArray(backupData.investments) ) { // Added investments check
+  if (!backupData || typeof backupData.profile !== 'object' || !Array.isArray(backupData.transactions) || !Array.isArray(backupData.loans) || !Array.isArray(backupData.creditCards) || !Array.isArray(backupData.creditCardPurchases) || !Array.isArray(backupData.categories) || !Array.isArray(backupData.financialGoals) || !Array.isArray(backupData.investments) ) {
     return { success: false, error: "Invalid backup file structure." };
   }
   
@@ -1292,7 +1300,7 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('DELETE FROM investments WHERE user_id = $1', [userId]); // Added
+      await client.query('DELETE FROM investments WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM financial_goals WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM transactions WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM loans WHERE user_id = $1', [userId]);
@@ -1300,7 +1308,7 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
       await client.query('DELETE FROM credit_cards WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM user_categories WHERE user_id = $1', [userId]);
       
-      let updateUserQuery = 'UPDATE app_users SET updated_at = NOW(), '; // Ensure updated_at is always set
+      let updateUserQuery = 'UPDATE app_users SET updated_at = NOW(), ';
       const updateUserValues = [];
       let valueIndex = 1;
       if (backupData.profile.displayName) {
@@ -1329,15 +1337,15 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
           [purchase.id, userId, purchase.cardId, purchase.date, purchase.description, purchase.category, purchase.totalAmount, purchase.installments, new Date(purchase.createdAt), new Date(purchase.updatedAt || purchase.createdAt)]);
       }
       for (const category of backupData.categories) {
-         await client.query('INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at) VALUES ($1, $2, $3, $4, $5)', 
+         await client.query('INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)', 
           [category.id, userId, category.name, category.isSystemDefined, new Date(category.createdAt)]);
       }
       for (const goal of backupData.financialGoals) {
         await client.query('INSERT INTO financial_goals (id, user_id, name, target_amount, current_amount, target_date, description, icon, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
           [goal.id, userId, goal.name, goal.targetAmount, goal.currentAmount, goal.targetDate || null, goal.description || null, goal.icon || null, goal.status, new Date(goal.createdAt), new Date(goal.updatedAt || goal.createdAt)]);
       }
-      for (const inv of backupData.investments) { // Added
-        await client.query('INSERT INTO investments (id, user_id, name, type, initial_amount, current_value, quantity, symbol, institution, acquisition_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+      for (const inv of backupData.investments) {
+        await client.query('INSERT INTO investments (id, user_id, name, type, initial_amount, current_value, quantity, symbol, institution, acquisition_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)', // use same for created_at and updated_at for new records
           [inv.id, userId, inv.name, inv.type, inv.initialAmount, inv.currentValue, inv.quantity, inv.symbol, inv.institution, inv.acquisitionDate, inv.notes, new Date(inv.createdAt), new Date(inv.updatedAt || inv.createdAt)]);
       }
       await client.query('COMMIT');
@@ -1364,7 +1372,7 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
     userRecord.creditCardPurchases = backupData.creditCardPurchases.map(p => ({...p, userId}));
     userRecord.categories = backupData.categories.map(cat => ({...cat, userId}));
     userRecord.financialGoals = backupData.financialGoals.map(g => ({...g, userId}));
-    userRecord.investments = backupData.investments.map(inv => ({...inv, userId})); // Added
+    userRecord.investments = backupData.investments.map(inv => ({...inv, userId}));
 
     await writeDB(db);
     return { success: true };
@@ -1372,3 +1380,6 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
 }
 
 migrateOldDbStructure().catch(err => console.error("Migration check failed:", err));
+
+
+    
