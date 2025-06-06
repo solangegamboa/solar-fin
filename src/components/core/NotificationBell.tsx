@@ -35,26 +35,23 @@ function formatProjectedDate(dateString: string): string {
 export function NotificationBell() {
   const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead, refreshNotifications } = useNotifications();
 
-  // Refresh notifications when the dropdown is opened, to ensure data is fresh
   const handleOpenChange = (open: boolean) => {
     if (open) {
       refreshNotifications();
     }
   };
 
-  // Não retornamos mais o botão de loading aqui para permitir que o DropdownMenu abra.
-  // O estado de isLoading será tratado dentro do DropdownMenuContent.
-
   return (
     <DropdownMenu onOpenChange={handleOpenChange}>
-      <DropdownMenuTrigger asChild={false}>
-        <button
-          type="button"
-          className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "relative w-9 h-9")}
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative w-9 h-9"
           aria-label="Abrir notificações"
-          disabled={isLoading && unreadCount === 0} // Desabilita apenas se estiver carregando e não houver nada para mostrar inicialmente
+          disabled={isLoading && unreadCount === 0}
         >
-          {isLoading && unreadCount === 0 ? ( // Mostra spinner no sino apenas no carregamento inicial sem notificações
+          {isLoading && unreadCount === 0 ? (
             <Sun className="h-[1.2rem] w-[1.2rem] animate-spin" />
           ) : (
             <Bell className="h-[1.2rem] w-[1.2rem]" />
@@ -68,31 +65,31 @@ export function NotificationBell() {
             </Badge>
           )}
           <span className="sr-only">Abrir notificações</span>
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 md:w-96">
         <DropdownMenuLabel className="flex justify-between items-center">
           <span>Notificações Agendadas</span>
-          {notifications.length > 0 && unreadCount > 0 && !isLoading && ( // Não mostrar "Marcar todas" durante o loading
+          {notifications.length > 0 && unreadCount > 0 && !isLoading && (
              <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={(e) => { e.stopPropagation(); markAllAsRead();}}>
                 <CheckCheck className="mr-1 h-3 w-3" /> Marcar todas como lidas
             </Button>
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {isLoading && notifications.length === 0 ? ( // Se está carregando e não há notificações antigas para mostrar
+        {isLoading && notifications.length === 0 ? (
           <DropdownMenuItem disabled className="flex justify-center items-center py-4">
             <Sun className="h-4 w-4 animate-spin mr-2" />
             Carregando...
           </DropdownMenuItem>
-        ) : !isLoading && notifications.length === 0 ? ( // Se terminou de carregar e não há notificações
+        ) : !isLoading && notifications.length === 0 ? (
           <DropdownMenuItem disabled className="text-center text-muted-foreground py-4">
             Nenhuma notificação agendada.
           </DropdownMenuItem>
-        ) : ( // Se há notificações para mostrar (mesmo que esteja carregando novas em background)
+        ) : (
           <ScrollArea className="h-[300px] md:h-[400px]">
             <DropdownMenuGroup>
-            {isLoading && notifications.length > 0 && ( // Mostra um loader no topo se estiver atualizando
+            {isLoading && notifications.length > 0 && (
                  <DropdownMenuItem disabled className="flex justify-center items-center py-2 opacity-75">
                     <Sun className="h-3 w-3 animate-spin mr-1.5" />
                     Atualizando...
