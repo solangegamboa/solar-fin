@@ -2,60 +2,60 @@
 "use client";
 
 import * as React from 'react';
-import { NumericFormat, type NumberFormatValues } from 'react-number-format';
+import { NumericFormat, type NumberFormatValues, type SourceInfo } from 'react-number-format';
 import { Input, type InputProps } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
-// Props that will be passed by react-hook-form's `field` object
-interface RHFInputProps {
-  value?: string | number | null;
-  onChange?: (eventOrValue: any) => void; // RHF's onChange can take event or value
+interface CurrencyInputProps extends Omit<InputProps, 'value' | 'onChange' | 'type'> {
+  value?: string | number | null | undefined;
+  onChange?: (value: number | null) => void; 
   onBlur?: () => void;
   name?: string;
-  ref?: React.Ref<HTMLInputElement>;
 }
 
-// Combine RHF props with other standard input props, but exclude ones NumericFormat handles differently
-interface CurrencyInputProps extends Omit<InputProps, 'value' | 'onChange' | 'type'>, RHFInputProps {}
-
 const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputProps>(
-  ({ value: rhfValue, name, onBlur: rhfOnBlur, onChange: rhfOnChange, className, ...rest }, ref) => {
+  ({ value: rhfValue, onChange: rhfOnChange, onBlur: rhfOnBlur, name, className, ...rest }, ref) => {
 
-    const handleValueChange = (values: NumberFormatValues) => {
-      if (rhfOnChange) {
-        // Pass floatValue (which is number | undefined) or null if it's undefined.
-        // RHF typically handles undefined or null for empty values.
-        rhfOnChange(values.floatValue === undefined ? null : values.floatValue);
+    const handleNumericFormatValueChange = (values: NumberFormatValues, sourceInfo: SourceInfo) => {
+      if (rhfOnChange && sourceInfo.source === 'event') { // Only update on user event to prevent cycles
+        let valToPass: number | null;
+        // Ensure floatValue is a valid number; otherwise, pass null.
+        // This handles cases where floatValue might be undefined or NaN.
+        if (typeof values.floatValue === 'number' && !isNaN(values.floatValue)) {
+          valToPass = values.floatValue;
+        } else {
+          valToPass = null;
+        }
+        rhfOnChange(valToPass);
       }
     };
 
     // Determine the value to pass to NumericFormat.
-    // If RHF value is null, undefined, or an empty string, pass an empty string to NumericFormat.
-    // NumericFormat's `value` prop can accept string, number, or null.
-    // Using an empty string for "empty" state can sometimes be more stable for masked inputs.
-    const valueForNumericFormat =
-      (rhfValue === null || rhfValue === undefined || String(rhfValue).trim() === '')
-      ? '' // Use empty string for empty/null/undefined RHF values
-      : Number(rhfValue); // Ensure it's a number if it has a value, NumericFormat can handle numbers
+    // NumericFormat can handle undefined for its value prop (treats as empty).
+    // If rhfValue is null or undefined, pass undefined. Otherwise, ensure it's a number.
+    const valueForNumericFormat = (rhfValue === null || rhfValue === undefined)
+      ? undefined 
+      : Number(rhfValue); 
 
     return (
       <NumericFormat
-        {...rest} // Passes placeholder, disabled, etc.
-        name={name} // Pass name for RHF
-        getInputRef={ref} // Pass ref to NumericFormat
+        {...rest} 
+        name={name} 
+        getInputRef={ref} 
         customInput={React.forwardRef((props, inputRef) => (
+          // Ensure customInput also gets className for consistent styling
           <Input {...props} ref={inputRef as React.Ref<HTMLInputElement>} className={cn("text-base md:text-sm", className)} />
         ))}
-        value={valueForNumericFormat} // Use the potentially empty string or number
-        onValueChange={handleValueChange}
-        onBlur={rhfOnBlur} // Pass RHF's onBlur
+        value={valueForNumericFormat}
+        onValueChange={handleNumericFormatValueChange}
+        onBlur={rhfOnBlur} 
         thousandSeparator="."
         decimalSeparator=","
         prefix="R$ "
         decimalScale={2}
         fixedDecimalScale
         allowNegative={false}
-        type="text" // Masked inputs should be type="text" for proper behavior
+        type="text" 
         autoComplete="off"
       />
     );
