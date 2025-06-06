@@ -31,7 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { TransactionForm } from "@/components/transactions/TransactionForm";
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Sun, AlertTriangleIcon, SearchX, Copy, RefreshCw, Trash2, CalendarClock } from "lucide-react";
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Sun, AlertTriangleIcon, SearchX, Copy, RefreshCw, Trash2, CalendarClock, Edit3, FileImage } from "lucide-react"; // Added Edit3
 import type { Transaction, NewTransactionData, RecurrenceFrequency } from '@/types';
 import { getTransactionsForUser, addTransaction, deleteTransaction } from '@/lib/databaseService';
 import { formatCurrency, cn } from '@/lib/utils';
@@ -40,6 +40,7 @@ import { ptBR } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { ImportStatementDialog } from '@/components/transactions/ImportStatementDialog';
 
 const recurrenceFrequencyMap: Record<RecurrenceFrequency, string> = {
   none: 'Não Recorrente',
@@ -51,6 +52,7 @@ const recurrenceFrequencyMap: Record<RecurrenceFrequency, string> = {
 export default function TransactionsPage() {
   const { user, loading: authLoading } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +60,7 @@ export default function TransactionsPage() {
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+  const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null); // For editing
   const { toast } = useToast();
 
   const fetchUserTransactions = useCallback(async () => {
@@ -87,9 +90,22 @@ export default function TransactionsPage() {
     }
   }, [fetchUserTransactions, user, authLoading]);
 
-  const handleTransactionAdded = () => {
+  const handleTransactionUpserted = () => { // Renamed to reflect add or edit
     fetchUserTransactions(); 
+    setIsModalOpen(false); // Close main modal
+    setTransactionToEdit(null); // Clear editing state
   };
+
+  const handleOpenEditModal = (transaction: Transaction) => {
+    setTransactionToEdit(transaction);
+    setIsModalOpen(true);
+  };
+  
+  const handleOpenAddModal = () => {
+    setTransactionToEdit(null); // Ensure no transaction is being edited
+    setIsModalOpen(true);
+  };
+
 
   const handleDuplicateTransaction = async (transaction: Transaction) => {
     if (!user) return;
@@ -102,7 +118,7 @@ export default function TransactionsPage() {
         description: transaction.description || '',
         date: format(new Date(), 'yyyy-MM-dd'), 
         recurrenceFrequency: transaction.recurrenceFrequency || 'none',
-        receiptImageUri: transaction.receiptImageUri, // Copy receipt URI if exists
+        receiptImageUri: transaction.receiptImageUri, 
       };
 
       const result = await addTransaction(user.id, newTransactionData);
@@ -180,6 +196,7 @@ export default function TransactionsPage() {
     <div className="space-y-4 md:hidden">
       {transactions.map((transaction) => {
         const isActuallyRecurring = transaction.recurrenceFrequency && transaction.recurrenceFrequency !== 'none';
+        const actionButtonsDisabled = !!isDuplicatingId || !!isDeletingId || !user;
         return (
           <Card key={transaction.id} className="shadow-sm">
             <CardHeader className="pb-3">
@@ -222,12 +239,23 @@ export default function TransactionsPage() {
                 )}
             </CardContent>
             <CardFooter className="flex justify-end space-x-1 pt-2 pb-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleOpenEditModal(transaction)}
+                disabled={actionButtonsDisabled}
+                aria-label="Editar transação"
+                className="h-7 w-7"
+                title="Editar transação"
+              >
+                <Edit3 className="h-3 w-3" />
+              </Button>
               {isActuallyRecurring && (
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => handleDuplicateTransaction(transaction)}
-                  disabled={isDuplicatingId === transaction.id || !!isDeletingId || !user}
+                  disabled={isDuplicatingId === transaction.id || actionButtonsDisabled}
                   aria-label="Duplicar transação"
                   className="h-7 w-7"
                   title="Duplicar para hoje"
@@ -243,7 +271,7 @@ export default function TransactionsPage() {
                   variant="ghost"
                   size="icon"
                   onClick={() => handleDeleteTransaction(transaction)}
-                  disabled={isDeletingId === transaction.id || !!isDuplicatingId || !user}
+                  disabled={isDeletingId === transaction.id || actionButtonsDisabled}
                   aria-label="Excluir transação"
                   className="h-7 w-7 text-destructive hover:text-destructive/80"
                 >
@@ -264,6 +292,7 @@ export default function TransactionsPage() {
   const renderTransactionTableRows = () => {
     return transactions.map((transaction) => {
        const isActuallyRecurring = transaction.recurrenceFrequency && transaction.recurrenceFrequency !== 'none';
+       const actionButtonsDisabled = !!isDuplicatingId || !!isDeletingId || !user;
        return (
         <TableRow key={transaction.id}>
           <TableCell>
@@ -290,12 +319,23 @@ export default function TransactionsPage() {
             {formatCurrency(transaction.amount)}
           </TableCell>
           <TableCell className="text-right space-x-1">
+            <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleOpenEditModal(transaction)}
+                disabled={actionButtonsDisabled}
+                aria-label="Editar transação"
+                className="h-8 w-8"
+                title="Editar transação"
+              >
+                <Edit3 className="h-4 w-4" />
+            </Button>
             {isActuallyRecurring && (
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => handleDuplicateTransaction(transaction)}
-                disabled={isDuplicatingId === transaction.id || !!isDeletingId || !user}
+                disabled={isDuplicatingId === transaction.id || actionButtonsDisabled}
                 aria-label="Duplicar transação"
                 className="h-8 w-8"
                 title="Duplicar para hoje"
@@ -311,7 +351,7 @@ export default function TransactionsPage() {
                 variant="ghost"
                 size="icon"
                 onClick={() => handleDeleteTransaction(transaction)}
-                disabled={isDeletingId === transaction.id || !!isDuplicatingId || !user}
+                disabled={isDeletingId === transaction.id || actionButtonsDisabled}
                 aria-label="Excluir transação"
                 className="h-8 w-8 text-destructive hover:text-destructive/80"
               >
@@ -336,23 +376,43 @@ export default function TransactionsPage() {
             Gerencie suas receitas e despesas.
           </p>
         </div>
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto" disabled={!user}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Nova Transação
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Adicionar Nova Transação</DialogTitle>
-              <DialogDescription>
-                Preencha os detalhes da sua transação abaixo.
-              </DialogDescription>
-            </DialogHeader>
-            {user && <TransactionForm onSuccess={handleTransactionAdded} setOpen={setIsModalOpen} userId={user.id} />}
-          </DialogContent>
-        </Dialog>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+           <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="w-full sm:w-auto" disabled={!user}>
+                  <FileImage className="mr-2 h-4 w-4" /> Importar Extrato (Beta)
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle>Importar Transações de Extrato Bancário</DialogTitle>
+                    <DialogDescription>
+                        Envie uma imagem (printscreen) do seu extrato. A IA tentará identificar as transações.
+                        Revise e ajuste as informações antes de importar.
+                    </DialogDescription>
+                </DialogHeader>
+                {user && <ImportStatementDialog userId={user.id} setOpen={setIsImportModalOpen} onSuccess={handleTransactionUpserted}/>}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isModalOpen} onOpenChange={(isOpen) => { setIsModalOpen(isOpen); if(!isOpen) setTransactionToEdit(null); }}>
+            <DialogTrigger asChild>
+              <Button onClick={handleOpenAddModal} className="w-full sm:w-auto" disabled={!user}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Nova Transação
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{transactionToEdit ? "Editar Transação" : "Adicionar Nova Transação"}</DialogTitle>
+                <DialogDescription>
+                  {transactionToEdit ? "Atualize os detalhes da sua transação." : "Preencha os detalhes da sua transação abaixo."}
+                </DialogDescription>
+              </DialogHeader>
+              {user && <TransactionForm onSuccess={handleTransactionUpserted} setOpen={setIsModalOpen} userId={user.id} existingTransaction={transactionToEdit} />}
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Card className="shadow-lg">
@@ -426,3 +486,5 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
+    

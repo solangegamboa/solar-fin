@@ -23,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText } from "lucide-react";
+import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText, Edit3 } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
 import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
 import { getCreditCardsForUser, getCreditCardPurchasesForUser, deleteCreditCardPurchase } from "@/lib/databaseService";
@@ -50,7 +50,8 @@ const ptBRMonthNames = [
 export default function CreditCardsPage() {
   const { user, loading: authLoading } = useAuth();
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
-  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false); // For adding new purchase
+  const [isEditPurchaseModalOpen, setIsEditPurchaseModalOpen] = useState(false); // For editing purchase
   
   const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
   const [purchases, setPurchases] = useState<CreditCardPurchase[]>([]);
@@ -64,6 +65,7 @@ export default function CreditCardsPage() {
   const [isDeletingPurchaseId, setIsDeletingPurchaseId] = useState<string | null>(null);
   const [showDeletePurchaseConfirmDialog, setShowDeletePurchaseConfirmDialog] = useState(false);
   const [purchaseToDelete, setPurchaseToDelete] = useState<CreditCardPurchase | null>(null);
+  const [purchaseToEdit, setPurchaseToEdit] = useState<CreditCardPurchase | null>(null);
 
 
   const fetchUserCreditCards = useCallback(async () => {
@@ -110,9 +112,16 @@ export default function CreditCardsPage() {
     fetchUserCreditCards(); 
   };
 
-  const handlePurchaseAddedOrDeleted = () => {
+  const handlePurchaseUpserted = () => { // Renamed to reflect add or edit
     setIsPurchaseModalOpen(false);
+    setIsEditPurchaseModalOpen(false);
+    setPurchaseToEdit(null);
     fetchUserPurchases();
+  };
+
+  const handleOpenEditPurchaseModal = (purchase: CreditCardPurchase) => {
+    setPurchaseToEdit(purchase);
+    setIsEditPurchaseModalOpen(true);
   };
 
   const calculateInvoiceTotalForCardAndMonth = useCallback(
@@ -229,7 +238,7 @@ export default function CreditCardsPage() {
           title: 'Compra Excluída!',
           description: 'A compra do cartão de crédito foi excluída com sucesso.',
         });
-        handlePurchaseAddedOrDeleted(); 
+        handlePurchaseUpserted(); // Use generalized handler
       } else {
         toast({
           variant: 'destructive',
@@ -325,6 +334,7 @@ export default function CreditCardsPage() {
       <ul className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
         {purchases.map(p => {
           const cardName = creditCards.find(c => c.id === p.cardId)?.name || 'Cartão desconhecido';
+          const isDisabled = !!isDeletingPurchaseId || !user;
           return (
             <li key={p.id} className="p-3 border rounded-md shadow-sm bg-card">
               <div className="flex justify-between items-start">
@@ -337,11 +347,21 @@ export default function CreditCardsPage() {
                     <p className="font-semibold">{formatCurrency(p.totalAmount)}</p>
                     <p className="text-xs text-muted-foreground">{p.installments}x de {formatCurrency(p.totalAmount / p.installments)}</p>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleOpenEditPurchaseModal(p)}
+                    disabled={isDisabled}
+                    aria-label="Editar compra"
+                    className="h-8 w-8 text-primary hover:text-primary/80 shrink-0"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </Button>
                    <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => handleDeleteCreditCardPurchase(p)}
-                    disabled={isDeletingPurchaseId === p.id || !user}
+                    disabled={isDeletingPurchaseId === p.id || isDisabled}
                     aria-label="Excluir compra"
                     className="h-8 w-8 text-destructive hover:text-destructive/80 shrink-0"
                   >
@@ -428,11 +448,30 @@ export default function CreditCardsPage() {
             <DialogTrigger asChild><Button variant="secondary" disabled={creditCards.length === 0 || !user} className="w-full sm:w-auto"><ShoppingBag className="mr-2 h-4 w-4" />Nova Compra</Button></DialogTrigger>
             <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Adicionar Compra Parcelada</DialogTitle><DialogDescription>Registre uma nova compra no cartão de crédito.</DialogDescription></DialogHeader>
-              {user && <CreditCardTransactionForm userCreditCards={creditCards} onSuccess={handlePurchaseAddedOrDeleted} setOpen={setIsPurchaseModalOpen} userId={user.id} />}
+              {user && <CreditCardTransactionForm userCreditCards={creditCards} onSuccess={handlePurchaseUpserted} setOpen={setIsPurchaseModalOpen} userId={user.id} existingPurchase={null} />}
             </DialogContent>
           </Dialog>
         </div>
       </div>
+      
+      {/* Dialog for Editing Purchase */}
+      <Dialog open={isEditPurchaseModalOpen} onOpenChange={(isOpen) => { setIsEditPurchaseModalOpen(isOpen); if (!isOpen) setPurchaseToEdit(null); }}>
+        <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Compra Parcelada</DialogTitle>
+            <DialogDescription>Atualize os detalhes da sua compra.</DialogDescription>
+          </DialogHeader>
+          {user && purchaseToEdit && (
+            <CreditCardTransactionForm
+              userCreditCards={creditCards}
+              onSuccess={handlePurchaseUpserted}
+              setOpen={setIsEditPurchaseModalOpen}
+              userId={user.id}
+              existingPurchase={purchaseToEdit}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       <h2 className="text-2xl font-semibold tracking-tight font-headline border-b pb-2">Meus Cartões</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
