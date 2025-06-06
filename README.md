@@ -5,7 +5,7 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
 
 ## Funcionalidades Principais
 
-*   **Painel Financeiro:** Uma visão geral da sua saúde financeira, incluindo saldo atual, receitas e despesas do mês selecionado, e um calendário financeiro interativo com resumo diário.
+*   **Painel Financeiro:** Uma visão geral da sua saúde financeira, incluindo saldo atual, receitas e despesas do mês selecionado (com navegação entre meses), e um calendário financeiro interativo com resumo diário das movimentações.
 *   **Gerenciamento de Transações:**
     *   Registre suas receitas e despesas, categorizando-as para melhor organização e permitindo a criação de novas categorias.
     *   Opção de anexar imagem de comprovante com extração automática de valor por IA.
@@ -83,9 +83,10 @@ JWT_SECRET=SEU_SEGREDO_JWT_AQUI
 
 # Opção 2: Usar PostgreSQL (recomendado para uso com Docker ou servidor PostgreSQL separado)
 DATABASE_MODE=postgres
-DATABASE_URL="postgresql://solaruser:solarpass@localhost:5432/solar_fin_db"
-# Se estiver usando o docker-compose.yml fornecido, o host para o app dentro do Docker será 'db',
-# mas para acesso externo ao banco (ex: via DBeaver), use 'localhost'.
+DATABASE_URL="postgresql://solaruser:solarpass@localhost:5433/solar_fin_db" 
+# A porta aqui é 5433 se você estiver acessando o PostgreSQL rodando no Docker (configurado no docker-compose.yml).
+# Se estiver usando o docker-compose.yml fornecido, o host para o app dentro do Docker será 'db' e a porta 5432,
+# mas para acesso externo ao banco (ex: via DBeaver), use 'localhost:5433'.
 # A URL de conexão para o app dentro do Docker será sobrescrita no docker-compose.yml.
 
 
@@ -97,7 +98,7 @@ DATABASE_URL="postgresql://solaruser:solarpass@localhost:5432/solar_fin_db"
 
 *   **`JWT_SECRET`:** **Obrigatório.** É crucial para a segurança da autenticação. Use uma string longa e aleatória.
 *   **`DATABASE_MODE`:** Define se o sistema usará `local` (db.json) ou `postgres`. Se `DATABASE_URL` estiver preenchido e `DATABASE_MODE` não, o sistema tentará usar `postgres`.
-*   **`DATABASE_URL`:** **Obrigatório se `DATABASE_MODE="postgres"`.** Forneça a string de conexão para seu servidor PostgreSQL. Se estiver usando Docker Compose, esta URL é para acesso externo; o contêiner do app usará uma URL interna.
+*   **`DATABASE_URL`:** **Obrigatório se `DATABASE_MODE="postgres"`.** Forneça a string de conexão para seu servidor PostgreSQL. Se estiver usando Docker Compose, esta URL (com `localhost:5433`) é para acesso externo; o contêiner do app usará uma URL interna (`db:5432`).
 *   **`GOOGLE_API_KEY`:** Necessário para as funcionalidades de IA que utilizam Genkit com o Google AI.
 
 ### 4. Escolha como rodar o Projeto
@@ -107,7 +108,7 @@ DATABASE_URL="postgresql://solaruser:solarpass@localhost:5432/solar_fin_db"
 Esta é a maneira mais fácil de ter a aplicação e o banco de dados PostgreSQL rodando juntos.
 
 1.  Certifique-se de que Docker e Docker Compose estão instalados.
-2.  No seu arquivo `.env`, a variável `DATABASE_URL` que você configurou (apontando para `localhost`) será usada se você tentar acessar o banco de dados de fora dos contêineres Docker (ex: com um cliente SQL). O contêiner da aplicação (`app`) no `docker-compose.yml` já está configurado para usar a URL correta para se conectar ao contêiner do banco (`db`).
+2.  No seu arquivo `.env`, a variável `DATABASE_URL` que você configurou (apontando para `localhost:5433`) será usada se você tentar acessar o banco de dados de fora dos contêineres Docker (ex: com um cliente SQL). O contêiner da aplicação (`app`) no `docker-compose.yml` já está configurado para usar a URL correta para se conectar ao contêiner do banco (`db`) na porta interna `5432`.
 3.  Execute o seguinte comando no terminal, na raiz do projeto:
     ```bash
     docker-compose up --build
@@ -125,15 +126,15 @@ Esta é a maneira mais fácil de ter a aplicação e o banco de dados PostgreSQL
 Se você prefere rodar a aplicação Next.js diretamente na sua máquina (sem Docker para o app), mas quer usar PostgreSQL:
 
 1.  **Configurar PostgreSQL:**
-    *   **PostgreSQL Manual:** Se você tem PostgreSQL instalado localmente, certifique-se de que está rodando. Crie um banco de dados (ex: `solar_fin_db`), um usuário (ex: `solaruser` com senha `solarpass`). Conecte-se ao banco e execute o script `sql/init.sql` (ex: `psql -U solaruser -d solar_fin_db -f sql/init.sql`). Ajuste `DATABASE_URL` no `.env` para `postgresql://solaruser:solarpass@localhost:5432/solar_fin_db`.
+    *   **PostgreSQL Manual:** Se você tem PostgreSQL instalado localmente, certifique-se de que está rodando. Crie um banco de dados (ex: `solar_fin_db`), um usuário (ex: `solaruser` com senha `solarpass`). Conecte-se ao banco e execute o script `sql/init.sql` (ex: `psql -U solaruser -d solar_fin_db -f sql/init.sql`). Ajuste `DATABASE_URL` no `.env` para `postgresql://solaruser:solarpass@localhost:5432/solar_fin_db` (ou a porta que seu PostgreSQL local estiver usando).
     *   **PostgreSQL com Docker (apenas o banco):** Você pode iniciar apenas o serviço do banco de dados do `docker-compose.yml`:
         ```bash
         docker-compose up -d db
         ```
-        Isso iniciará o PostgreSQL. O `sql/init.sql` será executado na primeira vez. A URL de conexão no seu `.env` (`DATABASE_URL="postgresql://solaruser:solarpass@localhost:5432/solar_fin_db"`) permitirá que seu app local se conecte a ele.
+        Isso iniciará o PostgreSQL. O `sql/init.sql` será executado na primeira vez. A URL de conexão no seu `.env` (`DATABASE_URL="postgresql://solaruser:solarpass@localhost:5433/solar_fin_db"`) permitirá que seu app local se conecte a ele na porta `5433` do host.
 
 2.  **Rode o Servidor de Desenvolvimento Next.js:**
-    Após configurar o PostgreSQL e o `.env` (com `DATABASE_MODE=postgres` e a `DATABASE_URL` correta), inicie o app Next.js:
+    Após configurar o PostgreSQL e o `.env` (com `DATABASE_MODE=postgres` e a `DATABASE_URL` correta para o seu caso), inicie o app Next.js:
     ```bash
     npm run dev
     ```
@@ -174,10 +175,10 @@ Se você utilizou `docker-compose up --build` (Opção 4A):
     *   A aplicação Next.js estará disponível no seu navegador em: `http://localhost:9002`
 
 *   **Acessando o Banco de Dados PostgreSQL:**
-    *   O banco de dados PostgreSQL estará acessível externamente na porta `5432` do seu `localhost`.
+    *   O banco de dados PostgreSQL estará acessível externamente na porta `5433` do seu `localhost`.
     *   Você pode usar um cliente SQL (como DBeaver, pgAdmin, DataGrip) para se conectar a ele usando:
         *   Host: `localhost`
-        *   Porta: `5432`
+        *   Porta: `5433`
         *   Usuário: `solaruser` (definido no `docker-compose.yml`)
         *   Senha: `solarpass` (definido no `docker-compose.yml`)
         *   Banco de Dados: `solar_fin_db` (definido no `docker-compose.yml`)
@@ -205,7 +206,7 @@ Se você utilizou `docker-compose up --build` (Opção 4A):
 
 *   **Variáveis de Ambiente e `.env`:**
     *   O serviço `app` no `docker-compose.yml` está configurado para usar o arquivo `.env` da raiz do seu projeto. Certifique-se de que `JWT_SECRET` está definido nele.
-    *   As variáveis `DATABASE_MODE=postgres` e `DATABASE_URL=postgresql://solaruser:solarpass@db:5432/solar_fin_db` são definidas diretamente no `docker-compose.yml` para o contêiner `app`, garantindo que ele se conecte ao contêiner `db` usando a rede interna do Docker.
+    *   As variáveis `DATABASE_MODE=postgres` e `DATABASE_URL=postgresql://solaruser:solarpass@db:5432/solar_fin_db` são definidas diretamente no `docker-compose.yml` para o contêiner `app`, garantindo que ele se conecte ao contêiner `db` usando a rede interna do Docker (onde o `db` escuta na porta `5432`).
 
 *   **Desenvolvimento Genkit (IA):**
     *   O servidor de desenvolvimento do Genkit (`npm run genkit:dev`) ainda precisa ser rodado separadamente na sua máquina local, pois ele não está incluído na configuração do Docker Compose. A aplicação dentro do Docker se conectará ao servidor Genkit rodando em `localhost:3400` da sua máquina host (o Docker geralmente permite essa conexão por padrão).
