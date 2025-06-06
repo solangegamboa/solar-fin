@@ -296,7 +296,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
         )}
 
         {extractionResult && editableTransactions.length > 0 && (
-          <div className="space-y-4 flex-grow min-h-0 overflow-hidden flex flex-col">
+          <div className="space-y-4 flex-grow min-h-0 flex flex-col"> {/* Removed overflow-hidden here */}
             <div className="p-2 border rounded-md bg-muted/20 text-sm">
               {extractionResult.accountName && <p><strong>Conta/Banco:</strong> {extractionResult.accountName}</p>}
               {extractionResult.statementPeriod && <p><strong>Período do Extrato:</strong> {extractionResult.statementPeriod}</p>}
