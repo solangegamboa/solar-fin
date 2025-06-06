@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -23,14 +23,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText, Edit3, FileImage } from "lucide-react";
+import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText, Edit3, FileImage, BarChart3, ListTree } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
 import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
 import { ImportCardInvoiceDialog } from "@/components/credit-cards/ImportCardInvoiceDialog";
 import { getCreditCardsForUser, getCreditCardPurchasesForUser, deleteCreditCardPurchase, deleteCreditCard } from "@/lib/databaseService";
 import type { CreditCard, CreditCardPurchase } from "@/types";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { 
   format, 
   parseISO, 
@@ -50,11 +50,20 @@ import { ptBR } from 'date-fns/locale';
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
+
 
 interface MonthlySummary {
   monthYear: string; 
   totalAmount: number;
   purchases: Array<CreditCardPurchase & { installmentAmount: number; currentInstallment: number; totalInstallments: number }>;
+}
+
+interface CategorySpending {
+  category: string;
+  totalAmount: number;
+  percentage: number;
 }
 
 const ptBRMonthNames = [
@@ -404,6 +413,27 @@ export default function CreditCardsPage() {
     }
   };
 
+  const categorySpendingSummary = useMemo(() => {
+    if (isLoadingPurchases || purchases.length === 0) {
+      return [];
+    }
+    const summary: Record<string, number> = purchases.reduce((acc, purchase) => {
+      acc[purchase.category] = (acc[purchase.category] || 0) + purchase.totalAmount;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const totalSpending = Object.values(summary).reduce((sum, amount) => sum + amount, 0);
+
+    return Object.entries(summary)
+      .map(([category, totalAmount]) => ({
+        category,
+        totalAmount,
+        percentage: totalSpending > 0 ? (totalAmount / totalSpending) * 100 : 0,
+      }))
+      .sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [purchases, isLoadingPurchases]);
+
+
   if (authLoading) {
     return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando dados do usuário...</p></div>;
   }
@@ -601,6 +631,33 @@ export default function CreditCardsPage() {
     );
   }
 
+  const renderCategorySpendingSummary = () => {
+    if (isLoadingPurchases && categorySpendingSummary.length === 0) {
+      return <div className="flex items-center justify-center h-40"><Sun className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Calculando gastos...</p></div>;
+    }
+    if (categorySpendingSummary.length === 0 && !isLoadingPurchases) {
+      return <div className="flex flex-col items-center justify-center h-40"><SearchX className="h-12 w-12 text-muted-foreground mb-4" /><p className="text-muted-foreground">Nenhuma compra registrada para exibir o resumo.</p></div>;
+    }
+    return (
+      <ScrollArea className="h-[300px] pr-3">
+        <ul className="space-y-3">
+          {categorySpendingSummary.map(item => (
+            <li key={item.category} className="text-sm">
+              <div className="flex justify-between items-center mb-1">
+                <span className="font-medium truncate pr-2" title={item.category}>{item.category}</span>
+                <div className="flex items-baseline whitespace-nowrap">
+                  <span className="font-semibold">{formatCurrency(item.totalAmount)}</span>
+                  <span className="ml-1.5 text-xs text-muted-foreground">({item.percentage.toFixed(1)}%)</span>
+                </div>
+              </div>
+              <Progress value={item.percentage} className="h-1.5" />
+            </li>
+          ))}
+        </ul>
+      </ScrollArea>
+    );
+  };
+
 
   return (
     <div className="space-y-8">
@@ -694,6 +751,23 @@ export default function CreditCardsPage() {
       
       <Separator className="my-8" />
 
+      <Card className="col-span-1 md:col-span-full shadow-lg">
+        <CardHeader>
+          <CardTitle className="font-headline text-xl flex items-center">
+            <ListTree className="mr-2 h-6 w-6 text-primary" />
+            Gastos por Categoria (Todos os Cartões)
+          </CardTitle>
+          <CardDescription>
+            Total gasto em cada categoria usando seus cartões de crédito.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {renderCategorySpendingSummary()}
+        </CardContent>
+      </Card>
+
+      <Separator className="my-8" />
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div>
             <h2 className="text-2xl font-semibold tracking-tight font-headline mb-4">Compras Realizadas (Todas)</h2>
@@ -752,3 +826,4 @@ export default function CreditCardsPage() {
     </div>
   );
 }
+
