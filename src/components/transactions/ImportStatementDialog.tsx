@@ -14,8 +14,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Sun, Upload, AlertTriangle, FileImage, Trash2, ScanLine } from 'lucide-react';
 import { extractStatementTransactionsFromImage } from '@/ai/flows/extract-statement-transactions-flow';
-import type { ExtractStatementTransactionsOutput, UserCategory, NewTransactionData, TransactionType } from '@/types';
-import { addTransaction, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
+import type { ExtractStatementTransactionsOutput, UserCategory, NewTransactionData, TransactionType, Transaction } from '@/types';
+import { addTransaction, getCategoriesForUser, addCategoryForUser, getTransactionsForUser } from '@/lib/databaseService';
 import { format, parseISO, isValid as isValidDate } from 'date-fns';
 
 const IMPORTED_CATEGORY_NAME = "Importado";
@@ -29,11 +29,11 @@ interface ImportStatementDialogProps {
 export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStatementDialogProps) {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false); 
+  const [isProcessing, setIsProcessing] = useState(false);
   const [defaultDate, setDefaultDate] = useState<Date | undefined>(new Date());
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [userCategories, setUserCategories] = useState<UserCategory[]>([]); // Kept for potential future use or consistency with other dialog
-  const [importedCategoryId, setImportedCategoryId] = useState<string | null>(null);
+  const [userCategories, setUserCategories] = useState<UserCategory[]>([]);
+  const [importedCategoryId, setImportedCategoryId] = useState<string | null>(null); // Still used to ensure category exists
   const [isLoadingPrerequisites, setIsLoadingPrerequisites] = useState(true);
   const [extractionAttemptId, setExtractionAttemptId] = useState(0);
 
@@ -49,7 +49,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
 
       let importedCat = categories.find(c => c.name === IMPORTED_CATEGORY_NAME);
       if (!importedCat) {
-        const result = await addCategoryForUser(userId, IMPORTED_CATEGORY_NAME, false); // isSystemDefined = false for user-driven action
+        const result = await addCategoryForUser(userId, IMPORTED_CATEGORY_NAME, false);
         if (result.success && result.category) {
           importedCat = result.category;
           setUserCategories(prev => [...prev, result.category!].sort((a,b) => a.name.localeCompare(b.name)));
@@ -59,7 +59,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
           return;
         }
       }
-      setImportedCategoryId(importedCat.id);
+      setImportedCategoryId(importedCat.id); // Keep for knowing the ID if needed, but use name for saving
     } catch (error) {
       console.error('Failed to fetch/create imported category:', error);
       toast({ variant: "destructive", title: "Erro ao Preparar Categorias", description: "Não foi possível carregar ou criar a categoria padrão para importação." });
@@ -97,7 +97,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
       toast({ variant: 'destructive', title: 'Nenhuma Imagem', description: 'Por favor, carregue uma imagem do extrato.' });
       return;
     }
-    if (isLoadingPrerequisites || !importedCategoryId) {
+    if (isLoadingPrerequisites || !importedCategoryId) { // Check importedCategoryId to ensure setup is complete
       toast({ variant: 'destructive', title: 'Preparando...', description: 'Aguarde a configuração da categoria de importação ou verifique erros anteriores.' });
       return;
     }
@@ -105,14 +105,17 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
     setIsProcessing(true);
 
     let extractionResult: ExtractStatementTransactionsOutput | null = null;
+    let existingUserTransactions: Transaction[] = [];
+
     try {
       extractionResult = await extractStatementTransactionsFromImage({
         imageDataUri: imagePreviewUrl,
         defaultYear: defaultDate ? defaultDate.getFullYear() : new Date().getFullYear(),
       });
+      existingUserTransactions = await getTransactionsForUser(userId);
     } catch (error: any) {
-      console.error('Error extracting transactions from image:', error);
-      toast({ variant: 'destructive', title: 'Erro na Extração', description: error.message || 'Não foi possível processar a imagem.' });
+      console.error('Error extracting transactions from image or fetching existing transactions:', error);
+      toast({ variant: 'destructive', title: 'Erro na Extração/Preparação', description: error.message || 'Não foi possível processar a imagem ou buscar transações existentes.' });
       setIsProcessing(false);
       return;
     }
@@ -125,6 +128,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
 
     let successCount = 0;
     let errorCount = 0;
+    let skippedDuplicateCount = 0;
 
     for (const tx of extractionResult.transactions) {
       let transactionDate: Date | null = null;
@@ -139,38 +143,66 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
       const amount = tx.amount !== null && tx.amount !== undefined ? Math.abs(tx.amount) : 0;
       if (amount <= 0) {
         console.warn("Skipping transaction with zero or invalid amount:", tx);
-        continue; 
+        continue;
       }
 
       let type: TransactionType | 'unknown' = 'unknown';
-      if (tx.amount !== null && tx.amount !== undefined) { // Prioritize amount signal for type
+      if (tx.amount !== null && tx.amount !== undefined) {
         if (tx.amount < 0) type = 'expense';
         else if (tx.amount > 0) type = 'income';
       } else if (tx.typeSuggestion && (tx.typeSuggestion === 'income' || tx.typeSuggestion === 'expense')) {
         type = tx.typeSuggestion;
       }
 
-
       if (type === 'unknown') {
          console.warn("Skipping transaction with unknown type:", tx);
-         errorCount++; 
+         errorCount++;
          continue;
+      }
+      
+      const currentDescription = (tx.description || tx.rawText || 'Transação Importada Automaticamente').toLowerCase().trim();
+      const currentAmount = parseFloat(amount.toFixed(2)); // Ensure consistent precision for comparison
+      const currentCategory = IMPORTED_CATEGORY_NAME.toLowerCase();
+
+      const isDuplicate = existingUserTransactions.some(existingTx => {
+        const existingDescription = (existingTx.description || '').toLowerCase().trim();
+        const existingAmount = parseFloat(existingTx.amount.toFixed(2));
+        const existingCategory = (existingTx.category || '').toLowerCase();
+        
+        return existingDescription === currentDescription &&
+               existingCategory === currentCategory &&
+               existingAmount === currentAmount;
+      });
+
+      if (isDuplicate) {
+        skippedDuplicateCount++;
+        console.log(`Skipping duplicate transaction: ${currentDescription}, Amount: ${currentAmount}`);
+        continue;
       }
 
       const newTxData: NewTransactionData = {
         amount: amount,
         date: format(transactionDate, 'yyyy-MM-dd'),
         type: type as TransactionType,
-        category: IMPORTED_CATEGORY_NAME, // Use the name of the category
+        category: IMPORTED_CATEGORY_NAME,
         description: tx.description || tx.rawText || 'Transação Importada Automaticamente',
         recurrenceFrequency: 'none',
-        // receiptImageUri is not handled by this specific AI flow.
       };
 
       try {
         const result = await addTransaction(userId, newTxData);
         if (result.success) {
           successCount++;
+          // Add to existingUserTransactions to prevent importing same item twice in same batch if statement has duplicates
+          if (result.transactionId) {
+            existingUserTransactions.push({
+              id: result.transactionId,
+              userId,
+              ...newTxData,
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            });
+          }
         } else {
           errorCount++;
           console.error(`Failed to save transaction "${newTxData.description}": ${result.error}`);
@@ -183,22 +215,41 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
 
     setIsProcessing(false);
 
+    let summaryMessages: string[] = [];
     if (successCount > 0) {
-      toast({ title: 'Importação Automática Concluída', description: `${successCount} transações salvas com sucesso na categoria "${IMPORTED_CATEGORY_NAME}".` });
-      if (onSuccess) onSuccess();
+      summaryMessages.push(`${successCount} transações salvas com sucesso na categoria "${IMPORTED_CATEGORY_NAME}".`);
+    }
+    if (skippedDuplicateCount > 0) {
+      summaryMessages.push(`${skippedDuplicateCount} transações foram puladas por serem duplicadas.`);
     }
     if (errorCount > 0) {
-      toast({ variant: 'destructive', title: 'Erros na Importação Automática', description: `${errorCount} transações não puderam ser salvas. Algumas podem ter sido puladas devido a dados insuficientes.` });
+      summaryMessages.push(`${errorCount} transações não puderam ser salvas (algumas podem ter sido puladas por dados insuficientes).`);
     }
     
-    if (successCount > 0 && errorCount === 0) {
+    if (summaryMessages.length === 0 && extractionResult.transactions.length > 0) {
+        summaryMessages.push("Nenhuma transação nova foi importada. Verifique se já existem ou se os dados são válidos.");
+    }
+
+
+    if (summaryMessages.length > 0) {
+      toast({
+        title: 'Importação Automática Concluída',
+        description: summaryMessages.join(' '),
+        duration: successCount > 0 && errorCount === 0 && skippedDuplicateCount === 0 ? 5000 : 8000,
+      });
+    }
+
+
+    if (onSuccess && successCount > 0) onSuccess();
+    
+    if (successCount > 0 && errorCount === 0 && skippedDuplicateCount === 0) { // Only close if fully successful and no skips
       setOpen(false);
     }
   };
 
   return (
-    <div key={extractionAttemptId} className="flex flex-col h-full w-full">
-      <div className="flex-grow space-y-4 overflow-y-auto p-1 min-h-0"> {/* Removed p-1 for DialogContent to handle */}
+    <div className="flex flex-col h-full w-full">
+      <div className="flex-grow min-h-0 space-y-4 p-1 overflow-y-auto">
         <div className="space-y-2">
           <Label htmlFor="statement-image">Imagem do Extrato</Label>
           <div className="flex items-center gap-2">
@@ -247,8 +298,8 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
             <AlertTitle>Importação Automática</AlertTitle>
             <AlertDescription>
                 As transações extraídas serão salvas automaticamente com a categoria "{IMPORTED_CATEGORY_NAME}".
-                Valores serão salvos como positivos, e o tipo (receita/despesa) será inferido.
-                Transações com dados insuficientes (sem valor ou tipo claro) podem ser puladas.
+                O tipo (receita/despesa) será inferido e os valores salvos como positivos.
+                Transações com dados insuficientes ou duplicadas (mesma descrição, categoria e valor) serão puladas.
             </AlertDescription>
         </Alert>
       </div>
@@ -257,7 +308,6 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
         <DialogClose asChild>
           <Button variant="outline" disabled={isProcessing}>Cancelar</Button>
         </DialogClose>
-        {/* The main action button is "Extrair e Importar" */}
       </DialogFooter>
     </div>
   );
