@@ -46,12 +46,12 @@ export async function POST(req: NextRequest) {
       displayName: newUser.displayName,
     };
 
-    const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' }); // Token JWT válido por 7 dias
 
     const cookie = serialize(COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7, // 1 week
+      maxAge: 60 * 60 * 24 * 7, // Cookie válido por 1 semana (7 dias)
       path: '/',
       sameSite: 'lax',
     });
