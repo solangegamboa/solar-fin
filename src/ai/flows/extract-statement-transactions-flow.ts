@@ -64,18 +64,18 @@ Image: {{media url=imageDataUri}}
 Instructions:
 1.  **Identify Transaction Lines:** Carefully scan the image for lines that represent individual financial transactions. These often include a date, a description, and a value.
 2.  **For each transaction line, extract the following:**
-    *   `rawText`: The full text of the line or segment you identified as a transaction.
-    *   `description`: The textual description of the transaction (e.g., "Compra Supermercado", "PIX Maria Silva", "Pagamento Conta Luz"). Try to be concise but informative.
-    *   `amount`: The monetary value.
+    *   \`rawText\`: The full text of the line or segment you identified as a transaction.
+    *   \`description\`: The textual description of the transaction (e.g., "Compra Supermercado", "PIX Maria Silva", "Pagamento Conta Luz"). Try to be concise but informative.
+    *   \`amount\`: The monetary value.
         *   Look for common Brazilian currency indicators (R$).
         *   Crucially, determine if it's an income (entrada/crédito, usually positive or without a clear negative sign next to the value itself but implied by context like "SALDO ANTERIOR" vs "SALDO ATUAL") or an expense (saída/débito, often indicated by a minus sign "-", a "D" or "C" notation, or columns). Represent expenses as NEGATIVE numbers (e.g., -50.35) and income as POSITIVE numbers (e.g., 1200.00). If the sign is ambiguous, make a best guess or return null.
-    *   `date`: The date of the transaction.
+    *   \`date\`: The date of the transaction.
         *   Attempt to parse dates in DD/MM or DD/MM/YYYY format.
         *   If only DD/MM is found, use the 'defaultYear' provided in the input to construct a full YYYY-MM-DD date. If 'defaultYear' is not provided, or if the month suggests a year change (e.g., statement is for Jan, previous entries were Dec), try to infer the correct year based on the context of other dates in the statement or assume the current year. If impossible to determine, return null. Format as YYYY-MM-DD.
-    *   `typeSuggestion`: Suggest 'income', 'expense', or 'unknown' based on the amount's sign or context. If amount is positive, suggest 'income'. If negative, suggest 'expense'.
+    *   \`typeSuggestion\`: Suggest 'income', 'expense', or 'unknown' based on the amount's sign or context. If amount is positive, suggest 'income'. If negative, suggest 'expense'.
 3.  **Overall Statement Info (if available):**
-    *   `statementPeriod`: If the statement shows a period (e.g., "Extrato de Maio/2023", "01/05/2023 a 31/05/2023"), extract it.
-    *   `accountName`: If a bank name (e.g., "Banco Itaú", "Nubank") or account holder name is clearly visible and associated with the statement, extract it.
+    *   \`statementPeriod\`: If the statement shows a period (e.g., "Extrato de Maio/2023", "01/05/2023 a 31/05/2023"), extract it.
+    *   \`accountName\`: If a bank name (e.g., "Banco Itaú", "Nubank") or account holder name is clearly visible and associated with the statement, extract it.
 4.  **Format:** Return all extracted data in the specified JSON format. If a field for a specific transaction cannot be determined, return null for that field. If no transactions are found, return an empty array for 'transactions'.
 
 Common Brazilian terms:
@@ -133,3 +133,4 @@ const extractStatementTransactionsFlow = ai.defineFlow(
     return output || { transactions: [], statementPeriod: null, accountName: null };
   }
 );
+
