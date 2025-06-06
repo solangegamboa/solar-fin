@@ -2,6 +2,10 @@
   "name": "Solar Fin",
   "short_name": "SolarFin",
   "description": "Seu aplicativo de controle de finanças pessoais.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F5F5F5",
+  "theme_color": "#29ABE2",
   "icons": [
     {
       "src": "https://placehold.co/192x192.png",
@@ -15,11 +19,5 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ],
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#F5F5F5",
-  "theme_color": "#29ABE2",
-  "scope": "/",
-  "orientation": "portrait-primary"
+  ]
 }

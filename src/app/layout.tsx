@@ -28,7 +28,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Solar Fin" />
-        <link rel="apple-touch-icon" href="https://placehold.co/192x192.png" />
+        <link rel="apple-touch-icon" href="https://placehold.co/192x192.png" data-ai-hint="app logo" />
       </head>
       <body className="font-body antialiased">
         <ThemeProvider
