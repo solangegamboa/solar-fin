@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -22,19 +22,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, Landmark, CalendarDays, Trash2, Sun, AlertTriangleIcon, SearchX, Info, TrendingUp, TrendingDown, CircleDollarSign, ReceiptText } from "lucide-react";
+import { PlusCircle, Landmark, CalendarDays, Trash2, Sun, AlertTriangleIcon, SearchX, Info, TrendingUp, TrendingDown, CircleDollarSign, ReceiptText, Sigma, CalendarClock, Banknote, LayoutGrid } from "lucide-react";
 import { LoanForm } from "@/components/loans/LoanForm";
 import type { Loan } from "@/types";
 import { getLoansForUser, deleteLoan } from "@/lib/databaseService";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, cn } from "@/lib/utils";
-import { format, parseISO, isPast, isFuture, differenceInMonths, addMonths, getDaysInMonth } from 'date-fns';
+import { format, parseISO, isPast, isFuture, differenceInMonths, addMonths, getDaysInMonth, startOfMonth, endOfMonth, isSameMonth, isSameYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from "@/contexts/AuthContext";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
 
 interface LoanProgressInfo {
   progress: number;
@@ -46,6 +48,12 @@ interface LoanProgressInfo {
   remainingAmount: number;
   totalLoanAmount: number;
   isUpcoming: boolean;
+}
+
+interface DebtByBank {
+  bankName: string;
+  totalRemaining: number;
+  loanCount: number;
 }
 
 export default function LoansPage() {
@@ -134,7 +142,7 @@ export default function LoansPage() {
     }
   };
   
-  const calculateLoanProgress = (loan: Loan): LoanProgressInfo => {
+  const calculateLoanProgress = useCallback((loan: Loan): LoanProgressInfo => {
     const startDate = parseISO(loan.startDate);
     const endDate = parseISO(loan.endDate);
     const today = new Date();
@@ -151,7 +159,7 @@ export default function LoansPage() {
       progress = 0;
       monthsPassed = 0;
       isUpcoming = true;
-    } else if (isPast(endDate) || today > endDate) { // Consider concluded if today is past end date
+    } else if (isPast(endDate) || today > endDate) { 
       status = "Concluído";
       progress = 100;
       monthsPassed = totalInstallments;
@@ -161,7 +169,7 @@ export default function LoansPage() {
       const dayOfToday = today.getDate();
       const dayOfStartDate = startDate.getDate();
       
-      if (dayOfToday >= dayOfStartDate || today > startDate) { // ensure current month counted if start day passed or if it's a future month past start date
+      if (dayOfToday >= dayOfStartDate || today > startDate) { 
         monthsPassed +=1;
       }
       monthsPassed = Math.max(0, Math.min(monthsPassed, totalInstallments));
@@ -179,13 +187,60 @@ export default function LoansPage() {
       remainingMonths, 
       totalInstallments,
       paidAmount: Math.max(0, paidAmount),
-      remainingAmount: Math.max(0, remainingAmount),
+      remainingAmount: Math.max(0, Math.min(remainingAmount, totalLoanAmount)), // Ensure remainingAmount is not negative or greater than total
       totalLoanAmount,
       isUpcoming
     };
-  };
+  }, []);
 
-  if (authLoading || isLoading && !loans.length) { 
+  const summaryData = useMemo(() => {
+    let totalRemainingForAllLoans = 0;
+    let totalNextMonthPayments = 0;
+    const debtByBankMap = new Map<string, { totalRemaining: number; loanCount: number }>();
+    const today = new Date();
+    const nextMonthDate = addMonths(today, 1);
+
+    loans.forEach(loan => {
+      const progressInfo = calculateLoanProgress(loan);
+      
+      if (progressInfo.status !== "Concluído") {
+        totalRemainingForAllLoans += progressInfo.remainingAmount;
+
+        const bankEntry = debtByBankMap.get(loan.bankName) || { totalRemaining: 0, loanCount: 0 };
+        bankEntry.totalRemaining += progressInfo.remainingAmount;
+        bankEntry.loanCount += 1;
+        debtByBankMap.set(loan.bankName, bankEntry);
+      }
+
+      if (progressInfo.status === "Em andamento") {
+        const loanStartDate = parseISO(loan.startDate);
+        const loanEndDate = parseISO(loan.endDate);
+        
+        // Check if any installment falls in the next calendar month
+        const firstInstallmentDateForNextMonth = startOfMonth(nextMonthDate);
+        const lastInstallmentDateForNextMonth = endOfMonth(nextMonthDate);
+
+        // Simplified check: if the loan is active and its period overlaps with next month.
+        // This assumes a payment is made every month the loan is active.
+        if (loanStartDate <= lastInstallmentDateForNextMonth && loanEndDate >= firstInstallmentDateForNextMonth) {
+            totalNextMonthPayments += loan.installmentAmount;
+        }
+      }
+    });
+
+    const debtByBankArray: DebtByBank[] = Array.from(debtByBankMap.entries()).map(
+      ([bankName, data]) => ({
+        bankName,
+        totalRemaining: data.totalRemaining,
+        loanCount: data.loanCount,
+      })
+    ).sort((a, b) => b.totalRemaining - a.totalRemaining);
+
+    return { totalRemainingForAllLoans, totalNextMonthPayments, debtByBank: debtByBankArray };
+  }, [loans, calculateLoanProgress]);
+
+
+  if (authLoading || (isLoading && !loans.length)) { 
     return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
   }
 
@@ -193,7 +248,7 @@ export default function LoansPage() {
     if (isLoading && loans.length === 0 && !authLoading) { 
       return <div className="flex items-center justify-center h-64 col-span-full"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando empréstimos...</p></div>;
     }
-    if (error) {
+    if (error && !isLoading) {
       return <div className="flex flex-col items-center justify-center h-64 text-destructive col-span-full"><AlertTriangleIcon className="h-12 w-12 mb-3" /><p className="text-lg font-semibold">{error}</p></div>;
     }
     if (loans.length === 0 && !isLoading) {
@@ -241,9 +296,9 @@ export default function LoansPage() {
                 <Badge variant={status === "Concluído" ? "default" : (status === "A iniciar" ? "outline" : "secondary")}
                        className={cn(
                           "text-xs",
-                          status === "Concluído" && "bg-green-100 text-green-700 border-green-300",
-                          status === "Em andamento" && "bg-yellow-100 text-yellow-700 border-yellow-300",
-                          status === "A iniciar" && "bg-blue-100 text-blue-700 border-blue-300"
+                          status === "Concluído" && "bg-green-100 text-green-700 border-green-300 dark:bg-green-800/30 dark:text-green-300 dark:border-green-700",
+                          status === "Em andamento" && "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-800/30 dark:text-yellow-300 dark:border-yellow-700",
+                          status === "A iniciar" && "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-800/30 dark:text-blue-300 dark:border-blue-700"
                        )}
                 >
                   {status}
@@ -326,6 +381,82 @@ export default function LoansPage() {
         </Dialog>
       </div>
 
+      <h2 className="text-2xl font-semibold tracking-tight font-headline border-b pb-2 flex items-center">
+        <LayoutGrid className="mr-3 h-6 w-6 text-primary" />
+        Resumos Financeiros
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <Card className="shadow-md">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center">
+              <CalendarClock className="mr-2 h-5 w-5 text-blue-500" />
+              Pagamentos Próximo Mês
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-blue-600">{formatCurrency(summaryData.totalNextMonthPayments)}</p>
+            <p className="text-xs text-muted-foreground">Soma das parcelas de empréstimos ativos com vencimento no próximo mês.</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-md">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center">
+              <Banknote className="mr-2 h-5 w-5 text-destructive" />
+              Dívida Total Restante
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-destructive">{formatCurrency(summaryData.totalRemainingForAllLoans)}</p>
+            <p className="text-xs text-muted-foreground">Soma de todos os valores restantes a pagar dos empréstimos não concluídos.</p>
+          </CardContent>
+        </Card>
+      </div>
+      
+      {summaryData.debtByBank.length > 0 && (
+        <Card className="shadow-lg">
+            <CardHeader>
+                <CardTitle className="font-headline text-xl flex items-center"><Landmark className="mr-2 h-6 w-6 text-primary"/>Dívida Restante por Instituição</CardTitle>
+                <CardDescription>Valores totais que ainda faltam pagar, agrupados por banco.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Accordion type="single" collapsible className="w-full">
+                    {summaryData.debtByBank.map((bankData, index) => (
+                        <AccordionItem value={`bank-${index}`} key={bankData.bankName}>
+                            <AccordionTrigger className="hover:no-underline">
+                                <div className="flex justify-between w-full pr-2 items-center">
+                                    <span className="font-semibold text-base">{bankData.bankName}</span>
+                                    <div className="text-right">
+                                      <Badge variant="secondary" className="text-base">{formatCurrency(bankData.totalRemaining)}</Badge>
+                                      <p className="text-xs text-muted-foreground mt-0.5">{bankData.loanCount} empréstimo(s)</p>
+                                    </div>
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent>
+                                <ul className="space-y-1 pt-1 pl-2 text-sm">
+                                    {loans.filter(l => l.bankName === bankData.bankName && calculateLoanProgress(l).status !== "Concluído").map(loan => {
+                                        const progress = calculateLoanProgress(loan);
+                                        return (
+                                            <li key={loan.id} className="flex justify-between items-center py-1 border-b last:border-b-0">
+                                                <span className="truncate pr-2" title={loan.description}>{loan.description}</span>
+                                                <span className="font-medium text-orange-600 whitespace-nowrap">{formatCurrency(progress.remainingAmount)}</span>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </AccordionContent>
+                        </AccordionItem>
+                    ))}
+                </Accordion>
+            </CardContent>
+        </Card>
+      )}
+      
+      <Separator className="my-8" />
+
+      <h2 className="text-2xl font-semibold tracking-tight font-headline border-b pb-2 flex items-center">
+        <ReceiptText className="mr-3 h-6 w-6 text-primary" />
+        Detalhes dos Empréstimos
+      </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {renderLoanList()}
       </div>
