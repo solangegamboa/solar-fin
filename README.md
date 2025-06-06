@@ -1,11 +1,11 @@
 
 # Solar Fin - Seu Aplicativo de Controle Financeiro Pessoal
 
-Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a gerenciar suas finanças pessoais de forma eficaz. Com ele, você pode registrar transações, acompanhar empréstimos, gerenciar cartões de crédito e obter insights financeiros com a ajuda de inteligência artificial.
+Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a gerenciar suas finanças pessoais de forma eficaz. Com ele, você pode registrar transações, acompanhar empréstimos, gerenciar cartões de crédito, definir metas financeiras e obter insights com a ajuda de inteligência artificial.
 
 ## Funcionalidades Principais
 
-*   **Painel Financeiro:** Uma visão geral da sua saúde financeira, incluindo saldo atual, receitas e despesas do mês selecionado (com navegação entre meses), e um calendário financeiro interativo com resumo diário das movimentações.
+*   **Painel Financeiro:** Uma visão geral da sua saúde financeira, incluindo saldo atual, receitas e despesas do mês selecionado (com navegação entre meses), um calendário financeiro interativo com resumo diário das movimentações, e lembretes de transações recorrentes agendadas.
 *   **Gerenciamento de Transações:**
     *   Registre suas receitas e despesas, categorizando-as para melhor organização e permitindo a criação de novas categorias.
     *   Opção de anexar imagem de comprovante com extração automática de valor por IA.
@@ -16,12 +16,19 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
     *   Cadastre seus cartões de crédito, com auxílio de IA para extrair informações como emissor e bandeira a partir de uma imagem do cartão.
     *   Registre compras parceladas e visualize um resumo consolidado das suas futuras faturas, mês a mês.
     *   Acompanhe estimativas das faturas atuais e próximas para cada cartão.
+*   **Gerenciamento de Metas Financeiras:**
+    *   Cadastre, acompanhe e gerencie suas metas financeiras de curto e longo prazo.
+    *   Visualize o progresso de cada meta e defina datas alvo para alcançá-las.
 *   **Insights Financeiros com IA:**
     *   Utilize a inteligência artificial (Genkit) para obter um resumo da sua situação financeira e dicas personalizadas para economizar, baseado nos seus dados registrados.
+*   **Notificações:**
+    *   Ícone de notificações no cabeçalho que exibe lembretes de transações recorrentes agendadas para datas próximas (7 dias antes e 14 dias depois do dia atual).
+    *   Indicador de notificações lidas/não lidas gerenciado localmente.
 *   **Gerenciamento de Conta e Segurança:**
-    *   Sistema de cadastro e login para que múltiplos usuários possam gerenciar suas finanças de forma independente e segura.
+    *   Sistema de cadastro e login para que múltiplos usuários possam gerenciar suas finanças de forma independente e segura (usando JWT com Cookies HTTPOnly).
     *   Altere seu nome de exibição e senha diretamente nas configurações.
-    *   Funcionalidade de backup local para salvar todos os seus dados (perfil, transações, cartões, empréstimos, categorias) em um arquivo JSON.
+    *   Opção para configurar preferência de recebimento de notificações por e-mail sobre transações agendadas (o envio real de e-mails requer configuração adicional no servidor e um sistema de cron job).
+    *   Funcionalidade de backup local para salvar todos os seus dados (perfil, transações, cartões, empréstimos, categorias, metas) em um arquivo JSON.
     *   Restaure seus dados a partir de um arquivo de backup local (substituindo os dados atuais).
 *   **Personalização:**
     *   Escolha entre os temas Claro, Escuro ou o padrão do Sistema para ajustar a aparência do aplicativo.
@@ -218,14 +225,15 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
 ## Estrutura do Projeto (Simplificada)
 
 *   `src/app/`: Contém as rotas da aplicação (App Router).
-    *   `(app)/`: Rotas protegidas da aplicação principal (Dashboard, Transações, etc.).
+    *   `(app)/`: Rotas protegidas da aplicação principal (Dashboard, Transações, Empréstimos, Cartões, Metas, etc.).
     *   `(auth)/`: Rotas de autenticação (Login, Signup).
     *   `api/`: Rotas de API (backend).
 *   `src/components/`: Componentes React reutilizáveis.
-    *   `core/`: Componentes centrais da aplicação (Header, Sidebar, Logo).
+    *   `core/`: Componentes centrais da aplicação (Header, Sidebar, Logo, NotificationBell).
     *   `ui/`: Componentes ShadCN UI.
-    *   Outras pastas para componentes específicos de funcionalidades (transações, empréstimos, etc.).
+    *   Outras pastas para componentes específicos de funcionalidades (transações, empréstimos, cartões, metas, etc.).
 *   `src/contexts/`: Contextos React (AuthProvider, ThemeProvider).
+*   `src/hooks/`: Hooks customizados (ex: `useNotifications.ts`).
 *   `src/lib/`: Utilitários e lógica de negócios.
     *   `databaseService.ts`: Lógica de acesso ao banco de dados (JSON ou PostgreSQL).
 *   `src/ai/`: Lógica relacionada à Inteligência Artificial com Genkit.
@@ -235,3 +243,6 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
 *   `public/`: Arquivos estáticos.
 *   `docker-compose.yml`: Define os serviços Docker para a aplicação e o banco de dados.
 *   `Dockerfile`: Define como construir a imagem Docker para a aplicação Next.js.
+
+
+    
