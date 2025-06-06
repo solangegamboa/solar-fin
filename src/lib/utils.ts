@@ -6,12 +6,10 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(
-  value: number,
-  currency: string = 'BRL',
-  locale: string = 'pt-BR'
+  value: number
 ): string {
-  return new Intl.NumberFormat(locale, {
+  return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
-    currency: currency,
+    currency: 'BRL',
   }).format(value);
 }
