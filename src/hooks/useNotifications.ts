@@ -176,28 +176,27 @@ export function useNotifications() {
             id: notificationId,
             type: 'scheduled_transaction',
             relatedId: tx.id,
-            message: `${tx.description || tx.category} - ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}`,
+            message: `${tx.description || tx.category} (${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)})`,
             projectedDate: projectedDateString,
-            isRead: readIds.includes(notificationId),
+            isRead: occurrence.isPast ? readIds.includes(notificationId) : false, // Upcoming transactions always start as "unread" for the logic
             isPast: occurrence.isPast,
             originalTransaction: tx,
           });
         });
       });
 
-      // Sort by projected date, then by original creation date as a fallback
+      // Sort by projected date (most recent first), then by original creation date as a fallback
       relevantNotifications.sort((a, b) => {
         const dateA = parseISO(a.projectedDate).getTime();
         const dateB = parseISO(b.projectedDate).getTime();
         if (dateA !== dateB) {
-          return dateB - dateA; // Most recent projected dates first
+          return dateB - dateA; 
         }
         return b.originalTransaction.createdAt - a.originalTransaction.createdAt;
       });
       
       setAllNotifications(relevantNotifications);
-      setUnreadCount(relevantNotifications.filter(n => !n.isRead).length);
-
+      // unreadCount will be updated by the useEffect below
     } catch (error) {
       console.error("Failed to fetch notifications:", error);
       setAllNotifications([]);
@@ -211,37 +210,54 @@ export function useNotifications() {
     fetchAndProcessNotifications();
   }, [fetchAndProcessNotifications]);
 
+  // Effect to update unreadCount whenever allNotifications changes
+  useEffect(() => {
+    // An item is considered unread for the badge if its `isRead` property is false.
+    // `isRead` can only become true for past items. Upcoming items always have `isRead: false`.
+    setUnreadCount(allNotifications.filter(n => !n.isRead).length);
+  }, [allNotifications]);
+
   const markAsRead = useCallback((notificationId: string) => {
-    let marked = false;
-    setAllNotifications(prev =>
-      prev.map(n => {
-        if (n.id === notificationId && !n.isRead) {
-          marked = true;
+    let itemWasMarked = false;
+    setAllNotifications(prevNotifications =>
+      prevNotifications.map(n => {
+        if (n.id === notificationId && !n.isRead && n.isPast) { // Only mark as read if it's a past, unread item
+          itemWasMarked = true;
           return { ...n, isRead: true };
         }
         return n;
       })
     );
-    if (marked) {
+
+    if (itemWasMarked) {
       const readIds = loadReadStatuses();
       if (!readIds.includes(notificationId)) {
         saveReadStatuses([...readIds, notificationId]);
       }
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      // unreadCount will be updated by the useEffect watching allNotifications
     }
   }, [loadReadStatuses, saveReadStatuses]);
 
   const markAllAsRead = useCallback(() => {
-    const unreadIds = allNotifications.filter(n => !n.isRead).map(n => n.id);
-    if (unreadIds.length === 0) return;
+    const idsThatWereMarkedRead: string[] = [];
+    setAllNotifications(prevNotifications => {
+      const updatedNotifications = prevNotifications.map(n => {
+        if (n.isPast && !n.isRead) { // Only mark past, unread items
+          idsThatWereMarkedRead.push(n.id);
+          return { ...n, isRead: true };
+        }
+        return n;
+      });
 
-    setAllNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    
-    const currentReadIds = loadReadStatuses();
-    const newReadIds = Array.from(new Set([...currentReadIds, ...unreadIds]));
-    saveReadStatuses(newReadIds);
-    setUnreadCount(0);
-  }, [allNotifications, loadReadStatuses, saveReadStatuses]);
+      if (idsThatWereMarkedRead.length > 0) {
+        const currentReadIds = loadReadStatuses();
+        const newUniqueReadIds = Array.from(new Set([...currentReadIds, ...idsThatWereMarkedRead]));
+        saveReadStatuses(newUniqueReadIds);
+      }
+      return updatedNotifications;
+    });
+    // unreadCount will be updated by the useEffect watching allNotifications
+  }, [loadReadStatuses, saveReadStatuses]);
 
   return {
     notifications: allNotifications,
