@@ -232,147 +232,168 @@
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Alimentação",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "ecffec3d-ebe2-4b5a-92c0-2381344bf818",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Transporte",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "91af72e1-c189-43b9-99b9-42a03249a48e",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Moradia",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "05d6b456-edaf-4729-93cc-c4b51392f904",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Saúde",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "ebcb7fd2-96dc-4304-b022-7dc4d79627df",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Educação",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "6abbbb77-872a-44c5-9c42-976c98663a43",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Lazer",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "c7f58cce-65e7-4c17-8f08-1228d6e5485d",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Vestuário",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "5c26ef85-911d-4fd6-a7a5-2722aa0fdb4b",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Contas Fixas",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "d4659cfd-4007-4868-b966-e8a778c28951",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Compras Online",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "f926ce4a-1f86-4150-9e1d-4aace357337c",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Salário",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "f901fcce-9519-4ce8-b0bd-6a7380147b66",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Investimentos",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "f99221b7-f842-42fe-bed3-347ee4838e89",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Presentes",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "e67571b8-7736-4a48-817a-6e9fe68d9924",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Cuidados Pessoais",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "bc6402cc-baab-44eb-b074-17227d82fffe",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Viagens",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "fd52e884-49ec-41b0-b031-2a3703a7646f",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Serviços (Assinaturas)",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "676c1497-595c-4137-a7f4-aefd6077886c",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Impostos",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "c47f5998-2d4e-4668-814d-e2e96525a7f3",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Outras Receitas",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "8b66625a-7001-4671-9352-3b98f1f69fb8",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Outras Despesas",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "unique-pets-id-user1",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Pets",
           "isSystemDefined": false,
-          "createdAt": 1749164200000
+          "createdAt": 1749164200000,
+          "updatedAt": 1749164200000
         },
         {
           "id": "unique-academia-id-user1",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Academia",
           "isSystemDefined": false,
-          "createdAt": 1749164210000
+          "createdAt": 1749164210000,
+          "updatedAt": 1749164210000
         },
         {
           "id": "unique-streaming-id-user1",
           "userId": "2a141a58-983f-4d63-83d5-605943ff7596",
           "name": "Streaming",
           "isSystemDefined": false,
-          "createdAt": 1749164220000
+          "createdAt": 1749164220000,
+          "updatedAt": 1749164220000
         }
       ],
       "financialGoals": [],
@@ -384,7 +405,7 @@
         "email": "solange.gamboa@gmail.com",
         "displayName": "Solange Gamboa",
         "createdAt": 1749158998992,
-        "lastLoginAt": 1749179993958,
+        "lastLoginAt": 1749180397184,
         "notifyByEmail": false
       },
       "hashedPassword": "$2a$10$GoGdmUtF2CJ1CveO7PRqDuy6mYmapH1PhHkCwyU8SPQIUCwiUbyrW",
@@ -514,133 +535,152 @@
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Alimentação",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "44eba06a-6350-407e-9dca-c80057d6dede",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Transporte",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "63207c7a-09e0-4c75-b199-eab6b8cddddf",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Moradia",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "a5b01ecb-31ec-456f-905f-37fcd84c0ec7",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Saúde",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "69c725ef-d5d6-4932-8481-dcbda4432323",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Educação",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "8dd8ec30-946b-4126-8e5a-1d51111b38f0",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Lazer",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "2bd9470f-1be0-42bf-863c-e87b070aca5d",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Vestuário",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "3bb589b8-77d5-43fc-b231-582872667f1d",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Contas Fixas",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "794a3a12-b5d8-4a1a-857f-8a8a83caa528",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Compras Online",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "fd59ccef-7d4a-4a7c-9b9e-b2879d440fba",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Salário",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "6cf0c5c5-c0f8-495e-85de-0b149ab39779",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Investimentos",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "9e566406-497f-4b82-afb0-f22ef2f799a4",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Presentes",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "54245799-3f95-4f19-924b-619633801811",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Cuidados Pessoais",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "89d70338-4942-4bc1-8808-e66c9e7c8a1f",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Viagens",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "247ffe26-d91c-4763-82a3-03e26e74e8ad",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Serviços (Assinaturas)",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "8e050e72-dd46-4353-aff0-ccde37d86543",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Impostos",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "fa372215-c727-47d2-8589-7d937ac9dd62",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Outras Receitas",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "1c142484-d63c-4fe3-b6d0-1f31edef571c",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Outras Despesas",
           "isSystemDefined": true,
-          "createdAt": 1749162545022
+          "createdAt": 1749162545022,
+          "updatedAt": 1749162545022
         },
         {
           "id": "unique-dogwalker-id-user2",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "name": "Dog Walker",
           "isSystemDefined": false,
-          "createdAt": 1749165700000
+          "createdAt": 1749165700000,
+          "updatedAt": 1749165700000
         }
       ],
       "financialGoals": [
@@ -739,126 +779,144 @@
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Alimentação",
           "isSystemDefined": true,
-          "createdAt": 1749167625370
+          "createdAt": 1749167625370,
+          "updatedAt": 1749167625370
         },
         {
           "id": "f70e9fad-c922-4db5-931f-8a38fe294436",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Transporte",
           "isSystemDefined": true,
-          "createdAt": 1749167625376
+          "createdAt": 1749167625376,
+          "updatedAt": 1749167625376
         },
         {
           "id": "de96a1b6-24a1-4428-b720-d1057c7ea7b6",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Moradia",
           "isSystemDefined": true,
-          "createdAt": 1749167625380
+          "createdAt": 1749167625380,
+          "updatedAt": 1749167625380
         },
         {
           "id": "e3bb219b-4484-4a22-b764-3b4e31a76984",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Saúde",
           "isSystemDefined": true,
-          "createdAt": 1749167625385
+          "createdAt": 1749167625385,
+          "updatedAt": 1749167625385
         },
         {
           "id": "d62d86a3-27f3-453e-aec3-1d6d07dcd2b1",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Educação",
           "isSystemDefined": true,
-          "createdAt": 1749167625395
+          "createdAt": 1749167625395,
+          "updatedAt": 1749167625395
         },
         {
           "id": "f392b4e1-c37b-4e4e-9333-76803b0a5b67",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Lazer",
           "isSystemDefined": true,
-          "createdAt": 1749167625398
+          "createdAt": 1749167625398,
+          "updatedAt": 1749167625398
         },
         {
           "id": "73c9ee22-1973-46a9-a003-cf915192699e",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Vestuário",
           "isSystemDefined": true,
-          "createdAt": 1749167625402
+          "createdAt": 1749167625402,
+          "updatedAt": 1749167625402
         },
         {
           "id": "b5d75882-2409-4183-b3d6-a3dd9099a188",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Contas Fixas",
           "isSystemDefined": true,
-          "createdAt": 1749167625406
+          "createdAt": 1749167625406,
+          "updatedAt": 1749167625406
         },
         {
           "id": "c5f0b64c-09fc-4c7a-baa7-46c571f7dc37",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Compras Online",
           "isSystemDefined": true,
-          "createdAt": 1749167625410
+          "createdAt": 1749167625410,
+          "updatedAt": 1749167625410
         },
         {
           "id": "7bb60ba8-8b82-4459-8bba-efd40284546d",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Salário",
           "isSystemDefined": true,
-          "createdAt": 1749167625414
+          "createdAt": 1749167625414,
+          "updatedAt": 1749167625414
         },
         {
           "id": "cb18c154-46b9-44f5-ae1f-8d60610b7304",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Investimentos",
           "isSystemDefined": true,
-          "createdAt": 1749167625418
+          "createdAt": 1749167625418,
+          "updatedAt": 1749167625418
         },
         {
           "id": "31edef89-958b-49b8-8a6c-164bc479ae75",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Presentes",
           "isSystemDefined": true,
-          "createdAt": 1749167625423
+          "createdAt": 1749167625423,
+          "updatedAt": 1749167625423
         },
         {
           "id": "dba15ca3-7e86-497f-8503-559b8fef46c1",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Cuidados Pessoais",
           "isSystemDefined": true,
-          "createdAt": 1749167625427
+          "createdAt": 1749167625427,
+          "updatedAt": 1749167625427
         },
         {
           "id": "955b7b4b-3ac9-4b7d-a971-ec56e537812c",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Viagens",
           "isSystemDefined": true,
-          "createdAt": 1749167625440
+          "createdAt": 1749167625440,
+          "updatedAt": 1749167625440
         },
         {
           "id": "a2c06c4a-8b24-44a5-9b4e-cc4c7065c270",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Serviços (Assinaturas)",
           "isSystemDefined": true,
-          "createdAt": 1749167625481
+          "createdAt": 1749167625481,
+          "updatedAt": 1749167625481
         },
         {
           "id": "7dd4f9ab-5562-4eb9-8d5a-998309cdf140",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Impostos",
           "isSystemDefined": true,
-          "createdAt": 1749167625518
+          "createdAt": 1749167625518,
+          "updatedAt": 1749167625518
         },
         {
           "id": "f512383d-272a-494f-9f08-40648ef9def7",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Outras Receitas",
           "isSystemDefined": true,
-          "createdAt": 1749167625542
+          "createdAt": 1749167625542,
+          "updatedAt": 1749167625542
         },
         {
           "id": "7515f42e-9105-4ff5-bd60-3bd61e1ff058",
           "userId": "74d9ffb4-1159-465c-9c1e-03c8ff5342c9",
           "name": "Outras Despesas",
           "isSystemDefined": true,
-          "createdAt": 1749167625558
+          "createdAt": 1749167625558,
+          "updatedAt": 1749167625558
         }
       ],
       "financialGoals": [],
