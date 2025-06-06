@@ -39,12 +39,12 @@ import {
   getYear, 
   getDate, 
   setDate,
-  startOfMonth, // Added
-  subMonths,    // Added
-  isSameMonth,  // Added
-  isSameYear,   // Added
-  isAfter,      // Added
-  isSameDay     // Added
+  startOfMonth, 
+  subMonths,    
+  isSameMonth,  
+  isSameYear,   
+  isAfter,      
+  isSameDay     
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from "@/components/ui/badge";
@@ -137,8 +137,7 @@ export default function CreditCardsPage() {
   
   const handleInvoiceImported = () => {
     setIsImportInvoiceModalOpen(false);
-    fetchUserPurchases(); // Refresh purchases as new ones might have been added
-    // Potentially refresh cards too if AI could create one, but current flow doesn't do that.
+    fetchUserPurchases(); 
   };
 
 
@@ -162,15 +161,15 @@ export default function CreditCardsPage() {
         const installmentAmount = purchase.totalAmount / purchase.installments;
 
         for (let i = 0; i < purchase.installments; i++) {
-          let installmentPaymentDate = purchaseDate;
+          let billingCycleDateForInstallment = purchaseDate;
           
           if (getDate(purchaseDate) > card.closingDateDay) {
-            installmentPaymentDate = addMonths(installmentPaymentDate, 1);
+            billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, 1);
           }
-          installmentPaymentDate = addMonths(installmentPaymentDate, i);
+          billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, i);
           
-          const installmentInvoiceClosingMonth = getMonth(installmentPaymentDate);
-          const installmentInvoiceClosingYear = getYear(installmentPaymentDate);
+          const installmentInvoiceClosingMonth = getMonth(billingCycleDateForInstallment);
+          const installmentInvoiceClosingYear = getYear(billingCycleDateForInstallment);
 
           if (
             installmentInvoiceClosingMonth === targetInvoiceClosingMonth &&
@@ -284,7 +283,7 @@ export default function CreditCardsPage() {
           title: 'Compra Excluída!',
           description: 'A compra do cartão de crédito foi excluída com sucesso.',
         });
-        handlePurchaseUpserted(); // Use generalized handler
+        handlePurchaseUpserted(); 
       } else {
         toast({
           variant: 'destructive',

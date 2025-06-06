@@ -210,15 +210,15 @@ export default function DashboardPage() {
         const installmentAmount = purchase.totalAmount / purchase.installments;
 
         for (let i = 0; i < purchase.installments; i++) {
-          let installmentPaymentDate = purchaseDate;
+          let billingCycleDateForInstallment = purchaseDate;
 
           if (getDate(purchaseDate) > card.closingDateDay) {
-            installmentPaymentDate = addMonths(installmentPaymentDate, 1);
+            billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, 1);
           }
-          installmentPaymentDate = addMonths(installmentPaymentDate, i);
+          billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, i);
 
-          const installmentInvoiceClosingMonth = getMonth(installmentPaymentDate);
-          const installmentInvoiceClosingYear = getYear(installmentPaymentDate);
+          const installmentInvoiceClosingMonth = getMonth(billingCycleDateForInstallment);
+          const installmentInvoiceClosingYear = getYear(billingCycleDateForInstallment);
 
           if (
             installmentInvoiceClosingMonth === targetInvoiceClosingMonth &&
@@ -495,12 +495,12 @@ export default function DashboardPage() {
                 const purchaseDate = parseISO(purchase.date);
                 const installmentAmount = purchase.totalAmount / purchase.installments;
                 for (let i = 0; i < purchase.installments; i++) {
-                    let installmentPaymentDate = purchaseDate;
+                    let billingCycleDateForInstallment = purchaseDate;
                     if (getDate(purchaseDate) > card.closingDateDay) {
-                        installmentPaymentDate = addMonths(installmentPaymentDate, 1);
+                        billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, 1);
                     }
-                    installmentPaymentDate = addMonths(installmentPaymentDate, i);
-                    if (isWithinInterval(installmentPaymentDate, { start: currentPeriodStart, end: currentPeriodEnd }) && getMonth(installmentPaymentDate) === getMonth(currentPeriodStart)) {
+                    billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, i);
+                    if (isWithinInterval(billingCycleDateForInstallment, { start: currentPeriodStart, end: currentPeriodEnd }) && getMonth(billingCycleDateForInstallment) === getMonth(currentPeriodStart)) {
                          currentMonthPaceExpenses += installmentAmount;
                     }
                 }
@@ -520,12 +520,12 @@ export default function DashboardPage() {
                 const purchaseDate = parseISO(purchase.date);
                 const installmentAmount = purchase.totalAmount / purchase.installments;
                 for (let i = 0; i < purchase.installments; i++) {
-                    let installmentPaymentDate = purchaseDate;
+                    let billingCycleDateForInstallment = purchaseDate;
                      if (getDate(purchaseDate) > card.closingDateDay) {
-                        installmentPaymentDate = addMonths(installmentPaymentDate, 1);
+                        billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, 1);
                     }
-                    installmentPaymentDate = addMonths(installmentPaymentDate, i);
-                     if (isWithinInterval(installmentPaymentDate, { start: prevMonthPeriodStart, end: prevMonthPeriodEnd }) && getMonth(installmentPaymentDate) === getMonth(prevMonthPeriodStart)) {
+                    billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, i);
+                     if (isWithinInterval(billingCycleDateForInstallment, { start: prevMonthPeriodStart, end: prevMonthPeriodEnd }) && getMonth(billingCycleDateForInstallment) === getMonth(prevMonthPeriodStart)) {
                          prevMonthPaceExpenses += installmentAmount;
                     }
                 }
