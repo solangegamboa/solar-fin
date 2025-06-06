@@ -26,8 +26,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Sun } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { addCreditCardPurchase, type AddCreditCardPurchaseResult, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
-import type { CreditCard, NewCreditCardPurchaseData, UserCategory } from '@/types';
-import { format } from 'date-fns';
+import type { CreditCard, NewCreditCardPurchaseData, UserCategory, CreditCardPurchase, UpdateCreditCardPurchaseData } from '@/types';
+import { format, parseISO } from 'date-fns';
 import { Combobox } from '@/components/ui/combobox';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -44,7 +44,7 @@ const purchaseSchema = z.object({
     .number({ invalid_type_error: 'O número de parcelas deve ser um número.', required_error: 'O número de parcelas é obrigatório.' })
     .int({ message: 'O número de parcelas deve ser inteiro.' })
     .min(1, { message: 'Mínimo de 1 parcela.' })
-    .max(24, { message: 'Máximo de 24 parcelas.' }), // Consider increasing if needed
+    .max(24, { message: 'Máximo de 24 parcelas.' }), 
 });
 
 type PurchaseFormValues = z.infer<typeof purchaseSchema>;
@@ -54,6 +54,7 @@ interface CreditCardTransactionFormProps {
   onSuccess?: () => void;
   setOpen: (open: boolean) => void;
   userId: string; 
+  existingPurchase?: CreditCardPurchase | null; // Added for editing
 }
 
 export function CreditCardTransactionForm({
@@ -61,6 +62,7 @@ export function CreditCardTransactionForm({
   onSuccess,
   setOpen,
   userId, 
+  existingPurchase,
 }: CreditCardTransactionFormProps) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -97,6 +99,28 @@ export function CreditCardTransactionForm({
       installments: 1,
     },
   });
+
+  useEffect(() => {
+    if (existingPurchase) {
+      form.reset({
+        cardId: existingPurchase.cardId,
+        date: parseISO(existingPurchase.date),
+        description: existingPurchase.description,
+        category: existingPurchase.category,
+        totalAmount: existingPurchase.totalAmount,
+        installments: existingPurchase.installments,
+      });
+    } else {
+      form.reset({ // Default for new purchase
+        cardId: '',
+        date: new Date(),
+        description: '',
+        category: '',
+        totalAmount: '' as unknown as number,
+        installments: 1,
+      });
+    }
+  }, [existingPurchase, form]);
   
   const handleAddNewCategory = async (categoryName: string): Promise<UserCategory | null> => {
     if (!userId) {
@@ -115,19 +139,37 @@ export function CreditCardTransactionForm({
 
   const onSubmit = async (values: PurchaseFormValues) => {
     setIsSubmitting(true);
-
-    const purchaseData: NewCreditCardPurchaseData = {
-      ...values,
-      date: format(values.date, 'yyyy-MM-dd'), 
-    };
+    let result: { success: boolean; purchaseId?: string; error?: string; message?: string };
 
     try {
-      const result: AddCreditCardPurchaseResult = await addCreditCardPurchase(userId, purchaseData);
+      if (existingPurchase) {
+        const updateData: UpdateCreditCardPurchaseData = {
+          cardId: values.cardId,
+          date: format(values.date, 'yyyy-MM-dd'),
+          description: values.description,
+          category: values.category,
+          totalAmount: Number(values.totalAmount),
+          installments: Number(values.installments),
+        };
+        const response = await fetch(`/api/credit-card-purchases/${existingPurchase.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData),
+        });
+        result = await response.json();
 
-      if (result.success && result.purchaseId) {
+      } else {
+        const purchaseData: NewCreditCardPurchaseData = {
+          ...values,
+          date: format(values.date, 'yyyy-MM-dd'), 
+        };
+        result = await addCreditCardPurchase(userId, purchaseData);
+      }
+
+      if (result.success) {
         toast({
           title: 'Sucesso!',
-          description: 'Compra no cartão de crédito adicionada.',
+          description: `Compra no cartão ${existingPurchase ? 'atualizada' : 'adicionada'}.`,
         });
         form.reset({
             cardId: '',
@@ -142,13 +184,13 @@ export function CreditCardTransactionForm({
       } else {
         toast({
           variant: 'destructive',
-          title: 'Erro ao Adicionar Compra',
-          description: result.error || 'Ocorreu um erro desconhecido.',
+          title: `Erro ao ${existingPurchase ? 'Atualizar' : 'Adicionar'} Compra`,
+          description: result.error || result.message || 'Ocorreu um erro desconhecido.',
         });
       }
     } catch (error: any) {
-      const errorMessage = (error && typeof error.message === 'string') ? error.message : 'Ocorreu um erro ao salvar a compra.';
-      console.error('Client-side error calling addCreditCardPurchase:', errorMessage);
+      const errorMessage = (error && typeof error.message === 'string') ? error.message : `Ocorreu um erro ao ${existingPurchase ? 'atualizar' : 'salvar'} a compra.`;
+      console.error('Client-side error processing credit card purchase:', errorMessage);
       toast({
         variant: 'destructive',
         title: 'Erro de Comunicação',
@@ -168,7 +210,7 @@ export function CreditCardTransactionForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Cartão de Crédito</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting || userCreditCards.length === 0}>
+              <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || userCreditCards.length === 0}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder={userCreditCards.length > 0 ? "Selecione o cartão" : "Nenhum cartão cadastrado"} />
@@ -275,7 +317,7 @@ export function CreditCardTransactionForm({
                 {isLoadingCategories ? 'Carregando...' : 'Salvando...'}
               </>
             ) : (
-              'Salvar Compra'
+              existingPurchase ? 'Salvar Alterações' : 'Salvar Compra'
             )}
           </Button>
         </div>

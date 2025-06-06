@@ -97,7 +97,7 @@ export async function createUser(email: string, password_plain: string, displayN
   const hashedPassword = await bcrypt.hash(password_plain, 10);
   const userId = randomUUID();
   const now = Date.now();
-  const notifyByEmailDefault = false; // Default for new users
+  const notifyByEmailDefault = false; 
 
   const newUserProfile: UserProfile = {
     id: userId,
@@ -121,7 +121,7 @@ export async function createUser(email: string, password_plain: string, displayN
       for (const catData of defaultCategories) {
           const categoryId = randomUUID();
           await client.query(
-              'INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)', // Use same for created_at and updated_at on insert
+              'INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)', 
               [categoryId, userId, catData.name, catData.isSystemDefined || false, new Date()]
           );
       }
@@ -224,7 +224,7 @@ export async function updateUserLastLogin(userId: string): Promise<void> {
         const db = await readDB();
         if (db.users[userId] && db.users[userId].profile) {
             db.users[userId].profile.lastLoginAt = now.getTime();
-            // db.users[userId].profile.updatedAt = now.getTime(); // Assuming UserProfile has updatedAt
+            
             await writeDB(db);
         }
     }
@@ -359,7 +359,7 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       const res = await pool.query(
-        'INSERT INTO transactions (id, user_id, type, amount, category, date, description, recurrence_frequency, receipt_image_uri, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10) RETURNING id', // Use same for created_at and updated_at on insert
+        'INSERT INTO transactions (id, user_id, type, amount, category, date, description, recurrence_frequency, receipt_image_uri, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10) RETURNING id', 
         [
           newTransactionId, userId, transactionData.type, transactionData.amount,
           transactionData.category, transactionData.date, transactionData.description || null,
@@ -477,21 +477,28 @@ export const updateTransaction = async (userId: string, transactionId: string, d
       const values: any[] = [];
       let queryIndex = 1;
 
-      Object.entries(data).forEach(([key, value]) => {
-        if (value !== undefined) {
-          const dbKey = key === 'recurrenceFrequency' ? 'recurrence_frequency' : key === 'receiptImageUri' ? 'receipt_image_uri' : key;
+      (Object.keys(data) as Array<keyof UpdateTransactionData>).forEach(key => {
+        if (data[key] !== undefined) {
+          const dbKeyMap: Record<keyof UpdateTransactionData, string> = {
+            type: 'type', amount: 'amount', category: 'category', date: 'date',
+            description: 'description', recurrenceFrequency: 'recurrence_frequency', receiptImageUri: 'receipt_image_uri',
+          };
+          const dbKey = dbKeyMap[key] || key;
           fields.push(`${dbKey} = $${queryIndex++}`);
-          values.push(value);
+          values.push(data[key]);
         }
       });
+      
 
       if (fields.length === 0) return { success: true }; // No fields to update
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
-      values.push(transactionId, userId); // For WHERE clause
+      values.push(transactionId); 
+      values.push(userId); 
 
-      const query = `UPDATE transactions SET ${fields.join(', ')} WHERE id = $${queryIndex++} AND user_id = $${queryIndex++}`;
+      const query = `UPDATE transactions SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
+      
       const res = await pool.query(query, values);
 
       if (res.rowCount === 0) return { success: false, error: "Transaction not found or not owned by user." };
@@ -507,17 +514,18 @@ export const updateTransaction = async (userId: string, transactionId: string, d
     const txIndex = db.users[userId].transactions.findIndex(tx => tx.id === transactionId);
     if (txIndex === -1) return { success: false, error: "Transaction not found." };
 
-    // Merge existing data with new data
+    
     const updatedTx: Transaction = {
       ...db.users[userId].transactions[txIndex],
       ...data,
-      date: data.date ? data.date : db.users[userId].transactions[txIndex].date, // Ensure date is handled correctly
+      date: data.date ? data.date : db.users[userId].transactions[txIndex].date, 
       amount: data.amount !== undefined ? data.amount : db.users[userId].transactions[txIndex].amount,
       type: data.type !== undefined ? data.type : db.users[userId].transactions[txIndex].type,
       category: data.category !== undefined ? data.category : db.users[userId].transactions[txIndex].category,
+      recurrenceFrequency: data.recurrenceFrequency !== undefined ? data.recurrenceFrequency : db.users[userId].transactions[txIndex].recurrenceFrequency,
       updatedAt: Date.now(),
     };
-    // Handle nullable fields explicitly if they can be set to null
+    
     if (data.description !== undefined) updatedTx.description = data.description === null ? undefined : data.description;
     if (data.receiptImageUri !== undefined) updatedTx.receiptImageUri = data.receiptImageUri;
 
@@ -565,7 +573,7 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
 
     const investmentsForAI = userInvestments.map(inv => ({
         name: inv.name,
-        type: inv.type as string, // Ensure it matches schema type string
+        type: inv.type as string, 
         currentValue: inv.currentValue,
         initialAmount: inv.initialAmount,
         symbol: inv.symbol,
@@ -601,7 +609,7 @@ export const addLoan = async (userId: string, loanData: NewLoanData): Promise<Ad
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
             await pool.query(
-                'INSERT INTO loans (id, user_id, bank_name, description, installment_amount, installments_count, start_date, end_date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)', // Use same for created_at and updated_at on insert
+                'INSERT INTO loans (id, user_id, bank_name, description, installment_amount, installments_count, start_date, end_date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)', 
                 [newLoanId, userId, loanData.bankName, loanData.description, loanData.installmentAmount, loanData.installmentsCount, loanData.startDate, calculatedEndDate, now]
             );
             return { success: true, loanId: newLoanId };
@@ -684,7 +692,7 @@ export const addCreditCard = async (userId: string, cardData: NewCreditCardData)
     if (DATABASE_MODE === 'postgres' && pool) {
        try {
             await pool.query(
-                'INSERT INTO credit_cards (id, user_id, name, limit_amount, due_date_day, closing_date_day, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)', // Use same for created_at and updated_at on insert
+                'INSERT INTO credit_cards (id, user_id, name, limit_amount, due_date_day, closing_date_day, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)', 
                 [newCardId, userId, cardData.name, cardData.limit, cardData.dueDateDay, cardData.closingDateDay, now]
             );
             return { success: true, creditCardId: newCardId };
@@ -748,9 +756,10 @@ export const updateCreditCard = async (userId: string, cardId: string, data: Upd
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
-      values.push(cardId, userId);
+      values.push(cardId); 
+      values.push(userId); 
 
-      const query = `UPDATE credit_cards SET ${fields.join(', ')} WHERE id = $${queryIndex++} AND user_id = $${queryIndex++}`;
+      const query = `UPDATE credit_cards SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
       const res = await pool.query(query, values);
 
       if (res.rowCount === 0) return { success: false, error: "Credit card not found or not owned by user." };
@@ -782,9 +791,9 @@ export const deleteCreditCard = async (userId: string, cardId: string): Promise<
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      // First delete associated purchases
+      
       await client.query('DELETE FROM credit_card_purchases WHERE card_id = $1 AND user_id = $2', [cardId, userId]);
-      // Then delete the card
+      
       const res = await client.query('DELETE FROM credit_cards WHERE id = $1 AND user_id = $2', [cardId, userId]);
       await client.query('COMMIT');
       if (res.rowCount === 0) return { success: false, error: "Credit card not found or not owned by user." };
@@ -803,7 +812,7 @@ export const deleteCreditCard = async (userId: string, cardId: string): Promise<
     db.users[userId].creditCards = db.users[userId].creditCards.filter(cc => cc.id !== cardId);
     if (db.users[userId].creditCards.length === initialLength) return { success: false, error: "Credit card not found." };
 
-    // Also delete associated purchases for local DB
+    
     if (db.users[userId].creditCardPurchases) {
       db.users[userId].creditCardPurchases = db.users[userId].creditCardPurchases.filter(p => p.cardId !== cardId);
     }
@@ -822,7 +831,7 @@ export const addCreditCardPurchase = async (userId: string, purchaseData: NewCre
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
             await pool.query(
-                'INSERT INTO credit_card_purchases (id, user_id, card_id, purchase_date, description, category, total_amount, installments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)', // Use same for created_at and updated_at on insert
+                'INSERT INTO credit_card_purchases (id, user_id, card_id, purchase_date, description, category, total_amount, installments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)', 
                 [newPurchaseId, userId, purchaseData.cardId, purchaseData.date, purchaseData.description, purchaseData.category, purchaseData.totalAmount, purchaseData.installments, now]
             );
             return { success: true, purchaseId: newPurchaseId };
@@ -887,9 +896,10 @@ export const updateCreditCardPurchase = async (userId: string, purchaseId: strin
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
-      values.push(purchaseId, userId);
+      values.push(purchaseId); 
+      values.push(userId); 
 
-      const query = `UPDATE credit_card_purchases SET ${fields.join(', ')} WHERE id = $${queryIndex++} AND user_id = $${queryIndex++}`;
+      const query = `UPDATE credit_card_purchases SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
       const res = await pool.query(query, values);
 
       if (res.rowCount === 0) return { success: false, error: "Credit card purchase not found or not owned by user." };
@@ -970,13 +980,13 @@ export const addCategoryForUser = async (userId: string, categoryName: string, i
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
             const res = await pool.query(
-                'INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5) ON CONFLICT (user_id, name) DO NOTHING RETURNING id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at', // Use same for created_at and updated_at
+                'INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5) ON CONFLICT (user_id, name) DO NOTHING RETURNING id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at', 
                 [newCategoryId, userId, categoryName.trim(), isSystemDefined, now]
             );
             if (res.rows.length > 0) {
                  const cat = res.rows[0];
                  return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()} };
-            } else { // Category already exists, fetch it
+            } else { 
                 const existingRes = await pool.query('SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at FROM user_categories WHERE user_id = $1 AND name = $2', [userId, categoryName.trim()]);
                 if (existingRes.rows.length > 0) {
                     const cat = existingRes.rows[0];
@@ -986,7 +996,7 @@ export const addCategoryForUser = async (userId: string, categoryName: string, i
             }
         } catch (error: any) {
             console.error("Error adding category to PostgreSQL:", error.message);
-             if (error.code === '23505') { // Unique violation
+             if (error.code === '23505') { 
                 return { success: false, error: "Category already exists." };
             }
             return { success: false, error: "Database error adding category." };
@@ -1027,7 +1037,7 @@ export const addFinancialGoal = async (userId: string, goalData: NewFinancialGoa
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       await pool.query(
-        'INSERT INTO financial_goals (id, user_id, name, target_amount, current_amount, target_date, description, icon, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)', // Use same for created_at and updated_at
+        'INSERT INTO financial_goals (id, user_id, name, target_amount, current_amount, target_date, description, icon, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)', 
         [
           newGoalId, userId, goalData.name, goalData.targetAmount,
           goalData.currentAmount || 0, goalData.targetDate || null,
@@ -1100,7 +1110,7 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
 
       (Object.keys(updateData) as Array<keyof UpdateFinancialGoalData>).forEach(key => {
         if (updateData[key] !== undefined) {
-          const dbKeyMap: Record<keyof UpdateFinancialGoalData, string> = { // Ensure all keys are mapped
+          const dbKeyMap: Record<keyof UpdateFinancialGoalData, string> = { 
              name: 'name', targetAmount: 'target_amount', currentAmount: 'current_amount',
              targetDate: 'target_date', description: 'description', icon: 'icon', status: 'status',
           };
@@ -1115,9 +1125,10 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
 
-      values.push(goalId, userId);
+      values.push(goalId); 
+      values.push(userId); 
 
-      const query = `UPDATE financial_goals SET ${fields.join(', ')} WHERE id = $${queryIndex++} AND user_id = $${queryIndex++}`;
+      const query = `UPDATE financial_goals SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
       const res = await pool.query(query, values);
 
       if (res.rowCount === 0) return { success: false, error: "Goal not found or not owned by user." };
@@ -1173,7 +1184,7 @@ export const addInvestment = async (userId: string, investmentData: NewInvestmen
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       await pool.query(
-        'INSERT INTO investments (id, user_id, name, type, initial_amount, current_value, quantity, symbol, institution, acquisition_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)', // Use same for created_at and updated_at
+        'INSERT INTO investments (id, user_id, name, type, initial_amount, current_value, quantity, symbol, institution, acquisition_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)', 
         [
           newInvestmentId, userId, investmentData.name, investmentData.type,
           investmentData.initialAmount || null, investmentData.currentValue,
@@ -1257,9 +1268,10 @@ export const updateInvestment = async (userId: string, investmentId: string, upd
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
-      values.push(investmentId, userId);
+      values.push(investmentId); 
+      values.push(userId); 
 
-      const query = `UPDATE investments SET ${fields.join(', ')} WHERE id = $${queryIndex++} AND user_id = $${queryIndex++}`;
+      const query = `UPDATE investments SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
       const res = await pool.query(query, values);
 
       if (res.rowCount === 0) return { success: false, error: "Investment not found or not owned by user." };
@@ -1368,7 +1380,7 @@ async function migrateOldDbStructure() {
                               }
                           });
                           modified = true;
-                      } else { // Ensure categories have updatedAt
+                      } else { 
                         userRecord.categories = userRecord.categories.map(c => ({...c, updatedAt: c.updatedAt || c.createdAt}));
                         modified = true;
                       }
@@ -1556,7 +1568,7 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
           [goal.id, userId, goal.name, goal.targetAmount, goal.currentAmount, goal.targetDate || null, goal.description || null, goal.icon || null, goal.status, new Date(goal.createdAt), new Date(goal.updatedAt || goal.createdAt)]);
       }
       for (const inv of backupData.investments) {
-        await client.query('INSERT INTO investments (id, user_id, name, type, initial_amount, current_value, quantity, symbol, institution, acquisition_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)', // use same for created_at and updated_at for new records
+        await client.query('INSERT INTO investments (id, user_id, name, type, initial_amount, current_value, quantity, symbol, institution, acquisition_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)', 
           [inv.id, userId, inv.name, inv.type, inv.initialAmount, inv.currentValue, inv.quantity, inv.symbol, inv.institution, inv.acquisitionDate, inv.notes, new Date(inv.createdAt), new Date(inv.updatedAt || inv.createdAt)]);
       }
       await client.query('COMMIT');
