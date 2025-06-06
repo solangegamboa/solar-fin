@@ -380,9 +380,9 @@ export default function DashboardPage() {
       const monthBeforeSelected = subMonths(selectedDate, 1);
       const targetPrevMonthClosingMonth = getMonth(monthBeforeSelected);
       const targetPrevMonthClosingYear = getYear(monthBeforeSelected);
-      let ccBillsClosedLastMonth = 0;
+      let ccBillsClosedLastMonthForSelected = 0;
       fetchedCreditCards.forEach(card => {
-        ccBillsClosedLastMonth += calculateInvoiceTotalForCardAndMonth(
+        ccBillsClosedLastMonthForSelected += calculateInvoiceTotalForCardAndMonth(
           card,
           creditCardPurchases,
           targetPrevMonthClosingMonth,
@@ -411,7 +411,7 @@ export default function DashboardPage() {
         }
       });
 
-      const totalSelectedMonthExpensesWithLoansAndOldCC = projectedMonthExpenses + ccBillsClosedLastMonth + loanPaymentsForSelectedMonth;
+      const totalSelectedMonthExpensesWithLoansAndOldCC = projectedMonthExpenses + ccBillsClosedLastMonthForSelected + loanPaymentsForSelectedMonth;
 
 
       let cardSpendingForSelectedMonthBills = 0;
@@ -450,9 +450,24 @@ export default function DashboardPage() {
             }
         }
       });
+      
+      // Calculate CC bills closed in the *previous actual month* for Saldo Atual
+      const actualPreviousMonth = subMonths(actualCurrentDate, 1);
+      const actualPreviousMonthClosingMonth = getMonth(actualPreviousMonth);
+      const actualPreviousMonthClosingYear = getYear(actualPreviousMonth);
+      let ccBillsClosedPreviousActualMonth = 0;
+      fetchedCreditCards.forEach(card => {
+        ccBillsClosedPreviousActualMonth += calculateInvoiceTotalForCardAndMonth(
+            card,
+            creditCardPurchases,
+            actualPreviousMonthClosingMonth,
+            actualPreviousMonthClosingYear
+        );
+      });
+
 
       setSummary({
-        balance: baseLifetimeBalance - loanPaymentsDueInActualCurrentMonth,
+        balance: baseLifetimeBalance - loanPaymentsDueInActualCurrentMonth - ccBillsClosedPreviousActualMonth,
         selectedMonthIncome: projectedMonthIncome,
         selectedMonthExpenses: totalSelectedMonthExpensesWithLoansAndOldCC,
         selectedMonthCardSpending: cardSpendingForSelectedMonthBills,
@@ -919,3 +934,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
