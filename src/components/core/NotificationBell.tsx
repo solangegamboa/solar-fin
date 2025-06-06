@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Bell, CheckCheck, Sun } from 'lucide-react';
+import { Bell, CheckCheck, Sun, CalendarClock, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -20,32 +20,27 @@ import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { NotificationItem } from '@/types';
 
-function formatNotificationDate(dateString: string): string {
+function formatProjectedDate(dateString: string): string {
   const date = parseISO(dateString);
-  if (isToday(date)) {
-    return `Hoje, ${format(date, 'HH:mm', { locale: ptBR })}`;
+   if (isToday(date)) {
+    return `Hoje, ${format(date, 'dd/MM', { locale: ptBR })}`;
   }
   if (isYesterday(date)) {
-    return `Ontem, ${format(date, 'HH:mm', { locale: ptBR })}`;
+    return `Ontem, ${format(date, 'dd/MM', { locale: ptBR })}`;
   }
-  // For dates further than yesterday or in future, show relative or absolute
-  const now = new Date();
-  if (date > addDays(now, -7) && date < now ) { // within last 7 days
-     return `${formatDistanceToNowStrict(date, { locale: ptBR, addSuffix: true })}`;
-  }
-  return format(date, 'dd/MM/yy HH:mm', { locale: ptBR });
-}
-
-// Helper function to add days, used in formatNotificationDate
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
+  return format(date, 'dd/MM/yyyy', { locale: ptBR });
 }
 
 
 export function NotificationBell() {
-  const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead, refreshNotifications } = useNotifications();
+
+  // Refresh notifications when the dropdown is opened, to ensure data is fresh
+  const handleOpenChange = (open: boolean) => {
+    if (open) {
+      refreshNotifications();
+    }
+  };
 
   if (isLoading) {
     return (
@@ -56,7 +51,7 @@ export function NotificationBell() {
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative w-9 h-9">
           <Bell className="h-[1.2rem] w-[1.2rem]" />
@@ -73,7 +68,7 @@ export function NotificationBell() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 md:w-96">
         <DropdownMenuLabel className="flex justify-between items-center">
-          <span>Notificações</span>
+          <span>Notificações Agendadas</span>
           {notifications.length > 0 && unreadCount > 0 && (
              <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={(e) => { e.stopPropagation(); markAllAsRead();}}>
                 <CheckCheck className="mr-1 h-3 w-3" /> Marcar todas como lidas
@@ -83,7 +78,7 @@ export function NotificationBell() {
         <DropdownMenuSeparator />
         {notifications.length === 0 ? (
           <DropdownMenuItem disabled className="text-center text-muted-foreground py-4">
-            Nenhuma notificação recente.
+            Nenhuma notificação agendada.
           </DropdownMenuItem>
         ) : (
           <ScrollArea className="h-[300px] md:h-[400px]">
@@ -92,7 +87,7 @@ export function NotificationBell() {
               <DropdownMenuItem
                 key={notification.id}
                 onSelect={(e) => { 
-                    e.preventDefault(); // Prevent closing menu immediately
+                    e.preventDefault(); 
                     if (!notification.isRead) markAsRead(notification.id); 
                 }}
                 className={cn(
@@ -103,12 +98,28 @@ export function NotificationBell() {
                 {!notification.isRead && (
                   <span className="mt-1 block h-2 w-2 shrink-0 rounded-full bg-primary" />
                 )}
-                <div className={cn("flex-grow space-y-0.5", notification.isRead && "pl-[18px]")}> {/* Add padding if dot is not there */}
-                  <p className={cn("font-medium", !notification.isRead && "text-foreground")}>
-                    {notification.message}
+                <div className={cn("flex-grow space-y-0.5", notification.isRead && "pl-[18px]")}>
+                  <div className="flex items-center justify-between">
+                     <p className={cn("font-medium truncate", !notification.isRead && "text-foreground")} title={notification.message}>
+                        {notification.message}
+                     </p>
+                     {notification.isPast && (
+                        <Badge variant="outline" className="ml-2 text-xs px-1.5 py-0.5 border-yellow-500 text-yellow-600 bg-yellow-50 dark:text-yellow-400 dark:bg-yellow-900/30">
+                            Ocorrida
+                        </Badge>
+                     )}
+                     {!notification.isPast && (
+                        <Badge variant="default" className="ml-2 text-xs px-1.5 py-0.5 bg-blue-500 text-white">
+                            Agendada
+                        </Badge>
+                     )}
+                  </div>
+                  <p className="text-xs text-muted-foreground flex items-center">
+                    <CalendarClock className="mr-1 h-3.5 w-3.5" />
+                    Data Agendada: {formatProjectedDate(notification.projectedDate)}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Data da transação: {format(parseISO(notification.date), 'dd/MM/yyyy', { locale: ptBR })}
+                     Original: {notification.originalTransaction.category} ({formatDateFns(parseISO(notification.originalTransaction.date), 'dd/MM/yy', { locale: ptBR})})
                   </p>
                 </div>
               </DropdownMenuItem>

@@ -19,9 +19,9 @@ export interface Transaction {
   type: TransactionType;
   amount: number;
   category: string; // This will now reference a UserCategory.name
-  date: string;
+  date: string; // Original date of the transaction template
   description?: string;
-  recurrenceFrequency?: RecurrenceFrequency; // Added
+  recurrenceFrequency?: RecurrenceFrequency;
   createdAt: number;
   updatedAt?: number; // Added for consistency
   receiptImageUri?: string | null; 
@@ -103,7 +103,7 @@ export interface NewTransactionData {
   category: string; // Will be the category name string
   date: string;
   description?: string;
-  recurrenceFrequency?: RecurrenceFrequency; // Added
+  recurrenceFrequency?: RecurrenceFrequency;
   receiptImageUri?: string | null; 
 }
 
@@ -189,7 +189,7 @@ export interface ExtractCardInfoOutput {
 
 // Backup and Restore types
 export interface UserBackupData {
-  profile: Pick<UserProfile, 'email' | 'displayName' | 'notifyByEmail'>; // Added notifyByEmail
+  profile: Pick<UserProfile, 'email' | 'displayName' | 'notifyByEmail'>;
   transactions: Transaction[];
   loans: Loan[];
   creditCards: CreditCard[];
@@ -200,4 +200,16 @@ export interface UserBackupData {
 
 export interface UpdateEmailNotificationPrefsData {
     notifyByEmail: boolean;
+}
+
+// Notification specific type
+export interface NotificationItem {
+  id: string; // Unique ID for the notification instance, e.g., `tx-${originalTx.id}-${projectedDate}`
+  type: 'scheduled_transaction'; // More specific type
+  relatedId: string; // Original transaction ID (from Transaction.id)
+  message: string; // Formatted message, e.g., "Agendamento: Salário - R$ 5.000,00"
+  projectedDate: string; // Projected date of the occurrence (ISO string, e.g., "2023-10-27")
+  isRead: boolean;
+  isPast: boolean; // True if the projected date is in the past relative to today
+  originalTransaction: Transaction; // The original recurring transaction template for context
 }
