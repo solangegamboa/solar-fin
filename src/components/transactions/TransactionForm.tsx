@@ -35,14 +35,33 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CurrencyInput } from '@/components/ui/currency-input';
 
+const amountSchema = z.preprocess(
+  (val) => {
+    if (typeof val === 'string') {
+      // Remove "R$", espaços, e pontos (como separador de milhar). Troca vírgula por ponto para decimal.
+      const numStr = val.replace(/[R$\s.]/g, "").replace(",", ".");
+      const num = parseFloat(numStr);
+      return isNaN(num) ? val : num; // Retorna o valor original se não puder parsear, para Zod lidar. Ou NaN.
+    }
+    if (typeof val === 'number') {
+      return val;
+    }
+    // Se for null ou undefined, z.number() (ou z.coerce.number() se fosse o caso) lidaria.
+    // Para required_error funcionar bem, pode ser melhor retornar undefined se val for null ou empty string.
+    if (val === null || val === '') return undefined;
+    return val;
+  },
+  z.number({ required_error: 'O valor é obrigatório.', invalid_type_error: 'O valor deve ser um número válido.' })
+    .positive({ message: 'O valor deve ser positivo.' })
+    .min(0.01, { message: 'O valor deve ser maior que R$ 0,00.' }) // Ajustado para > 0.00
+);
+
+
 const transactionFormSchema = z.object({
   type: z.enum(['income', 'expense'], {
     required_error: 'O tipo da transação é obrigatório.',
   }),
-  amount: z.coerce
-    .number({ invalid_type_error: 'O valor deve ser um número.' , required_error: 'O valor é obrigatório.'})
-    .positive({ message: 'O valor deve ser positivo.' })
-    .min(0.01, { message: 'O valor deve ser maior que zero.' }),
+  amount: amountSchema,
   category: z.string().min(1, { message: 'A categoria é obrigatória.' }).max(50, { message: 'A categoria deve ter no máximo 50 caracteres.'}),
   date: z.date({
     required_error: 'A data da transação é obrigatória.',
@@ -268,11 +287,14 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
       'Authorization': `Bearer ${token}`,
     };
 
+    // O valor 'amount' já foi processado pelo Zod e deve ser um número aqui
+    const amountAsNumber = values.amount; 
+
     try {
       if (existingTransaction) {
         const updateData: UpdateTransactionData = {
             type: values.type,
-            amount: Number(values.amount),
+            amount: amountAsNumber,
             category: values.category,
             date: format(values.date, 'yyyy-MM-dd'),
             description: values.description || undefined,
@@ -288,7 +310,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
       } else {
         const transactionData: NewTransactionData = {
           type: values.type,
-          amount: Number(values.amount),
+          amount: amountAsNumber,
           category: values.category,
           date: format(values.date, 'yyyy-MM-dd'),
           description: values.description || undefined,
@@ -423,16 +445,16 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         <FormField
           control={form.control}
           name="amount"
-          render={({ field: { onChange, onBlur, value, name, ref } }) => (
+          render={({ field }) => ( // field includes value, onChange, onBlur, name, ref
             <FormItem>
               <FormLabel>Valor (R$)</FormLabel>
               <FormControl>
                 <CurrencyInput
-                  name={name}
-                  value={value}
-                  onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
-                  onBlur={onBlur}
-                  ref={ref}
+                  value={field.value} // Pass RHF's value to CurrencyInput
+                  onChange={field.onChange} // Pass RHF's onChange to CurrencyInput
+                  onBlur={field.onBlur} // Pass RHF's onBlur
+                  name={field.name} // Pass RHF's name
+                  ref={field.ref} // Pass RHF's ref
                   placeholder="R$ 0,00"
                   disabled={isSubmitting || isProcessingImage}
                 />
