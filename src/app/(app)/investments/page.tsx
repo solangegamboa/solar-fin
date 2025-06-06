@@ -63,17 +63,24 @@ export default function InvestmentsPage() {
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
 
   const fetchInvestments = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+        // If user is not available in AuthContext, set loading to false and don't fetch.
+        // The AppLayout should redirect to login if user is truly not authenticated.
+        // This check prevents an API call if AuthContext hasn't initialized user yet but isn't loading.
+        setIsLoading(false);
+        return;
+    }
     setIsLoading(true);
     setError(null);
     try {
+      // Ensure credentials: 'include' is present for sending cookies
       const response = await fetch('/api/investments', { credentials: 'include' });
       const data = await response.json();
       if (response.ok && data.success) {
         setInvestments(data.investments);
       } else {
         setError(data.message || "Falha ao carregar investimentos.");
-        toast({ variant: "destructive", title: "Erro", description: data.message || "Falha ao carregar investimentos." });
+        toast({ variant: "destructive", title: "Erro ao Carregar", description: data.message || "Falha ao carregar os investimentos da sua conta." });
       }
     } catch (e: any) {
       setError("Falha ao conectar com o servidor para carregar investimentos.");
@@ -84,13 +91,13 @@ export default function InvestmentsPage() {
   }, [user, toast]);
 
   useEffect(() => {
-    if (user && !authLoading) {
+    if (!authLoading) { // Only fetch if auth loading is complete
       fetchInvestments();
     }
-  }, [user, authLoading, fetchInvestments]);
+  }, [authLoading, fetchInvestments]);
 
   const handleInvestmentUpserted = (upsertedInvestment: Investment) => {
-    fetchInvestments();
+    fetchInvestments(); // Refetch to update the list
     setIsModalOpen(false);
     setInvestmentToEdit(null);
   };
@@ -118,7 +125,7 @@ export default function InvestmentsPage() {
     try {
       const response = await fetch(`/api/investments/${investmentToDelete.id}`, { 
         method: 'DELETE',
-        credentials: 'include'
+        credentials: 'include' // Ensure cookie is sent
       });
       const result = await response.json();
 
@@ -224,7 +231,7 @@ export default function InvestmentsPage() {
   if (authLoading) {
     return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
   }
-  if (!user && !authLoading) {
+  if (!user && !authLoading) { // This case should ideally be caught by AppLayout or a higher-level redirect
      return <div className="flex flex-col items-center justify-center h-64 text-muted-foreground"><AlertTriangleIcon className="h-12 w-12 mb-3" /><p className="text-lg">Por favor, faça login para acessar esta página.</p></div>;
   }
 
@@ -287,3 +294,5 @@ export default function InvestmentsPage() {
     </div>
   );
 }
+
+    
