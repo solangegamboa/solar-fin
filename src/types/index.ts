@@ -283,6 +283,27 @@ export interface ExtractStatementTransactionsOutput {
   accountName: string | null;
 }
 
+// Genkit Flow for extracting items from a credit card invoice/statement image
+export interface ExtractCardInvoiceInput {
+  imageDataUri: string;
+  defaultMonthYear?: string; // Optional: "MM/YYYY" or "YYYY-MM" to help AI with dates
+}
+
+export interface ExtractedInvoiceItem {
+  rawText: string | null;
+  description: string | null;
+  amount: number | null; // Should be positive, as it's a charge
+  date: string | null;   // YYYY-MM-DD, AI needs to infer this
+  // Installment info might be too complex for initial AI extraction, handle in UI
+}
+
+export interface ExtractCardInvoiceOutput {
+  items: ExtractedInvoiceItem[];
+  billingPeriod: string | null; // e.g., "JUL/2024", "01/07/2024 - 31/07/2024"
+  cardLastDigits: string | null; // e.g., "xxxx xxxx xxxx 1234" if visible
+  cardNameHint?: string | null; // e.g. "Meu Cartão Platinum" if visible
+}
+
 
 // Backup and Restore types
 export interface UserBackupData {
@@ -317,3 +338,6 @@ export interface UpdateResult {
   success: boolean;
   error?: string;
 }
+
+
+    

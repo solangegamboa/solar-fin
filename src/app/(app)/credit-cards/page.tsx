@@ -23,9 +23,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText, Edit3 } from "lucide-react";
+import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText, Edit3, FileImage } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
 import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
+import { ImportCardInvoiceDialog } from "@/components/credit-cards/ImportCardInvoiceDialog";
 import { getCreditCardsForUser, getCreditCardPurchasesForUser, deleteCreditCardPurchase } from "@/lib/databaseService";
 import type { CreditCard, CreditCardPurchase } from "@/types";
 import { useToast } from "@/hooks/use-toast";
@@ -50,8 +51,9 @@ const ptBRMonthNames = [
 export default function CreditCardsPage() {
   const { user, loading: authLoading } = useAuth();
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
-  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false); // For adding new purchase
-  const [isEditPurchaseModalOpen, setIsEditPurchaseModalOpen] = useState(false); // For editing purchase
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false); 
+  const [isEditPurchaseModalOpen, setIsEditPurchaseModalOpen] = useState(false); 
+  const [isImportInvoiceModalOpen, setIsImportInvoiceModalOpen] = useState(false);
   
   const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
   const [purchases, setPurchases] = useState<CreditCardPurchase[]>([]);
@@ -112,12 +114,19 @@ export default function CreditCardsPage() {
     fetchUserCreditCards(); 
   };
 
-  const handlePurchaseUpserted = () => { // Renamed to reflect add or edit
+  const handlePurchaseUpserted = () => { 
     setIsPurchaseModalOpen(false);
     setIsEditPurchaseModalOpen(false);
     setPurchaseToEdit(null);
     fetchUserPurchases();
   };
+  
+  const handleInvoiceImported = () => {
+    setIsImportInvoiceModalOpen(false);
+    fetchUserPurchases(); // Refresh purchases as new ones might have been added
+    // Potentially refresh cards too if AI could create one, but current flow doesn't do that.
+  };
+
 
   const handleOpenEditPurchaseModal = (purchase: CreditCardPurchase) => {
     setPurchaseToEdit(purchase);
@@ -436,7 +445,7 @@ export default function CreditCardsPage() {
           <h1 className="text-3xl font-bold tracking-tight font-headline">Cartões de Crédito</h1>
           <p className="text-muted-foreground">Gerencie seus cartões e compras parceladas.</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row flex-wrap justify-end gap-2 w-full sm:w-auto">
           <Dialog open={isCardModalOpen} onOpenChange={setIsCardModalOpen}>
             <DialogTrigger asChild><Button className="w-full sm:w-auto" disabled={!user}><PlusCircle className="mr-2 h-4 w-4" />Novo Cartão</Button></DialogTrigger>
             <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
@@ -449,6 +458,29 @@ export default function CreditCardsPage() {
             <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Adicionar Compra Parcelada</DialogTitle><DialogDescription>Registre uma nova compra no cartão de crédito.</DialogDescription></DialogHeader>
               {user && <CreditCardTransactionForm userCreditCards={creditCards} onSuccess={handlePurchaseUpserted} setOpen={setIsPurchaseModalOpen} userId={user.id} existingPurchase={null} />}
+            </DialogContent>
+          </Dialog>
+          <Dialog open={isImportInvoiceModalOpen} onOpenChange={setIsImportInvoiceModalOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" disabled={creditCards.length === 0 || !user} className="w-full sm:w-auto">
+                <FileImage className="mr-2 h-4 w-4" /> Importar Fatura (Beta)
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+               {user && creditCards.length > 0 && (
+                 <ImportCardInvoiceDialog 
+                    userId={user.id} 
+                    userCreditCards={creditCards}
+                    setOpen={setIsImportInvoiceModalOpen} 
+                    onSuccess={handleInvoiceImported}
+                 />
+                )}
+                {creditCards.length === 0 && (
+                  <div className="p-6 text-center">
+                    <CreditCardLucideIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Você precisa cadastrar um cartão de crédito antes de importar uma fatura.</p>
+                  </div>
+                )}
             </DialogContent>
           </Dialog>
         </div>
@@ -515,5 +547,6 @@ export default function CreditCardsPage() {
     </div>
   );
 }
+
 
     
