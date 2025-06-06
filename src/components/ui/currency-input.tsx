@@ -16,25 +16,27 @@ interface RHFInputProps {
 }
 
 // Combine RHF props with other standard input props, but exclude ones NumericFormat handles differently
-interface CurrencyInputProps extends Omit<InputProps, 'value' | 'onChange' | 'type'>, RHFInputProps {
-  // Custom prop to bridge RHF's onChange with NumericFormat's onValueChange behavior
-  // RHF's field.onChange expects the raw numeric value (or undefined/null for empty)
-  onValueChangeNumeric?: (value: number | undefined) => void;
-}
+interface CurrencyInputProps extends Omit<InputProps, 'value' | 'onChange' | 'type'>, RHFInputProps {}
 
 const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputProps>(
-  ({ value, name, onBlur, onValueChangeNumeric, className, ...rest }, ref) => {
-    
+  ({ value: rhfValue, name, onBlur: rhfOnBlur, onChange: rhfOnChange, className, ...rest }, ref) => {
+
     const handleValueChange = (values: NumberFormatValues) => {
-      if (onValueChangeNumeric) {
-        onValueChangeNumeric(values.floatValue);
+      if (rhfOnChange) {
+        // Pass floatValue (which is number | undefined) or null if it's undefined.
+        // RHF typically handles undefined or null for empty values.
+        rhfOnChange(values.floatValue === undefined ? null : values.floatValue);
       }
     };
 
-    // NumericFormat expects 'value' as string or number.
-    // If RHF field.value is null/undefined (empty), pass undefined to NumericFormat to show placeholder.
-    // Otherwise, ensure it's a number.
-    const numericValue = (value === null || value === undefined || value === '') ? undefined : Number(value);
+    // Determine the value to pass to NumericFormat.
+    // If RHF value is null, undefined, or an empty string, pass an empty string to NumericFormat.
+    // NumericFormat's `value` prop can accept string, number, or null.
+    // Using an empty string for "empty" state can sometimes be more stable for masked inputs.
+    const valueForNumericFormat =
+      (rhfValue === null || rhfValue === undefined || String(rhfValue).trim() === '')
+      ? '' // Use empty string for empty/null/undefined RHF values
+      : Number(rhfValue); // Ensure it's a number if it has a value, NumericFormat can handle numbers
 
     return (
       <NumericFormat
@@ -44,15 +46,15 @@ const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputProps>(
         customInput={React.forwardRef((props, inputRef) => (
           <Input {...props} ref={inputRef as React.Ref<HTMLInputElement>} className={cn("text-base md:text-sm", className)} />
         ))}
-        value={numericValue}
+        value={valueForNumericFormat} // Use the potentially empty string or number
         onValueChange={handleValueChange}
-        onBlur={onBlur} // Pass onBlur for RHF
+        onBlur={rhfOnBlur} // Pass RHF's onBlur
         thousandSeparator="."
         decimalSeparator=","
         prefix="R$ "
         decimalScale={2}
         fixedDecimalScale
-        allowNegative={false} // Most financial inputs are for positive amounts; type (income/expense) handles sign
+        allowNegative={false}
         type="text" // Masked inputs should be type="text" for proper behavior
         autoComplete="off"
       />
