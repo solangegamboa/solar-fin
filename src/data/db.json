@@ -571,6 +571,90 @@
           "recurrenceFrequency": "none",
           "createdAt": 1749239921486,
           "updatedAt": 1749239921486
+        },
+        {
+          "id": "fbcfdf81-1762-4edd-b37d-a990c24d8188",
+          "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
+          "type": "income",
+          "amount": 11079.07,
+          "category": "Importado",
+          "date": "2025-06-02",
+          "description": "Transf Saldo C/sal P/cc",
+          "recurrenceFrequency": "none",
+          "createdAt": 1749240184650,
+          "updatedAt": 1749240184650
+        },
+        {
+          "id": "ec8d0f34-ecad-4e4e-b1ed-d9de6e0978ba",
+          "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
+          "type": "expense",
+          "amount": 2797.93,
+          "category": "Importado",
+          "date": "2025-06-02",
+          "description": "Pagto Eletron Cobranca Aluguel",
+          "recurrenceFrequency": "none",
+          "createdAt": 1749240184852,
+          "updatedAt": 1749240184852
+        },
+        {
+          "id": "f987681f-ff7f-41f8-abc2-f63875360715",
+          "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
+          "type": "expense",
+          "amount": 702.74,
+          "category": "Importado",
+          "date": "2025-06-02",
+          "description": "Pagto Eletron Cobranca Aymore Credito Financiamento E",
+          "recurrenceFrequency": "none",
+          "createdAt": 1749240185036,
+          "updatedAt": 1749240185036
+        },
+        {
+          "id": "10908649-d19e-4e8d-ac52-cd0c145d359c",
+          "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
+          "type": "expense",
+          "amount": 530.2,
+          "category": "Importado",
+          "date": "2025-06-02",
+          "description": "Gastos Cartao de Credito",
+          "recurrenceFrequency": "none",
+          "createdAt": 1749240185577,
+          "updatedAt": 1749240185577
+        },
+        {
+          "id": "6a29eec6-dc0d-4ece-8c5d-4d8ef7b833be",
+          "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
+          "type": "expense",
+          "amount": 2151.2,
+          "category": "Importado",
+          "date": "2025-06-02",
+          "description": "Gastos Cartao de Credito",
+          "recurrenceFrequency": "none",
+          "createdAt": 1749240185860,
+          "updatedAt": 1749240185860
+        },
+        {
+          "id": "0dad5a71-37ef-4c8f-abd0-2dd496b800e7",
+          "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
+          "type": "expense",
+          "amount": 2260,
+          "category": "Importado",
+          "date": "2025-06-02",
+          "description": "Transferencia Pix Des: Solange da Silva Gamb 02/06-",
+          "recurrenceFrequency": "none",
+          "createdAt": 1749240186054,
+          "updatedAt": 1749240186054
+        },
+        {
+          "id": "067a2ac7-81f1-41f1-abbe-25f776cdab1f",
+          "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
+          "type": "expense",
+          "amount": 2000,
+          "category": "Importado",
+          "date": "2025-06-06",
+          "description": "Transferencia Pix",
+          "recurrenceFrequency": "none",
+          "createdAt": 1749240186238,
+          "updatedAt": 1749240186238
         }
       ],
       "loans": [

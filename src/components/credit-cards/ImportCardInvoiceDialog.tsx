@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import {
   DialogFooter,
   DialogClose,
-} from '@/components/ui/dialog'; // Removed DialogHeader, Title, Description
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -17,27 +17,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Combobox } from '@/components/ui/combobox';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { Sun, Upload, AlertTriangle, FileImage, Trash2, ScanLine, CreditCard as CreditCardIconLucide } from 'lucide-react';
+import { Sun, Upload, AlertTriangle, FileImage, Trash2, ScanLine } from 'lucide-react';
 import { extractCardInvoiceItemsFromImage } from '@/ai/flows/extract-card-invoice-items-flow';
-import type { ExtractCardInvoiceOutput, ExtractedInvoiceItem, UserCategory, NewCreditCardPurchaseData, CreditCard } from '@/types';
-import { addCreditCardPurchase, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
+import type { ExtractCardInvoiceOutput, UserCategory, NewCreditCardPurchaseData, CreditCard, CreditCardPurchase } from '@/types';
+import { addCreditCardPurchase, getCategoriesForUser, addCategoryForUser, getCreditCardPurchasesForUser } from '@/lib/databaseService';
 import { format, parseISO, isValid as isValidDate, getYear, getMonth } from 'date-fns';
-import { Card } from '@/components/ui/card'; 
 
-interface EditableExtractedInvoiceItem extends ExtractedInvoiceItem {
-  id: string; // For unique key in UI
-  isSelected: boolean;
-  userSelectedDate: Date | null;
-  userSelectedCategory: string;
-  userDescription: string;
-  userAmount: number | null;
-  userInstallments: number;
-}
+const IMPORTED_CARD_CATEGORY_NAME = "Fatura Cartão";
 
 interface ImportCardInvoiceDialogProps {
   userId: string;
@@ -50,38 +38,52 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
   const [selectedCardId, setSelectedCardId] = useState<string>('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [isProcessingImage, setIsProcessingImage] = useState(false);
-  const [extractionResult, setExtractionResult] = useState<ExtractCardInvoiceOutput | null>(null);
-  const [editableItems, setEditableItems] = useState<EditableExtractedInvoiceItem[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [defaultDate, setDefaultDate] = useState<Date | undefined>(new Date());
-  const [userCategories, setUserCategories] = useState<UserCategory[]>([]);
-  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [userCategories, setUserCategories] = useState<UserCategory[]>([]); // Still useful for ensuring category exists
+  const [importedCardCategoryId, setImportedCardCategoryId] = useState<string | null>(null);
+  const [isLoadingPrerequisites, setIsLoadingPrerequisites] = useState(true);
   const [extractionAttemptId, setExtractionAttemptId] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const fetchUserCategories = useCallback(async () => {
+  const fetchAndEnsureImportedCardCategory = useCallback(async () => {
     if (!userId) return;
-    setIsLoadingCategories(true);
+    setIsLoadingPrerequisites(true);
     try {
-      const categories = await getCategoriesForUser(userId);
+      let categories = await getCategoriesForUser(userId);
       setUserCategories(categories);
+
+      let importedCat = categories.find(c => c.name === IMPORTED_CARD_CATEGORY_NAME);
+      if (!importedCat) {
+        const result = await addCategoryForUser(userId, IMPORTED_CARD_CATEGORY_NAME, false);
+        if (result.success && result.category) {
+          importedCat = result.category;
+          setUserCategories(prev => [...prev, result.category!].sort((a,b) => a.name.localeCompare(b.name)));
+        } else {
+          toast({ variant: "destructive", title: "Erro Crítico", description: `Não foi possível criar a categoria "${IMPORTED_CARD_CATEGORY_NAME}". A importação não pode continuar.` });
+          setIsLoadingPrerequisites(false);
+          return;
+        }
+      }
+      setImportedCardCategoryId(importedCat.id);
     } catch (error) {
-      console.error('Failed to fetch user categories:', error);
-      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar suas categorias.' });
+      console.error('Failed to fetch/create imported card category:', error);
+      toast({ variant: "destructive", title: "Erro ao Preparar Categorias", description: "Não foi possível carregar ou criar a categoria padrão para importação de fatura." });
     } finally {
-      setIsLoadingCategories(false);
+      setIsLoadingPrerequisites(false);
     }
   }, [userId, toast]);
 
   useEffect(() => {
-    fetchUserCategories();
-    if (userCreditCards.length > 0) {
+    fetchAndEnsureImportedCardCategory();
+    if (userCreditCards.length > 0 && !selectedCardId) {
       setSelectedCardId(userCreditCards[0].id);
     }
-  }, [fetchUserCategories, userCreditCards]);
+  }, [fetchAndEnsureImportedCardCategory, userCreditCards, selectedCardId]);
+
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -92,22 +94,18 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
         setImagePreviewUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
-      setExtractionResult(null);
-      setEditableItems([]);
     }
   };
 
   const handleClearImage = () => {
     setImageFile(null);
     setImagePreviewUrl(null);
-    setExtractionResult(null);
-    setEditableItems([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
 
-  const handleExtractItems = async () => {
+  const handleExtractAndImportItems = async () => {
     if (!imageFile || !imagePreviewUrl) {
       toast({ variant: 'destructive', title: 'Nenhuma Imagem', description: 'Por favor, carregue uma imagem da fatura.' });
       return;
@@ -116,170 +114,157 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
       toast({ variant: 'destructive', title: 'Nenhum Cartão Selecionado', description: 'Selecione um cartão de crédito para associar as compras.' });
       return;
     }
+     if (isLoadingPrerequisites || !importedCardCategoryId) {
+      toast({ variant: 'destructive', title: 'Preparando...', description: 'Aguarde a configuração da categoria de importação ou verifique erros anteriores.' });
+      return;
+    }
     setExtractionAttemptId(prev => prev + 1);
-    setIsProcessingImage(true);
-    setExtractionResult(null);
-    setEditableItems([]);
+    setIsProcessing(true);
 
-    
+    let extractionResult: ExtractCardInvoiceOutput | null = null;
+    let existingCardPurchases: CreditCardPurchase[] = [];
+
     let defaultMonthYearForAI: string | undefined = undefined;
     const selectedCard = userCreditCards.find(c => c.id === selectedCardId);
-    if (selectedCard) {
-        
-        const invoiceMonth = getMonth(defaultDate || new Date()); 
-        const invoiceYear = getYear(defaultDate || new Date());
+    if (selectedCard && defaultDate) {
+        const invoiceMonth = getMonth(defaultDate); 
+        const invoiceYear = getYear(defaultDate);
         defaultMonthYearForAI = `${String(invoiceMonth + 1).padStart(2, '0')}/${invoiceYear}`;
     }
 
-
     try {
-      const result = await extractCardInvoiceItemsFromImage({
+      extractionResult = await extractCardInvoiceItemsFromImage({
         imageDataUri: imagePreviewUrl,
         defaultMonthYear: defaultMonthYearForAI,
       });
-      setExtractionResult(result);
-      if (result.items && result.items.length > 0) {
-        setEditableItems(
-          result.items.map((item, index) => {
-            let parsedDate: Date | null = null;
-            if (item.date) {
-                try {
-                    parsedDate = parseISO(item.date);
-                    if (!isValidDate(parsedDate)) parsedDate = null;
-                } catch (e) { parsedDate = null; }
-            }
-            return {
-              ...item,
-              id: `extracted-item-${index}-${Date.now()}`,
-              isSelected: true,
-              userSelectedDate: parsedDate || defaultDate || new Date(),
-              userSelectedCategory: '',
-              userDescription: item.description || item.rawText || '',
-              userAmount: item.amount,
-              userInstallments: 1, 
-            };
-          })
-        );
-        toast({ title: 'Extração Concluída', description: `${result.items.length} itens encontrados. Revise e confirme.` });
-      } else {
-        toast({ title: 'Extração Concluída', description: 'Nenhum item encontrado na imagem da fatura.' });
-      }
+      existingCardPurchases = await getCreditCardPurchasesForUser(userId); // Fetch all purchases for the user
     } catch (error: any) {
-      console.error('Error extracting items from invoice image:', error);
-      toast({ variant: 'destructive', title: 'Erro na Extração', description: error.message || 'Não foi possível processar a imagem.' });
-    } finally {
-      setIsProcessingImage(false);
-    }
-  };
-
-  const handleItemFieldChange = (id: string, field: keyof EditableExtractedInvoiceItem, value: any) => {
-    setEditableItems(prev =>
-      prev.map(item => (item.id === id ? { ...item, [field]: value } : item))
-    );
-  };
-  
-  const handleAddNewCategory = async (categoryName: string): Promise<UserCategory | null> => {
-    if (!userId) {
-      toast({ variant: "destructive", title: "Erro", description: "Usuário não identificado." });
-      return null;
-    }
-    setIsSaving(true);
-    const result = await addCategoryForUser(userId, categoryName);
-    setIsSaving(false);
-    if (result.success && result.category) {
-      setUserCategories(prev => [...prev, result.category!].sort((a,b) => a.name.localeCompare(b.name)));
-      return result.category;
-    } else {
-      toast({ variant: "destructive", title: "Erro ao Adicionar Categoria", description: result.error || "Não foi possível salvar a nova categoria." });
-      return null;
-    }
-  };
-
-
-  const handleSaveSelectedItems = async () => {
-    if (!selectedCardId) {
-      toast({ variant: 'destructive', title: 'Cartão Não Selecionado', description: 'Por favor, selecione o cartão de crédito desta fatura.' });
-      return;
-    }
-    const itemsToSave = editableItems.filter(item => item.isSelected);
-    if (itemsToSave.length === 0) {
-      toast({ title: 'Nenhum Item Selecionado', description: 'Marque os itens que deseja importar.' });
+      console.error('Error extracting items from invoice or fetching existing purchases:', error);
+      toast({ variant: 'destructive', title: 'Erro na Extração/Preparação', description: error.message || 'Não foi possível processar a imagem ou buscar compras existentes.' });
+      setIsProcessing(false);
       return;
     }
 
-    let allValid = true;
-    for (const item of itemsToSave) {
-      if (!item.userAmount || item.userAmount <= 0) {
-        toast({ variant: 'destructive', title: 'Valor Inválido', description: `Item "${item.userDescription}" tem valor inválido.` });
-        allValid = false; break;
-      }
-      if (!item.userSelectedDate) {
-        toast({ variant: 'destructive', title: 'Data Inválida', description: `Item "${item.userDescription}" não tem data.` });
-        allValid = false; break;
-      }
-      if (!item.userSelectedCategory) {
-        toast({ variant: 'destructive', title: 'Categoria Inválida', description: `Selecione a categoria para "${item.userDescription}".` });
-        allValid = false; break;
-      }
-       if (item.userInstallments < 1 || !Number.isInteger(item.userInstallments)) {
-        toast({ variant: 'destructive', title: 'Parcelas Inválidas', description: `Número de parcelas para "${item.userDescription}" deve ser um inteiro positivo.` });
-        allValid = false; break;
-      }
+    if (!extractionResult || !extractionResult.items || extractionResult.items.length === 0) {
+      toast({ title: 'Extração Concluída', description: 'Nenhum item encontrado ou identificado na imagem da fatura.' });
+      setIsProcessing(false);
+      return;
     }
 
-    if (!allValid) return;
-
-    setIsSaving(true);
     let successCount = 0;
     let errorCount = 0;
+    let skippedDuplicateCount = 0;
 
-    for (const item of itemsToSave) {
+    const purchasesForSelectedCard = existingCardPurchases.filter(p => p.cardId === selectedCardId);
+
+    for (const item of extractionResult.items) {
+      let purchaseDate: Date | null = null;
+      if (item.date) {
+        try {
+          purchaseDate = parseISO(item.date);
+          if (!isValidDate(purchaseDate)) purchaseDate = null;
+        } catch (e) { purchaseDate = null; }
+      }
+      purchaseDate = purchaseDate || defaultDate || new Date();
+      
+      const amount = item.amount !== null && item.amount !== undefined ? Math.abs(item.amount) : 0;
+      if (amount <= 0) {
+        console.warn("Skipping invoice item with zero or invalid amount:", item);
+        continue;
+      }
+
+      const currentDescription = (item.description || item.rawText || 'Compra Importada Fatura').toLowerCase().trim();
+      const currentAmount = parseFloat(amount.toFixed(2));
+      const currentCategory = IMPORTED_CARD_CATEGORY_NAME.toLowerCase();
+
+      const isDuplicate = purchasesForSelectedCard.some(existingPurchase => {
+        const existingDescription = (existingPurchase.description || '').toLowerCase().trim();
+        const existingAmount = parseFloat(existingPurchase.totalAmount.toFixed(2)); // Compare total amount, not installment
+        const existingCategory = (existingPurchase.category || '').toLowerCase();
+        
+        return existingDescription === currentDescription &&
+               existingCategory === currentCategory &&
+               existingAmount === currentAmount &&
+               existingPurchase.installments === 1; // Only consider it duplicate if it was also a 1-installment purchase
+      });
+
+      if (isDuplicate) {
+        skippedDuplicateCount++;
+        console.log(`Skipping duplicate card purchase: ${currentDescription}, Amount: ${currentAmount}`);
+        continue;
+      }
+
       const newPurchaseData: NewCreditCardPurchaseData = {
         cardId: selectedCardId,
-        date: format(item.userSelectedDate!, 'yyyy-MM-dd'),
-        description: item.userDescription,
-        category: item.userSelectedCategory,
-        totalAmount: item.userAmount!,
-        installments: item.userInstallments,
+        date: format(purchaseDate, 'yyyy-MM-dd'),
+        description: item.description || item.rawText || 'Compra Importada Fatura',
+        category: IMPORTED_CARD_CATEGORY_NAME,
+        totalAmount: amount,
+        installments: 1, // Default to 1 installment for simplicity
       };
+
       try {
         const result = await addCreditCardPurchase(userId, newPurchaseData);
-        if (result.success) {
+        if (result.success && result.purchaseId) {
           successCount++;
+          // Add to temp list to avoid re-importing within the same batch
+          purchasesForSelectedCard.push({
+            id: result.purchaseId,
+            userId,
+            ...newPurchaseData,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          });
         } else {
           errorCount++;
-          console.error(`Failed to save purchase "${item.userDescription}": ${result.error}`);
+          console.error(`Failed to save card purchase "${newPurchaseData.description}": ${result.error}`);
         }
       } catch (e) {
         errorCount++;
-        console.error(`Exception saving purchase "${item.userDescription}":`, e);
+        console.error(`Exception saving card purchase "${newPurchaseData.description}":`, e);
       }
     }
-    setIsSaving(false);
 
+    setIsProcessing(false);
+
+    let summaryMessages: string[] = [];
     if (successCount > 0) {
-      toast({ title: 'Importação Concluída', description: `${successCount} compras salvas com sucesso.` });
-      if (onSuccess) onSuccess();
+      summaryMessages.push(`${successCount} compras salvas com sucesso na categoria "${IMPORTED_CARD_CATEGORY_NAME}" (com 1 parcela).`);
+    }
+    if (skippedDuplicateCount > 0) {
+      summaryMessages.push(`${skippedDuplicateCount} compras foram puladas por serem duplicadas.`);
     }
     if (errorCount > 0) {
-      toast({ variant: 'destructive', title: 'Erros na Importação', description: `${errorCount} compras não puderam ser salvas. Verifique o console.` });
+      summaryMessages.push(`${errorCount} compras não puderam ser salvas (algumas podem ter sido puladas por dados insuficientes).`);
     }
-    if (successCount > 0 && errorCount === 0) {
+     if (summaryMessages.length === 0 && extractionResult.items.length > 0) {
+        summaryMessages.push("Nenhuma compra nova foi importada. Verifique se já existem ou se os dados são válidos.");
+    }
+
+    if (summaryMessages.length > 0) {
+      toast({
+        title: 'Importação de Fatura Concluída',
+        description: summaryMessages.join(' '),
+        duration: successCount > 0 && errorCount === 0 && skippedDuplicateCount === 0 ? 5000 : 8000,
+      });
+    }
+
+    if (onSuccess && successCount > 0) onSuccess();
+    
+    if (successCount > 0 && errorCount === 0 && skippedDuplicateCount === 0) {
       setOpen(false);
-    } else if (successCount > 0 && errorCount > 0) {
-      setEditableItems(prev => prev.filter(item => !item.isSelected || itemsToSave.find(saved => saved.id === item.id && errorCount > 0)));
     }
   };
 
+
   return (
-    <div className="flex flex-col w-full flex-grow min-h-0"> {/* Changed from h-full */}
-      {/* Main content area */}
-      <div className="flex flex-col flex-grow min-h-0 space-y-4"> {/* Removed p-1 and overflow-y-auto */}
-        <div className="space-y-4 px-0 pt-0"> {/* Content above results */}
+    <div className="flex flex-col h-full w-full">
+      <div className="flex-grow min-h-0 space-y-4 overflow-y-auto p-1">
+        <div className="space-y-4 px-0 pt-0">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                  <Label htmlFor="credit-card-select">Cartão de Crédito</Label>
-                  <Select value={selectedCardId} onValueChange={setSelectedCardId} disabled={isProcessingImage || isSaving || userCreditCards.length === 0}>
+                  <Label htmlFor="credit-card-select">Cartão de Crédito da Fatura</Label>
+                  <Select value={selectedCardId} onValueChange={setSelectedCardId} disabled={isProcessing || isLoadingPrerequisites || userCreditCards.length === 0}>
                       <SelectTrigger id="credit-card-select">
                       <SelectValue placeholder={userCreditCards.length > 0 ? "Selecione um cartão" : "Nenhum cartão cadastrado"} />
                       </SelectTrigger>
@@ -297,7 +282,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
                       value={defaultDate}
                       onChange={(date) => setDefaultDate(date)}
                       buttonClassName="w-full"
-                      disabled={isProcessingImage || isSaving}
+                      disabled={isProcessing || isLoadingPrerequisites}
                   />
                   <p className="text-xs text-muted-foreground mt-1">Usada para ajudar a IA a inferir o ano/mês das compras.</p>
               </div>
@@ -313,10 +298,10 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
                 onChange={handleFileChange}
                 ref={fileInputRef}
                 className="flex-grow"
-                disabled={isProcessingImage || isSaving}
+                disabled={isProcessing || isLoadingPrerequisites}
               />
               {imagePreviewUrl && (
-                <Button variant="outline" size="icon" onClick={handleClearImage} disabled={isProcessingImage || isSaving} title="Limpar imagem">
+                <Button variant="outline" size="icon" onClick={handleClearImage} disabled={isProcessing || isLoadingPrerequisites} title="Limpar imagem">
                   <Trash2 className="h-4 w-4" />
                 </Button>
               )}
@@ -329,127 +314,26 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
           </div>
         </div>
 
-
         {imageFile && (
-          <Button onClick={handleExtractItems} disabled={isProcessingImage || isSaving || !imageFile || !selectedCardId} className="w-full">
-            {isProcessingImage ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : <ScanLine className="mr-2 h-4 w-4" />}
-            {isProcessingImage ? 'Extraindo Itens...' : 'Extrair Itens da Fatura'}
+          <Button onClick={handleExtractAndImportItems} disabled={isProcessing || isLoadingPrerequisites || !imageFile || !selectedCardId} className="w-full">
+            {isProcessing ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : <ScanLine className="mr-2 h-4 w-4" />}
+            {isProcessing ? 'Importando...' : 'Extrair e Importar Itens'}
           </Button>
         )}
-
-        {/* Results Section */}
-        {extractionResult && editableItems.length > 0 && (
-          <div key={extractionAttemptId} className="flex flex-col flex-grow min-h-0 space-y-4">
-            <div className="p-2 border rounded-md bg-muted/20 text-sm">
-              {extractionResult.cardNameHint && <p><strong>Cartão (Extrato):</strong> {extractionResult.cardNameHint}</p>}
-              {extractionResult.cardLastDigits && <p><strong>Final:</strong> {extractionResult.cardLastDigits}</p>}
-              {extractionResult.billingPeriod && <p><strong>Período:</strong> {extractionResult.billingPeriod}</p>}
-            </div>
-            
-            <Alert>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Revise com Atenção!</AlertTitle>
-                <AlertDescription>
-                    Verifique os dados extraídos e ajuste data, categoria, valor e número de parcelas antes de importar.
-                </AlertDescription>
-            </Alert>
-
-            <ScrollArea className="flex-grow border rounded-md">
-              <div className="space-y-3 p-3">
-                {editableItems.map((item) => (
-                  <Card key={item.id} className="p-3 space-y-2 text-xs shadow-sm">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id={`select-item-${item.id}`}
-                        checked={item.isSelected}
-                        onCheckedChange={(checked) => handleItemFieldChange(item.id, 'isSelected', !!checked)}
-                        disabled={isSaving}
-                      />
-                      <div className="flex-grow">
-                        <Label htmlFor={`desc-item-${item.id}`} className="text-xs font-normal">Descrição Original</Label>
-                        <p className="text-xs text-muted-foreground truncate" title={item.rawText || undefined}>{item.rawText}</p>
-                        <Input
-                          id={`desc-item-${item.id}`}
-                          value={item.userDescription}
-                          onChange={(e) => handleItemFieldChange(item.id, 'userDescription', e.target.value)}
-                          placeholder="Descrição da Compra"
-                          className="h-8 mt-0.5"
-                          disabled={isSaving}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 items-end">
-                      <div>
-                        <Label htmlFor={`amount-item-${item.id}`} className="text-xs">Valor (R$)</Label>
-                        <Input
-                          id={`amount-item-${item.id}`}
-                          type="number"
-                          step="0.01"
-                          value={item.userAmount === null ? '' : item.userAmount}
-                          onChange={(e) => handleItemFieldChange(item.id, 'userAmount', e.target.value === '' ? null : parseFloat(e.target.value))}
-                          placeholder="0.00"
-                          className="h-8"
-                          disabled={isSaving}
-                        />
-                      </div>
-                       <div>
-                        <Label htmlFor={`installments-item-${item.id}`} className="text-xs">Parcelas</Label>
-                        <Input
-                          id={`installments-item-${item.id}`}
-                          type="number"
-                          step="1"
-                          min="1"
-                          value={item.userInstallments}
-                          onChange={(e) => handleItemFieldChange(item.id, 'userInstallments', parseInt(e.target.value, 10) || 1)}
-                          className="h-8"
-                          disabled={isSaving}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor={`date-item-${item.id}`} className="text-xs">Data da Compra</Label>
-                        <DatePicker
-                          value={item.userSelectedDate || undefined}
-                          onChange={(date) => handleItemFieldChange(item.id, 'userSelectedDate', date)}
-                          buttonClassName="h-8 w-full"
-                          disabled={isSaving}
-                        />
-                      </div>
-                    </div>
-                     <div>
-                        <Label htmlFor={`category-item-${item.id}`} className="text-xs">Categoria</Label>
-                        <Combobox
-                            items={userCategories}
-                            value={item.userSelectedCategory}
-                            onChange={(value) => handleItemFieldChange(item.id, 'userSelectedCategory', value)}
-                            onAddNewCategory={handleAddNewCategory}
-                            placeholder="Selecione ou crie"
-                            searchPlaceholder="Buscar ou criar..."
-                            emptyMessage={isLoadingCategories ? "Carregando..." : "Nenhuma. Digite para criar."}
-                            disabled={isLoadingCategories || isSaving}
-                        />
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
-        )}
-        {extractionResult && editableItems.length === 0 && !isProcessingImage && (
-             <p className="text-center text-muted-foreground py-4">Nenhum item foi identificado na imagem da fatura. Tente uma imagem mais nítida.</p>
-        )}
+         <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Importação Automática de Fatura</AlertTitle>
+            <AlertDescription>
+                Os itens extraídos serão salvos automaticamente com a categoria "{IMPORTED_CARD_CATEGORY_NAME}" e com 1 parcela.
+                Compras com dados insuficientes ou duplicadas (mesma descrição, categoria, valor e 1 parcela no cartão selecionado) serão puladas.
+            </AlertDescription>
+        </Alert>
       </div>
-      <DialogFooter className="pt-4 border-t"> {/* Rely on DialogContent for p-6 */}
+
+      <DialogFooter className="pt-4 border-t mt-auto bg-background p-6">
         <DialogClose asChild>
-          <Button variant="outline" disabled={isProcessingImage || isSaving}>Cancelar</Button>
+          <Button variant="outline" disabled={isProcessing}>Cancelar</Button>
         </DialogClose>
-        <Button
-          onClick={handleSaveSelectedItems}
-          disabled={isProcessingImage || isSaving || !selectedCardId || editableItems.filter(item => item.isSelected).length === 0}
-        >
-          {isSaving ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-          {isSaving ? 'Salvando...' : `Adicionar (${editableItems.filter(item => item.isSelected).length}) Selecionadas`}
-        </Button>
       </DialogFooter>
     </div>
   );
