@@ -398,14 +398,15 @@ export default function DashboardPage() {
           </Button>
       </div>
       
-       <div className="flex flex-row items-center justify-center sm:justify-end gap-2">
+       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center sm:justify-end gap-2">
          <Button onClick={handleCurrentMonth} variant="secondary" size="icon" aria-label="Mês Atual" disabled={isCurrentMonthSelected()}>
             <CalendarClock />
           </Button>
           <Dialog open={isTransactionModalOpen} onOpenChange={setIsTransactionModalOpen}>
             <DialogTrigger asChild>
-              <Button size="icon" aria-label="Nova Transação" disabled={!user}>
-                <PlusCircle />
+              <Button className="w-full sm:w-auto" disabled={!user}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Nova Transação
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
@@ -418,8 +419,9 @@ export default function DashboardPage() {
           </Dialog>
           <Dialog open={isCreditCardPurchaseModalOpen} onOpenChange={setIsCreditCardPurchaseModalOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="icon" aria-label="Nova Compra (Cartão)" disabled={!user || userCreditCards.length === 0}>
-                <ShoppingBag/>
+              <Button variant="outline" className="w-full sm:w-auto" disabled={!user || userCreditCards.length === 0}>
+                <ShoppingBag className="mr-2 h-4 w-4"/>
+                Nova Compra
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
