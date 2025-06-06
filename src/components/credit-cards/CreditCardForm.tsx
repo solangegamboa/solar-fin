@@ -21,7 +21,7 @@ import { addCreditCard, type NewCreditCardData, type AddCreditCardResult } from 
 import { extractCardInfoFromImage } from '@/ai/flows/extract-card-info-flow';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CurrencyInput } from '@/components/ui/currency-input';
+// CurrencyInput is no longer used
 
 const creditCardFormSchema = z.object({
   name: z.string().min(1, { message: 'O nome do cartão é obrigatório.' }).max(50, {message: 'O nome do cartão deve ter no máximo 50 caracteres.'}),
@@ -303,17 +303,18 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
         <FormField
           control={form.control}
           name="limit"
-          render={({ field: { onChange, onBlur, value, name, ref } }) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Limite (R$)</FormLabel>
               <FormControl>
-                <CurrencyInput
-                  name={name}
-                  value={value}
-                  onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
-                  onBlur={onBlur}
-                  ref={ref}
+                <Input
+                  type="number"
+                  step="0.01"
+                  lang="pt-BR"
                   placeholder="R$ 5.000,00"
+                  {...field}
+                  value={field.value === undefined ? '' : field.value}
+                  onChange={e => field.onChange(e.target.valueAsNumber === undefined || isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber)}
                   disabled={isSubmitting || isProcessingImage}
                 />
               </FormControl>

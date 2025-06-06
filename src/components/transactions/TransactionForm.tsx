@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input'; // Import Input
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
@@ -33,28 +34,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { extractTransactionDetailsFromImage } from '@/ai/flows/extract-transaction-details-flow';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CurrencyInput } from '@/components/ui/currency-input';
+// CurrencyInput is no longer used
 
-const amountSchema = z.preprocess(
-  (val) => {
-    if (typeof val === 'string') {
-      // Remove "R$", espaços, e pontos (como separador de milhar). Troca vírgula por ponto para decimal.
-      const numStr = val.replace(/[R$\s.]/g, "").replace(",", ".");
-      const num = parseFloat(numStr);
-      return isNaN(num) ? val : num; // Retorna o valor original se não puder parsear, para Zod lidar. Ou NaN.
-    }
-    if (typeof val === 'number') {
-      return val;
-    }
-    // Se for null ou undefined, z.number() (ou z.coerce.number() se fosse o caso) lidaria.
-    // Para required_error funcionar bem, pode ser melhor retornar undefined se val for null ou empty string.
-    if (val === null || val === '') return undefined;
-    return val;
-  },
-  z.number({ required_error: 'O valor é obrigatório.', invalid_type_error: 'O valor deve ser um número válido.' })
-    .positive({ message: 'O valor deve ser positivo.' })
-    .min(0.01, { message: 'O valor deve ser maior que R$ 0,00.' }) // Ajustado para > 0.00
-);
+const amountSchema = z.coerce
+  .number({
+    required_error: 'O valor é obrigatório.',
+    invalid_type_error: 'O valor deve ser um número válido.',
+  })
+  .positive({ message: 'O valor deve ser positivo.' })
+  .min(0.01, { message: 'O valor deve ser maior que R$ 0,00.' });
 
 
 const transactionFormSchema = z.object({
@@ -287,7 +275,6 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
       'Authorization': `Bearer ${token}`,
     };
 
-    // O valor 'amount' já foi processado pelo Zod e deve ser um número aqui
     const amountAsNumber = values.amount; 
 
     try {
@@ -445,17 +432,18 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         <FormField
           control={form.control}
           name="amount"
-          render={({ field }) => ( // field includes value, onChange, onBlur, name, ref
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Valor (R$)</FormLabel>
               <FormControl>
-                <CurrencyInput
-                  value={field.value} // Pass RHF's value to CurrencyInput
-                  onChange={field.onChange} // Pass RHF's onChange to CurrencyInput
-                  onBlur={field.onBlur} // Pass RHF's onBlur
-                  name={field.name} // Pass RHF's name
-                  ref={field.ref} // Pass RHF's ref
-                  placeholder="R$ 0,00"
+                <Input
+                  type="number"
+                  step="0.01"
+                  lang="pt-BR"
+                  placeholder="R$ 1.234,56"
+                  {...field}
+                  value={field.value === undefined ? '' : field.value} // Ensure value is string for input
+                  onChange={e => field.onChange(e.target.valueAsNumber === undefined || isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber)}
                   disabled={isSubmitting || isProcessingImage}
                 />
               </FormControl>

@@ -30,7 +30,7 @@ import type { CreditCard, NewCreditCardPurchaseData, UserCategory, CreditCardPur
 import { format, parseISO } from 'date-fns';
 import { Combobox } from '@/components/ui/combobox';
 import { useAuth } from '@/contexts/AuthContext';
-import { CurrencyInput } from '@/components/ui/currency-input';
+// CurrencyInput is no longer used
 
 const purchaseSchema = z.object({
   cardId: z.string().min(1, { message: 'Selecione um cartão de crédito.' }),
@@ -298,17 +298,18 @@ export function CreditCardTransactionForm({
           <FormField
             control={form.control}
             name="totalAmount"
-            render={({ field: { onChange, onBlur, value, name, ref } }) => (
+            render={({ field }) => (
               <FormItem>
                 <FormLabel>Valor Total (R$)</FormLabel>
                 <FormControl>
-                  <CurrencyInput
-                    name={name}
-                    value={value}
-                    onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
-                    onBlur={onBlur}
-                    ref={ref}
+                  <Input
+                    type="number"
+                    step="0.01"
+                    lang="pt-BR"
                     placeholder="R$ 300,00"
+                    {...field}
+                    value={field.value === undefined ? '' : field.value}
+                    onChange={e => field.onChange(e.target.valueAsNumber === undefined || isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber)}
                     disabled={isSubmitting}
                   />
                 </FormControl>

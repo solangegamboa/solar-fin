@@ -29,7 +29,7 @@ import { useState } from 'react';
 import type { Investment, NewInvestmentData, UpdateInvestmentData, InvestmentType } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
-import { CurrencyInput } from '@/components/ui/currency-input';
+// CurrencyInput is no longer used
 
 const investmentTypes: { value: InvestmentType; label: string }[] = [
   { value: 'stock', label: 'Ações' },
@@ -221,17 +221,18 @@ export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen 
         <FormField
           control={form.control}
           name="currentValue"
-          render={({ field: { onChange, onBlur, value, name, ref } }) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Valor Atual (R$)</FormLabel>
               <FormControl>
-                 <CurrencyInput
-                  name={name}
-                  value={value}
-                  onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
-                  onBlur={onBlur}
-                  ref={ref}
+                 <Input
+                  type="number"
+                  step="0.01"
+                  lang="pt-BR"
                   placeholder="R$ 1.500,00"
+                  {...field}
+                  value={field.value === undefined ? '' : field.value}
+                  onChange={e => field.onChange(e.target.valueAsNumber === undefined || isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber)}
                   disabled={isSubmitting}
                 />
               </FormControl>
@@ -244,17 +245,18 @@ export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen 
           <FormField
             control={form.control}
             name="initialAmount"
-            render={({ field: { onChange, onBlur, value, name, ref } }) => (
+            render={({ field }) => (
               <FormItem>
                 <FormLabel>Valor Inicial Investido (R$, Opcional)</FormLabel>
                 <FormControl>
-                   <CurrencyInput
-                    name={name}
-                    value={value}
-                    onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
-                    onBlur={onBlur}
-                    ref={ref}
+                   <Input
+                    type="number"
+                    step="0.01"
+                    lang="pt-BR"
                     placeholder="R$ 1.000,00"
+                    {...field}
+                    value={field.value === undefined || field.value === null ? '' : field.value}
+                    onChange={e => field.onChange(e.target.valueAsNumber === undefined || isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber)}
                     disabled={isSubmitting}
                   />
                 </FormControl>

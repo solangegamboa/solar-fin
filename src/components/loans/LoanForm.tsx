@@ -22,7 +22,7 @@ import { useState } from 'react';
 import { addLoan, type NewLoanData } from '@/lib/databaseService';
 import type { Loan } from '@/types';
 import { format, parseISO } from 'date-fns';
-import { CurrencyInput } from '@/components/ui/currency-input';
+// CurrencyInput is no longer used
 
 const loanFormSchema = z.object({
   bankName: z.string().min(1, { message: 'O nome do banco é obrigatório.' }).max(50, { message: 'Máximo de 50 caracteres.'}),
@@ -143,17 +143,18 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
         <FormField
           control={form.control}
           name="installmentAmount"
-          render={({ field: { onChange, onBlur, value, name, ref } }) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Valor da Parcela (R$)</FormLabel>
               <FormControl>
-                <CurrencyInput
-                  name={name}
-                  value={value}
-                  onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
-                  onBlur={onBlur}
-                  ref={ref}
+                <Input
+                  type="number"
+                  step="0.01"
+                  lang="pt-BR"
                   placeholder="R$ 500,00"
+                  {...field}
+                  value={field.value === undefined ? '' : field.value}
+                  onChange={e => field.onChange(e.target.valueAsNumber === undefined || isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber)}
                   disabled={isSubmitting}
                 />
               </FormControl>

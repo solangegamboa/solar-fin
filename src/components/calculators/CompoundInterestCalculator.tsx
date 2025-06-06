@@ -25,7 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useState } from 'react';
 import { formatCurrency } from '@/lib/utils';
 import { TrendingUp, Percent, CalendarClock, Layers, RefreshCw, Equal } from 'lucide-react';
-import { CurrencyInput } from '@/components/ui/currency-input';
+// CurrencyInput is no longer used
 
 const compoundInterestSchema = z.object({
   principal: z.coerce
@@ -102,17 +102,18 @@ export function CompoundInterestCalculator() {
           <FormField
             control={form.control}
             name="principal"
-            render={({ field: { onChange, onBlur, value, name, ref } }) => (
+            render={({ field }) => (
               <FormItem>
                 <FormLabel className="flex items-center"><TrendingUp className="mr-2 h-4 w-4 text-muted-foreground" />Valor Principal (R$)</FormLabel>
                 <FormControl>
-                  <CurrencyInput
-                    name={name}
-                    value={value}
-                    onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
-                    onBlur={onBlur}
-                    ref={ref}
+                  <Input
+                    type="number"
+                    step="0.01"
+                    lang="pt-BR"
                     placeholder="R$ 1.000,00"
+                    {...field}
+                    value={field.value === undefined ? '' : field.value}
+                    onChange={e => field.onChange(e.target.valueAsNumber === undefined || isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber)}
                   />
                 </FormControl>
                 <FormMessage />
