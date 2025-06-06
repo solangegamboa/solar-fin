@@ -4,10 +4,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
@@ -31,7 +30,7 @@ import { extractCardInvoiceItemsFromImage } from '@/ai/flows/extract-card-invoic
 import type { ExtractCardInvoiceOutput, ExtractedInvoiceItem, UserCategory, NewCreditCardPurchaseData, CreditCard } from '@/types';
 import { addCreditCardPurchase, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
 import { format, parseISO, isValid as isValidDate, getYear, getMonth } from 'date-fns';
-import { Card } from '../ui/card'; 
+import { Card } from '@/components/ui/card'; 
 
 interface EditableExtractedInvoiceItem extends ExtractedInvoiceItem {
   id: string; // For unique key in UI
@@ -276,7 +275,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
   };
 
   return (
-    <>
+    <div className="flex flex-col h-full w-full">
       <DialogHeader>
         <DialogTitle>Importar Itens da Fatura do Cartão</DialogTitle>
         <DialogDescription>
@@ -284,7 +283,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
           Revise e ajuste as informações antes de importar.
         </DialogDescription>
       </DialogHeader>
-      <div className="space-y-4 p-1 max-h-[calc(85vh-200px)] flex flex-col">
+      <div className="flex-grow space-y-4 p-1 overflow-y-auto min-h-0">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <Label htmlFor="credit-card-select">Cartão de Crédito</Label>
@@ -457,7 +456,6 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
           {isSaving ? 'Salvando...' : `Adicionar (${editableItems.filter(item => item.isSelected).length}) Selecionadas`}
         </Button>
       </DialogFooter>
-    </>
+    </div>
   );
 }
-

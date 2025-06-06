@@ -4,11 +4,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
@@ -270,7 +268,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
 
 
   return (
-    <>
+    <div className="flex flex-col h-full w-full">
       <DialogHeader>
         <DialogTitle>Importar Transações de Extrato Bancário</DialogTitle>
         <DialogDescription>
@@ -278,7 +276,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
             Revise e ajuste as informações antes de importar.
         </DialogDescription>
       </DialogHeader>
-      <div className="space-y-4 p-1 max-h-[calc(85vh-180px)] flex flex-col">
+      <div className="flex-grow space-y-4 p-1 overflow-y-auto min-h-0">
         <div className="space-y-2">
           <Label htmlFor="statement-image">Imagem do Extrato</Label>
           <div className="flex items-center gap-2">
@@ -438,7 +436,6 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
           {isSaving ? 'Salvando...' : `Adicionar (${editableTransactions.filter(tx => tx.isSelected).length}) Selecionadas`}
         </Button>
       </DialogFooter>
-    </>
+    </div>
   );
 }
-
