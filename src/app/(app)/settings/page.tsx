@@ -14,11 +14,11 @@ import { ThemeToggle } from "@/components/core/ThemeToggle";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Switch } from "@/components/ui/switch"; // Added Switch
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Info, Sun, KeyRound, UserCircle2, Download, Upload, AlertTriangle as AlertTriangleIcon, Database, Mail } from 'lucide-react'; // Added Mail
-import type { AuthApiResponse, UserBackupData, UpdateEmailNotificationPrefsData } from '@/types';
+import { Info, Sun, KeyRound, UserCircle2, Download, Upload, AlertTriangle as AlertTriangleIcon, Database, Mail } from 'lucide-react';
+import type { AuthApiResponse, UserBackupData, UpdateEmailNotificationPrefsData, UserProfile } from '@/types';
 import { format } from 'date-fns';
 import {
   AlertDialog,
@@ -32,7 +32,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from '@/components/ui/skeleton';
-
 
 type DataStorageMode = "local" | "postgres";
 
@@ -53,7 +52,7 @@ type PasswordChangeFormValues = z.infer<typeof passwordChangeSchema>;
 
 
 export default function SettingsPage() {
-  const { user, loading: authLoading, updateUserContext, logout } = useAuth();
+  const { user, loading: authLoading, updateUserContext, logout, getToken } = useAuth();
   const { toast } = useToast();
   const [currentServerDbMode, setCurrentServerDbMode] = useState<DataStorageMode | null>(null);
   const [isLoadingDbMode, setIsLoadingDbMode] = useState(true);
@@ -93,16 +92,17 @@ export default function SettingsPage() {
     const fetchDbMode = async () => {
       setIsLoadingDbMode(true);
       try {
+        // This API call does not require auth token.
         const response = await fetch('/api/system/db-mode');
         if (response.ok) {
           const data = await response.json();
           setCurrentServerDbMode(data.mode as DataStorageMode);
         } else {
-          setCurrentServerDbMode('local'); // Fallback
+          setCurrentServerDbMode('local'); 
           toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível identificar o modo de banco de dados do servidor.' });
         }
       } catch (error) {
-        setCurrentServerDbMode('local'); // Fallback
+        setCurrentServerDbMode('local'); 
         toast({ variant: 'destructive', title: 'Erro de Rede', description: 'Não foi possível conectar para verificar o modo do banco.' });
       } finally {
         setIsLoadingDbMode(false);
@@ -111,17 +111,31 @@ export default function SettingsPage() {
     fetchDbMode();
   }, [toast]);
 
+  const getAuthHeaders = (): Record<string, string> | null => {
+    const token = getToken();
+    if (!token) {
+      toast({ variant: 'destructive', title: 'Erro de Autenticação', description: 'Sessão inválida. Faça login novamente.' });
+      return null;
+    }
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+  };
 
   const handleUpdateDisplayName = async (values: DisplayNameFormValues) => {
     if (!user) return;
+    const headers = getAuthHeaders();
+    if (!headers) return;
+
     setIsDisplayNameSubmitting(true);
     try {
       const response = await fetch('/api/user/update-display-name', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ displayName: values.displayName }),
       });
-      const data: AuthApiResponse = await response.json();
+      const data: AuthApiResponse & { user?: UserProfile } = await response.json();
       if (response.ok && data.success && data.user) {
         toast({ title: 'Sucesso!', description: 'Nome de exibição atualizado.' });
         updateUserContext({ displayName: data.user.displayName });
@@ -137,11 +151,14 @@ export default function SettingsPage() {
 
   const handleChangePassword = async (values: PasswordChangeFormValues) => {
     if (!user) return;
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    
     setIsPasswordSubmitting(true);
     try {
       const response = await fetch('/api/user/change-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           currentPassword: values.currentPassword,
           newPassword: values.newPassword,
@@ -163,25 +180,28 @@ export default function SettingsPage() {
 
   const handleEmailNotificationChange = async (checked: boolean) => {
     if (!user) return;
+    const headers = getAuthHeaders();
+    if (!headers) return;
+
     setIsEmailNotificationSubmitting(true);
-    setEmailNotificationsEnabled(checked); // Optimistic update
+    setEmailNotificationsEnabled(checked); 
     try {
       const response = await fetch('/api/user/update-email-notification', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ notifyByEmail: checked } as UpdateEmailNotificationPrefsData),
       });
-      const data: AuthApiResponse = await response.json();
+      const data: AuthApiResponse & { user?: UserProfile } = await response.json();
       if (response.ok && data.success && data.user) {
         toast({ title: 'Sucesso!', description: `Notificações por e-mail ${checked ? 'ativadas' : 'desativadas'}.` });
         updateUserContext({ notifyByEmail: data.user.notifyByEmail });
       } else {
         toast({ variant: 'destructive', title: 'Erro', description: data.message || 'Não foi possível atualizar a preferência.' });
-        setEmailNotificationsEnabled(!checked); // Revert optimistic update on error
+        setEmailNotificationsEnabled(!checked); 
       }
     } catch (error) {
       toast({ variant: 'destructive', title: 'Erro de Rede', description: 'Não foi possível conectar ao servidor.' });
-      setEmailNotificationsEnabled(!checked); // Revert optimistic update on error
+      setEmailNotificationsEnabled(!checked); 
     } finally {
       setIsEmailNotificationSubmitting(false);
     }
@@ -189,20 +209,33 @@ export default function SettingsPage() {
 
   const handleBackup = async () => {
     if (!user) return;
+    const token = getToken();
+    if (!token) {
+      toast({ variant: 'destructive', title: 'Erro de Autenticação', description: 'Sessão inválida.' });
+      return;
+    }
     setIsBackupLoading(true);
     try {
-      const response = await fetch('/api/user/backup');
+      const response = await fetch('/api/user/backup', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Falha ao gerar backup.');
       }
-      const backupData: UserBackupData = await response.json();
-      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      // Filename is suggested by Content-Disposition header, browser handles download.
+      const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const userEmailPrefix = user.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '_');
-      const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
-      a.download = `solar_fin_backup_${userEmailPrefix}_${timestamp}.json`;
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `solar_fin_backup_${user.email?.split('@')[0] || 'user'}_${format(new Date(), 'yyyyMMdd_HHmmss')}.json`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+        if (filenameMatch && filenameMatch.length > 1) {
+          filename = filenameMatch[1];
+        }
+      }
+      a.download = filename;
       a.href = url;
       document.body.appendChild(a);
       a.click();
@@ -226,19 +259,22 @@ export default function SettingsPage() {
 
   const handleRestore = async () => {
     if (!user || !selectedRestoreFile) return;
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    
     setIsRestoreLoading(true);
     try {
       const fileReader = new FileReader();
       fileReader.onload = async (e) => {
         try {
           const backupData = JSON.parse(e.target?.result as string) as UserBackupData;
-          if (!backupData.profile || !backupData.transactions) { // Basic check, more thorough validation could be added
+          if (!backupData.profile || !backupData.transactions) { 
             throw new Error("Formato de arquivo de backup inválido.");
           }
 
           const response = await fetch('/api/user/restore', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(backupData),
           });
           const result = await response.json();
@@ -247,7 +283,7 @@ export default function SettingsPage() {
             setSelectedRestoreFile(null);
             if (restoreFileInputRef.current) restoreFileInputRef.current.value = "";
             setTimeout(() => {
-                 logout(); // AuthContext logout will redirect
+                 logout(); 
             }, 2000);
           } else {
             throw new Error(result.message || 'Falha ao restaurar os dados.');
@@ -276,7 +312,6 @@ export default function SettingsPage() {
   if (!user && !authLoading) {
      return <div className="flex flex-col items-center justify-center h-64 text-muted-foreground"><AlertTriangleIcon className="h-12 w-12 mb-3" /><p className="text-lg">Por favor, faça login para acessar esta página.</p></div>;
   }
-
 
   return (
     <div className="space-y-8">
@@ -416,7 +451,6 @@ export default function SettingsPage() {
       </Card>
       
       <Separator />
-
 
       <Card className="shadow-lg">
         <CardHeader>

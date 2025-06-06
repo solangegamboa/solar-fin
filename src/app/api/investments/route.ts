@@ -1,42 +1,16 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
-import jwt from 'jsonwebtoken';
-import { cookies } from 'next/headers';
+// import jwt from 'jsonwebtoken'; // Moved to authUtils
+// import { cookies } from 'next/headers'; // No longer using cookies
 import { addInvestment, getInvestmentsForUser } from '@/lib/databaseService';
-import type { UserProfile, NewInvestmentData, Investment } from '@/types';
+import type { NewInvestmentData, Investment } from '@/types';
+import { getUserIdFromAuthHeader } from '@/lib/authUtils';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const COOKIE_NAME = 'authToken';
-
-async function authenticateUser(req: NextRequest): Promise<UserProfile | null> {
-  if (!JWT_SECRET) {
-    console.error('AUTH_ERROR: JWT_SECRET is not set in /api/investments/route.ts');
-    return null;
-  }
-  const cookieStore = cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token) {
-    console.error('AUTH_ERROR: Auth token cookie not found in /api/investments/route.ts. Headers:', JSON.stringify(Object.fromEntries(req.headers)));
-    return null;
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as (Pick<UserProfile, 'id'> & {iat: number, exp: number});
-    if (decoded && decoded.id) {
-      // console.log('AUTH_SUCCESS: User authenticated in /api/investments/route.ts, UserId:', decoded.id);
-      return { id: decoded.id, email: '' }; // email not needed here
-    }
-    console.error('AUTH_ERROR: JWT decoded but no ID found in /api/investments/route.ts');
-    return null;
-  } catch (error: any) {
-     console.error('AUTH_ERROR: JWT verification failed in /api/investments/route.ts. Error:', error.message);
-    return null;
-  }
-}
+// Removed authenticateUser function
 
 export async function POST(req: NextRequest) {
-  const user = await authenticateUser(req);
-  if (!user) {
+  const userId = await getUserIdFromAuthHeader(req);
+  if (!userId) {
     return NextResponse.json({ success: false, message: 'Not authenticated.' }, { status: 401 });
   }
 
@@ -56,8 +30,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, message: 'Quantity cannot be negative.' }, { status: 400 });
     }
 
-
-    const result = await addInvestment(user.id, investmentData);
+    const result = await addInvestment(userId, investmentData);
     if (result.success && result.investmentId) {
       return NextResponse.json({ success: true, investmentId: result.investmentId, message: 'Investment added successfully.' }, { status: 201 });
     } else {
@@ -70,13 +43,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const user = await authenticateUser(req);
-  if (!user) {
+  const userId = await getUserIdFromAuthHeader(req);
+  if (!userId) {
     return NextResponse.json({ success: false, message: 'Not authenticated.' }, { status: 401 });
   }
 
   try {
-    const investments: Investment[] = await getInvestmentsForUser(user.id);
+    const investments: Investment[] = await getInvestmentsForUser(userId);
     return NextResponse.json({ success: true, investments }, { status: 200 });
   } catch (error: any) {
     console.error('Get investments error:', error);

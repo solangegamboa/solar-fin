@@ -28,6 +28,7 @@ import { Sun } from 'lucide-react';
 import { useState } from 'react';
 import type { Investment, NewInvestmentData, UpdateInvestmentData, InvestmentType } from '@/types';
 import { format, parseISO } from 'date-fns';
+import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 
 const investmentTypes: { value: InvestmentType; label: string }[] = [
   { value: 'stock', label: 'Ações' },
@@ -67,6 +68,7 @@ interface InvestmentFormProps {
 
 export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen }: InvestmentFormProps) {
   const { toast } = useToast();
+  const { getToken } = useAuth(); // Get getToken from AuthContext
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const defaultValues: Partial<InvestmentFormValues> = existingInvestment
@@ -96,12 +98,24 @@ export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen 
 
   const onSubmit = async (values: InvestmentFormValues) => {
     setIsSubmitting(true);
+    const token = getToken();
+    if (!token) {
+      toast({ variant: 'destructive', title: 'Erro de Autenticação', description: 'Sessão inválida.' });
+      setIsSubmitting(false);
+      return;
+    }
+
     const apiData: NewInvestmentData | UpdateInvestmentData = {
       ...values,
       acquisitionDate: values.acquisitionDate ? format(values.acquisitionDate, 'yyyy-MM-dd') : null,
       currentValue: values.currentValue, 
       initialAmount: values.initialAmount != null ? values.initialAmount : null,
       quantity: values.quantity != null ? values.quantity : null,
+    };
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
     };
 
     try {
@@ -111,20 +125,18 @@ export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen 
       if (existingInvestment) {
         response = await fetch(`/api/investments/${existingInvestment.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(apiData),
-          credentials: 'include',
         });
         result = await response.json();
         if (response.ok && result.success) {
-            onSuccess({ ...existingInvestment, ...values, acquisitionDate: apiData.acquisitionDate, updatedAt: Date.now() });
+            onSuccess({ ...existingInvestment, ...values, acquisitionDate: apiData.acquisitionDate, updatedAt: Date.now() } as Investment);
         }
       } else {
         response = await fetch('/api/investments', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(apiData),
-          credentials: 'include',
         });
         result = await response.json();
          if (response.ok && result.success && result.investmentId) {
@@ -140,7 +152,6 @@ export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen 
             } as Investment);
         }
       }
-
 
       if (response.ok && result.success) {
         toast({

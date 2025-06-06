@@ -1,38 +1,12 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
-import jwt from 'jsonwebtoken';
-import { cookies } from 'next/headers';
+// import jwt from 'jsonwebtoken'; // Moved to authUtils
+// import { cookies } from 'next/headers'; // No longer using cookies
 import { updateFinancialGoal, deleteFinancialGoal } from '@/lib/databaseService';
-import type { UserProfile, UpdateFinancialGoalData } from '@/types';
+import type { UpdateFinancialGoalData } from '@/types';
+import { getUserIdFromAuthHeader } from '@/lib/authUtils';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const COOKIE_NAME = 'authToken';
-
-async function authenticateUser(req: NextRequest): Promise<UserProfile | null> {
-  if (!JWT_SECRET) {
-    console.error('AUTH_ERROR: JWT_SECRET is not set in /api/goals/[goalId]/route.ts');
-    return null;
-  }
-  const cookieStore = cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token) {
-    console.error('AUTH_ERROR: Auth token cookie not found in /api/goals/[goalId]/route.ts. Headers:', JSON.stringify(Object.fromEntries(req.headers)));
-    return null;
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as (Pick<UserProfile, 'id'> & {iat: number, exp: number});
-     if (decoded && decoded.id) {
-      // console.log('AUTH_SUCCESS: User authenticated in /api/goals/[goalId]/route.ts, UserId:', decoded.id);
-      return { id: decoded.id, email: '' };
-    }
-    console.error('AUTH_ERROR: JWT decoded but no ID found in /api/goals/[goalId]/route.ts');
-    return null;
-  } catch (error: any) {
-    console.error('AUTH_ERROR: JWT verification failed in /api/goals/[goalId]/route.ts. Error:', error.message);
-    return null;
-  }
-}
+// Removed authenticateUser function
 
 interface RouteParams {
   params: {
@@ -41,8 +15,8 @@ interface RouteParams {
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
-  const user = await authenticateUser(req);
-  if (!user) {
+  const userId = await getUserIdFromAuthHeader(req);
+  if (!userId) {
     return NextResponse.json({ success: false, message: 'Not authenticated.' }, { status: 401 });
   }
   const { goalId } = params;
@@ -52,7 +26,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   try {
     const updateData = await req.json() as UpdateFinancialGoalData;
-    // Add more specific validation for updateData if needed
     if (updateData.targetAmount !== undefined && updateData.targetAmount <= 0) {
         return NextResponse.json({ success: false, message: 'Target amount must be positive.' }, { status: 400 });
     }
@@ -60,8 +33,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         return NextResponse.json({ success: false, message: 'Current amount cannot be negative.' }, { status: 400 });
     }
 
-
-    const result = await updateFinancialGoal(user.id, goalId, updateData);
+    const result = await updateFinancialGoal(userId, goalId, updateData);
     if (result.success) {
       return NextResponse.json({ success: true, message: 'Financial goal updated successfully.' }, { status: 200 });
     } else {
@@ -74,8 +46,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
-  const user = await authenticateUser(req);
-  if (!user) {
+  const userId = await getUserIdFromAuthHeader(req);
+  if (!userId) {
     return NextResponse.json({ success: false, message: 'Not authenticated.' }, { status: 401 });
   }
   const { goalId } = params;
@@ -84,7 +56,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    const result = await deleteFinancialGoal(user.id, goalId);
+    const result = await deleteFinancialGoal(userId, goalId);
     if (result.success) {
       return NextResponse.json({ success: true, message: 'Financial goal deleted successfully.' }, { status: 200 });
     } else {

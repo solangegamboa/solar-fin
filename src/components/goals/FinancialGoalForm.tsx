@@ -28,6 +28,7 @@ import { Sun, PiggyBank, Target, TrendingUp, Flag, XCircle } from 'lucide-react'
 import { useState } from 'react';
 import type { FinancialGoal, NewFinancialGoalData, UpdateFinancialGoalData, FinancialGoalStatus } from '@/types';
 import { format, parseISO } from 'date-fns';
+import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 
 const goalFormSchema = z.object({
   name: z.string().min(1, 'O nome da meta é obrigatório.').max(100, 'Máximo de 100 caracteres.'),
@@ -69,6 +70,7 @@ const iconOptions = [
 
 export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: FinancialGoalFormProps) {
   const { toast } = useToast();
+  const { getToken } = useAuth(); // Get getToken from AuthContext
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const defaultValues: Partial<GoalFormValues> = existingGoal
@@ -94,10 +96,22 @@ export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: 
 
   const onSubmit = async (values: GoalFormValues) => {
     setIsSubmitting(true);
+    const token = getToken();
+    if (!token) {
+      toast({ variant: 'destructive', title: 'Erro de Autenticação', description: 'Sessão inválida.' });
+      setIsSubmitting(false);
+      return;
+    }
+
     const goalData: NewFinancialGoalData | UpdateFinancialGoalData = {
       ...values,
       targetDate: values.targetDate ? format(values.targetDate, 'yyyy-MM-dd') : null,
       currentAmount: values.currentAmount || 0,
+    };
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
     };
 
     try {
@@ -105,16 +119,14 @@ export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: 
       if (existingGoal) {
         response = await fetch(`/api/goals/${existingGoal.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(goalData),
-          credentials: 'include',
         });
       } else {
         response = await fetch('/api/goals', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(goalData),
-          credentials: 'include',
         });
       }
 
@@ -285,7 +297,6 @@ export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: 
             )}
           />
         )}
-
 
         <div className="flex justify-end space-x-2 pt-4">
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>

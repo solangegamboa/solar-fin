@@ -1,69 +1,49 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { cookies } from 'next/headers';
+// import { cookies } from 'next/headers'; // No longer reading from cookies
 import { findUserById } from '@/lib/databaseService';
 import type { UserProfile } from '@/types';
-
+import { getUserIdFromAuthHeader } from '@/lib/authUtils'; // Import new utility
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const COOKIE_NAME = 'authToken';
+// const COOKIE_NAME = 'authToken'; // No longer used
 
 export async function GET(req: NextRequest) {
-  if (!JWT_SECRET) {
-    console.error('JWT_SECRET is not set');
+  if (!JWT_SECRET) { // JWT_SECRET check is also in getUserIdFromAuthHeader but doesn't hurt here
+    console.error('JWT_SECRET is not set in /api/auth/me');
     return NextResponse.json({ success: false, message: 'Server configuration error.' }, { status: 500 });
   }
 
-  const cookieStore = cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
+  const userId = await getUserIdFromAuthHeader(req);
 
-  if (!token) {
-    return NextResponse.json({ success: false, message: 'Not authenticated.' }, { status: 401 });
+  if (!userId) {
+    // getUserIdFromAuthHeader handles logging for token issues
+    return NextResponse.json({ success: false, message: 'Not authenticated or invalid token.' }, { status: 401 });
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as (Pick<UserProfile, 'id'> & {iat: number, exp: number});
-    
-    if (!decoded || !decoded.id) {
-      return NextResponse.json({ success: false, message: 'Invalid token payload.' }, { status: 401 });
-    }
-
-    const user = await findUserById(decoded.id);
+    const user = await findUserById(userId);
 
     if (!user) {
       // This case might mean the user was deleted after the token was issued.
-      // Invalidate the cookie.
-      const expiredCookie = serialize(COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
-      const response = NextResponse.json({ success: false, message: 'User not found.' }, { status: 401 });
-      response.headers.set('Set-Cookie', expiredCookie);
-      return response;
+      // Client side should handle this by clearing localStorage token if /me fails.
+      return NextResponse.json({ success: false, message: 'User not found.' }, { status: 401 });
     }
     
-    // Return only non-sensitive user data
     const userProfile: UserProfile = {
         id: user.id,
         email: user.email,
         displayName: user.displayName,
         createdAt: user.createdAt,
-        lastLoginAt: user.lastLoginAt
+        lastLoginAt: user.lastLoginAt,
+        notifyByEmail: user.notifyByEmail,
     };
 
     return NextResponse.json({ success: true, user: userProfile }, { status: 200 });
 
   } catch (error: any) {
-    console.error('Error verifying token or fetching user:', error.message);
-    // If token is expired or invalid, clear it.
-     const expiredCookie = serialize(COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
-     const response = NextResponse.json({ success: false, message: 'Invalid or expired token.' }, { status: 401 });
-     response.headers.set('Set-Cookie', expiredCookie);
-     return response;
+    console.error('Error fetching user by ID in /api/auth/me:', error.message);
+    return NextResponse.json({ success: false, message: 'Error retrieving user profile.' }, { status: 500 });
   }
-}
-
-// Helper function, not directly used by GET but good for type consistency
-// if you were to re-use token parsing logic elsewhere.
-function serialize(arg0: string, arg1: string, arg2: { httpOnly: boolean; maxAge: number; path: string; }): string | ReadableStream<Uint8Array> | null {
-    // Simplified serialize, production would use 'cookie' package's serialize
-    return `${arg0}=${arg1}; HttpOnly; Max-Age=${arg2.maxAge}; Path=${arg2.path}`;
 }

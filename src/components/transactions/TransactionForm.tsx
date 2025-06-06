@@ -23,18 +23,17 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-import { getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService'; // Removed addTransaction and updateTransaction
+import { getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
 import { useToast } from '@/hooks/use-toast';
 import { Sun, Camera, Paperclip, ScanLine, Trash2, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { UserCategory, RecurrenceFrequency, Transaction, NewTransactionData, UpdateTransactionData, AddTransactionResult } from '@/types';
+import type { UserCategory, RecurrenceFrequency, Transaction, NewTransactionData, UpdateTransactionData } from '@/types';
 import { Combobox } from '@/components/ui/combobox';
 import { useAuth } from '@/contexts/AuthContext';
 import { extractTransactionDetailsFromImage } from '@/ai/flows/extract-transaction-details-flow';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-
 
 const transactionFormSchema = z.object({
   type: z.enum(['income', 'expense'], {
@@ -64,7 +63,7 @@ interface TransactionFormProps {
 
 export function TransactionForm({ onSuccess, setOpen, userId, existingTransaction }: TransactionFormProps) {
   const { toast } = useToast();
-  const { user } = useAuth(); // Keep useAuth if needed for other purposes like userId, though it's passed as prop
+  const { getToken } = useAuth(); 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categories, setCategories] = useState<UserCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
@@ -78,12 +77,13 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-
   const fetchCategories = useCallback(async () => {
     if (!userId) return;
     setIsLoadingCategories(true);
     try {
-      const userCategories = await getCategoriesForUser(userId);
+      // Assuming getCategoriesForUser can be called client-side or via a GET API route if needed.
+      // If it's a server function, it needs to be callable from client (e.g. Server Action or via API route)
+      const userCategories = await getCategoriesForUser(userId); // This might need adjustment if it's server-only
       setCategories(userCategories);
     } catch (error) {
       console.error("Failed to fetch categories:", error);
@@ -144,7 +144,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
       reader.onloadend = () => {
         const result = reader.result as string;
         setImagePreviewUrl(result);
-        form.setValue('receiptImageUri', result); // Store in form if needed for submission
+        form.setValue('receiptImageUri', result);
       };
       reader.readAsDataURL(file);
     }
@@ -160,7 +160,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const dataUri = canvas.toDataURL('image/png');
         setImagePreviewUrl(dataUri);
-        form.setValue('receiptImageUri', dataUri); // Store in form
+        form.setValue('receiptImageUri', dataUri);
       }
       stopCamera();
     }
@@ -227,7 +227,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         setImagePreviewUrl(null);
       }
     } else {
-      form.reset({ // Reset to defaults for new transaction
+      form.reset({
         type: undefined,
         amount: '' as unknown as number,
         category: '',
@@ -236,20 +236,16 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         recurrenceFrequency: 'none',
         receiptImageUri: null,
       });
-      setImagePreviewUrl(null); // Clear image preview for new transaction
+      setImagePreviewUrl(null);
     }
   }, [existingTransaction, form]);
-
 
   const handleAddNewCategory = async (categoryName: string): Promise<UserCategory | null> => {
     if (!userId) {
       toast({ variant: "destructive", title: "Erro", description: "Usuário não identificado." });
       return null;
     }
-    // This function now relies on the server-side `addCategoryForUser` via an API or Server Action if needed
-    // For now, assuming getCategoriesForUser and addCategoryForUser might be client-callable for simplicity if they don't do sensitive ops.
-    // If they are strictly server, this needs an API endpoint.
-    // For this fix, we'll keep it as is, assuming it works or will be refactored if it also uses server-only code.
+    // Assuming addCategoryForUser is a server function that can be called or is an API endpoint
     const result = await addCategoryForUser(userId, categoryName);
     if (result.success && result.category) {
       setCategories(prev => [...prev, result.category!].sort((a, b) => a.name.localeCompare(b.name)));
@@ -262,7 +258,18 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
 
   const onSubmit = async (values: TransactionFormValues) => {
     setIsSubmitting(true);
+    const token = getToken();
+    if (!token) {
+      toast({ variant: 'destructive', title: 'Erro de Autenticação', description: 'Sessão inválida. Faça login novamente.' });
+      setIsSubmitting(false);
+      return;
+    }
+
     let result: { success: boolean; transactionId?: string; error?: string; message?: string };
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
 
     try {
       if (existingTransaction) {
@@ -271,13 +278,13 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
             amount: Number(values.amount),
             category: values.category,
             date: format(values.date, 'yyyy-MM-dd'),
-            description: values.description || undefined, // Send undefined if empty to potentially clear it
+            description: values.description || undefined,
             recurrenceFrequency: values.recurrenceFrequency || 'none',
-            receiptImageUri: imagePreviewUrl, // Use the state which holds the latest image URI
+            receiptImageUri: imagePreviewUrl,
         };
         const response = await fetch(`/api/transactions/${existingTransaction.id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(updateData),
         });
         result = await response.json();
@@ -293,7 +300,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         };
         const response = await fetch('/api/transactions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(transactionData),
         });
         result = await response.json();
@@ -416,7 +423,6 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         </div>
         <Separator className="my-4" />
 
-
         <FormField
           control={form.control}
           name="amount"
@@ -445,7 +451,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
                     placeholder="Selecione ou crie uma categoria"
                     searchPlaceholder="Buscar ou criar nova..."
                     emptyMessage={isLoadingCategories ? "Carregando categorias..." : "Nenhuma categoria. Digite para criar."}
-                    disabled={isSubmitting || isLoadingCategories || !user || isProcessingImage}
+                    disabled={isSubmitting || isLoadingCategories || !userId || isProcessingImage}
                 />
               <FormMessage />
             </FormItem>
@@ -508,12 +514,11 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
           )}
         />
 
-
         <div className="flex justify-end space-x-2 pt-2">
           <Button type="button" variant="outline" onClick={() => { stopCamera(); setOpen(false); }} disabled={isSubmitting || isProcessingImage}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isSubmitting || isLoadingCategories || !user || isProcessingImage}>
+          <Button type="submit" disabled={isSubmitting || isLoadingCategories || !userId || isProcessingImage}>
             {isSubmitting || isLoadingCategories || isProcessingImage ? (
               <>
                 <Sun className="mr-2 h-4 w-4 animate-spin" />

@@ -1,53 +1,26 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
-import jwt from 'jsonwebtoken';
-import { cookies } from 'next/headers';
+// import jwt from 'jsonwebtoken'; // Moved to authUtils
+// import { cookies } from 'next/headers'; // No longer using cookies
 import { addFinancialGoal, getFinancialGoalsForUser } from '@/lib/databaseService';
-import type { UserProfile, NewFinancialGoalData, FinancialGoal } from '@/types';
+import type { NewFinancialGoalData, FinancialGoal } from '@/types';
+import { getUserIdFromAuthHeader } from '@/lib/authUtils';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const COOKIE_NAME = 'authToken';
-
-async function authenticateUser(req: NextRequest): Promise<UserProfile | null> {
-  if (!JWT_SECRET) {
-    console.error('AUTH_ERROR: JWT_SECRET is not set in /api/goals/route.ts');
-    return null;
-  }
-  const cookieStore = cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token) {
-    console.error('AUTH_ERROR: Auth token cookie not found in /api/goals/route.ts. Headers:', JSON.stringify(Object.fromEntries(req.headers)));
-    return null;
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as (Pick<UserProfile, 'id'> & {iat: number, exp: number});
-    if (decoded && decoded.id) {
-      // console.log('AUTH_SUCCESS: User authenticated in /api/goals/route.ts, UserId:', decoded.id);
-      return { id: decoded.id, email: '' }; // email not needed here, just id
-    }
-    console.error('AUTH_ERROR: JWT decoded but no ID found in /api/goals/route.ts');
-    return null;
-  } catch (error: any) {
-    console.error('AUTH_ERROR: JWT verification failed in /api/goals/route.ts. Error:', error.message);
-    return null;
-  }
-}
+// Removed authenticateUser function
 
 export async function POST(req: NextRequest) {
-  const user = await authenticateUser(req);
-  if (!user) {
+  const userId = await getUserIdFromAuthHeader(req);
+  if (!userId) {
     return NextResponse.json({ success: false, message: 'Not authenticated.' }, { status: 401 });
   }
 
   try {
     const goalData = await req.json() as NewFinancialGoalData;
-    // Basic validation
     if (!goalData.name || typeof goalData.targetAmount !== 'number' || goalData.targetAmount <= 0) {
         return NextResponse.json({ success: false, message: 'Name and positive target amount are required.' }, { status: 400 });
     }
 
-    const result = await addFinancialGoal(user.id, goalData);
+    const result = await addFinancialGoal(userId, goalData);
     if (result.success && result.goalId) {
       return NextResponse.json({ success: true, goalId: result.goalId, message: 'Financial goal added successfully.' }, { status: 201 });
     } else {
@@ -60,13 +33,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const user = await authenticateUser(req);
-  if (!user) {
+  const userId = await getUserIdFromAuthHeader(req);
+  if (!userId) {
     return NextResponse.json({ success: false, message: 'Not authenticated.' }, { status: 401 });
   }
 
   try {
-    const goals: FinancialGoal[] = await getFinancialGoalsForUser(user.id);
+    const goals: FinancialGoal[] = await getFinancialGoalsForUser(userId);
     return NextResponse.json({ success: true, goals }, { status: 200 });
   } catch (error: any) {
     console.error('Get financial goals error:', error);

@@ -3,11 +3,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { findUserByEmail, updateUserLastLogin } from '@/lib/databaseService';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { serialize } from 'cookie';
+// import { serialize } from 'cookie'; // No longer serializing cookie
 import type { UserProfile } from '@/types';
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const COOKIE_NAME = 'authToken';
+// const COOKIE_NAME = 'authToken'; // Cookie no longer used here
 
 export async function POST(req: NextRequest) {
   if (!JWT_SECRET) {
@@ -36,27 +36,21 @@ export async function POST(req: NextRequest) {
 
     await updateUserLastLogin(user.id);
 
-    const userPayload: Pick<UserProfile, 'id' | 'email' | 'displayName'> = {
+    const userPayload: Pick<UserProfile, 'id' | 'email' | 'displayName' | 'notifyByEmail'> = {
       id: user.id,
       email: user.email,
       displayName: user.displayName,
+      notifyByEmail: user.notifyByEmail,
     };
     
-    const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' }); // Token JWT válido por 7 dias
+    const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
 
-    const cookie = serialize(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7, // Cookie válido por 1 semana (7 dias)
-      path: '/',
-      sameSite: 'lax',
-    });
-
-    const response = NextResponse.json<{ success: boolean; user: typeof userPayload }>(
-        { success: true, user: userPayload },
+    // Remove cookie setting, return token in body
+    const response = NextResponse.json<{ success: boolean; user: typeof userPayload; token: string }>(
+        { success: true, user: userPayload, token: token },
         { status: 200 }
     );
-    response.headers.set('Set-Cookie', cookie);
+    // response.headers.set('Set-Cookie', cookie); // Removed cookie setting
     return response;
 
   } catch (error: any) {

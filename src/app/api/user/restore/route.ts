@@ -1,45 +1,23 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
-import jwt from 'jsonwebtoken';
-import { cookies } from 'next/headers';
+// import jwt from 'jsonwebtoken'; // Moved to authUtils
+// import { cookies } from 'next/headers'; // No longer using cookies
 import { restoreUserBackupData } from '@/lib/databaseService';
-import type { UserProfile, UserBackupData } from '@/types';
+import type { UserBackupData } from '@/types';
+import { getUserIdFromAuthHeader } from '@/lib/authUtils';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const COOKIE_NAME = 'authToken';
+// const JWT_SECRET = process.env.JWT_SECRET; // Moved to authUtils
+// const COOKIE_NAME = 'authToken'; // No longer using cookies
 
 export async function POST(req: NextRequest) {
-  if (!JWT_SECRET) {
-    console.error('JWT_SECRET is not set');
-    return NextResponse.json({ success: false, message: 'Server configuration error.' }, { status: 500 });
-  }
-
-  const cookieStore = cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
-
-  if (!token) {
+  const userId = await getUserIdFromAuthHeader(req);
+  if (!userId) {
     return NextResponse.json({ success: false, message: 'Not authenticated.' }, { status: 401 });
-  }
-
-  let userId: string;
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as (Pick<UserProfile, 'id'> & {iat: number, exp: number});
-    if (!decoded || !decoded.id) {
-      return NextResponse.json({ success: false, message: 'Invalid token payload.' }, { status: 401 });
-    }
-    userId = decoded.id;
-  } catch (error: any) {
-     if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
-        return NextResponse.json({ success: false, message: 'Invalid or expired token.' }, { status: 401 });
-    }
-    console.error('Token verification error during restore:', error);
-    return NextResponse.json({ success: false, message: 'Authentication error.' }, { status: 401 });
   }
 
   try {
     const backupData = await req.json() as UserBackupData;
 
-    // Basic validation of backup data structure
     if (
       !backupData ||
       typeof backupData.profile !== 'object' ||
@@ -47,7 +25,9 @@ export async function POST(req: NextRequest) {
       !Array.isArray(backupData.loans) ||
       !Array.isArray(backupData.creditCards) ||
       !Array.isArray(backupData.creditCardPurchases) ||
-      !Array.isArray(backupData.categories)
+      !Array.isArray(backupData.categories) ||
+      !Array.isArray(backupData.financialGoals) || // Added check
+      !Array.isArray(backupData.investments)     // Added check
     ) {
       return NextResponse.json({ success: false, message: 'Invalid backup file format.' }, { status: 400 });
     }

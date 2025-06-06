@@ -1,36 +1,12 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
-import jwt from 'jsonwebtoken';
-import { cookies } from 'next/headers';
+// import jwt from 'jsonwebtoken'; // Moved to authUtils
+// import { cookies } from 'next/headers'; // No longer using cookies
 import { updateCreditCardPurchase, deleteCreditCardPurchase } from '@/lib/databaseService';
-import type { UserProfile, UpdateCreditCardPurchaseData, UpdateResult } from '@/types';
+import type { UpdateCreditCardPurchaseData, UpdateResult } from '@/types';
+import { getUserIdFromAuthHeader } from '@/lib/authUtils'; // Import new utility
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const COOKIE_NAME = 'authToken';
-
-async function authenticateUser(req: NextRequest): Promise<UserProfile | null> {
-  if (!JWT_SECRET) {
-    console.error('AUTH_ERROR: JWT_SECRET is not set in /api/credit-card-purchases/[purchaseId]/route.ts');
-    return null;
-  }
-  const cookieStore = cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token) {
-    console.error('AUTH_ERROR: Auth token cookie not found. Headers:', JSON.stringify(Object.fromEntries(req.headers)));
-    return null;
-  }
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as (Pick<UserProfile, 'id'> & {iat: number, exp: number});
-    if (decoded && decoded.id) {
-      return { id: decoded.id, email: '' };
-    }
-    console.error('AUTH_ERROR: JWT decoded but no ID found.');
-    return null;
-  } catch (error: any) {
-    console.error('AUTH_ERROR: JWT verification failed. Error:', error.message);
-    return null;
-  }
-}
+// Removed authenticateUser function
 
 interface RouteParams {
   params: {
@@ -39,8 +15,8 @@ interface RouteParams {
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
-  const user = await authenticateUser(req);
-  if (!user) {
+  const userId = await getUserIdFromAuthHeader(req);
+  if (!userId) {
     return NextResponse.json({ success: false, message: 'Not authenticated.' }, { status: 401 });
   }
   const { purchaseId } = params;
@@ -50,7 +26,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   try {
     const updateData = await req.json() as UpdateCreditCardPurchaseData;
-    // Add more specific validation for updateData if needed
     if (updateData.totalAmount !== undefined && updateData.totalAmount <= 0) {
         return NextResponse.json({ success: false, message: 'Total amount must be positive.' }, { status: 400 });
     }
@@ -58,8 +33,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         return NextResponse.json({ success: false, message: 'Installments must be a positive integer.' }, { status: 400 });
     }
 
-
-    const result: UpdateResult = await updateCreditCardPurchase(user.id, purchaseId, updateData);
+    const result: UpdateResult = await updateCreditCardPurchase(userId, purchaseId, updateData);
     if (result.success) {
       return NextResponse.json({ success: true, message: 'Credit card purchase updated successfully.' }, { status: 200 });
     } else {
@@ -72,8 +46,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
-  const user = await authenticateUser(req);
-  if (!user) {
+  const userId = await getUserIdFromAuthHeader(req);
+  if (!userId) {
     return NextResponse.json({ success: false, message: 'Not authenticated.' }, { status: 401 });
   }
   const { purchaseId } = params;
@@ -82,7 +56,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    const result: UpdateResult = await deleteCreditCardPurchase(user.id, purchaseId);
+    const result: UpdateResult = await deleteCreditCardPurchase(userId, purchaseId);
     if (result.success) {
       return NextResponse.json({ success: true, message: 'Credit card purchase deleted successfully.' }, { status: 200 });
     } else {
