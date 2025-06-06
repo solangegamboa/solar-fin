@@ -10,17 +10,26 @@ const COOKIE_NAME = 'authToken';
 
 async function authenticateUser(req: NextRequest): Promise<UserProfile | null> {
   if (!JWT_SECRET) {
-    console.error('JWT_SECRET is not set');
+    console.error('AUTH_ERROR: JWT_SECRET is not set in /api/investments/[investmentId]/route.ts');
     return null;
   }
   const cookieStore = cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token) return null;
+  if (!token) {
+     console.error('AUTH_ERROR: Auth token cookie not found in /api/investments/[investmentId]/route.ts. Headers:', JSON.stringify(Object.fromEntries(req.headers)));
+    return null;
+  }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as (Pick<UserProfile, 'id'> & {iat: number, exp: number});
-    return decoded && decoded.id ? { id: decoded.id, email: '' } : null;
-  } catch (error) {
+    if (decoded && decoded.id) {
+      // console.log('AUTH_SUCCESS: User authenticated in /api/investments/[investmentId]/route.ts, UserId:', decoded.id);
+      return { id: decoded.id, email: '' };
+    }
+    console.error('AUTH_ERROR: JWT decoded but no ID found in /api/investments/[investmentId]/route.ts');
+    return null;
+  } catch (error: any) {
+    console.error('AUTH_ERROR: JWT verification failed in /api/investments/[investmentId]/route.ts. Error:', error.message);
     return null;
   }
 }
