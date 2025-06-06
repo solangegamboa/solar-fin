@@ -62,7 +62,7 @@ export default function FinancialGoalsPage() {
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
 
   const fetchGoals = useCallback(async () => {
-    if (!user?.id) { // Check for user.id specifically
+    if (!user?.id) { 
       setError("Usuário não autenticado para buscar metas.");
       setIsLoading(false);
       return;
@@ -84,16 +84,16 @@ export default function FinancialGoalsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, toast]); // Depend on user.id
+  }, [user, toast]); // Alterado de user?.id para user
 
   useEffect(() => {
-    if (!authLoading) { // Only proceed if auth state is resolved
+    if (!authLoading) { 
       if (user) {
         fetchGoals();
       } else {
         setError("Você precisa estar logado para ver suas metas.");
         setIsLoading(false);
-        setGoals([]); // Clear any existing goals if user logs out
+        setGoals([]); 
       }
     }
   }, [user, authLoading, fetchGoals]);
@@ -162,7 +162,7 @@ export default function FinancialGoalsPage() {
     if (isLoading) {
       return <div className="col-span-full flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando metas...</p></div>;
     }
-    if (error) { // This error is set by fetchGoals or the useEffect
+    if (error) { 
       return <div className="col-span-full flex flex-col items-center justify-center h-64 text-destructive"><AlertTriangleIcon className="h-12 w-12 mb-3" /><p>{error}</p></div>;
     }
     if (goals.length === 0) {
@@ -242,11 +242,9 @@ export default function FinancialGoalsPage() {
     });
   };
 
-  if (authLoading && !user) { // Show main loading only if auth is loading AND user is not yet available
+  if (authLoading && !user) { 
     return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando...</p></div>;
   }
-  // If auth is done, and still no user, the useEffect above should set the error message.
-  // The renderGoalCards function will then display that error.
 
   return (
     <div className="space-y-8">
