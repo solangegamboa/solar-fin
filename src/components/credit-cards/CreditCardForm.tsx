@@ -17,11 +17,12 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Sun, Camera, Paperclip, ScanLine, Trash2, AlertTriangle, CreditCard as CreditCardIconLucide } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { addCreditCard, type NewCreditCardData, type AddCreditCardResult } from '@/lib/databaseService';
+import { type NewCreditCardData, type CreditCard, type UpdateCreditCardData } from '@/lib/databaseService'; // Adjusted imports
 import { extractCardInfoFromImage } from '@/ai/flows/extract-card-info-flow';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-// CurrencyInput is no longer used
+import { useAuth } from '@/contexts/AuthContext';
+
 
 const creditCardFormSchema = z.object({
   name: z.string().min(1, { message: 'O nome do cartão é obrigatório.' }).max(50, {message: 'O nome do cartão deve ter no máximo 50 caracteres.'}),
@@ -48,10 +49,12 @@ interface CreditCardFormProps {
   onSuccess?: () => void;
   setOpen: (open: boolean) => void;
   userId: string;
+  existingCard?: CreditCard | null; // Added prop for editing
 }
 
-export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormProps) {
+export function CreditCardForm({ onSuccess, setOpen, userId, existingCard }: CreditCardFormProps) {
   const { toast } = useToast();
+  const { getToken } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isProcessingImage, setIsProcessingImage] = useState(false);
@@ -69,17 +72,33 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
       }
     };
   }, []);
+  
+  const defaultFormValues: CreditCardFormValues = {
+    name: existingCard?.name || '',
+    limit: existingCard?.limit || undefined,
+    dueDateDay: existingCard?.dueDateDay || undefined,
+    closingDateDay: existingCard?.closingDateDay || undefined,
+    cardImageUri: null, // cardImageUri is not stored, so it's always null/new for the form session
+  };
 
   const form = useForm<CreditCardFormValues>({
     resolver: zodResolver(creditCardFormSchema),
-    defaultValues: {
-      name: '',
-      limit: undefined,
-      dueDateDay: undefined,
-      closingDateDay: undefined,
-      cardImageUri: null,
-    },
+    defaultValues: defaultFormValues,
   });
+
+  useEffect(() => {
+    // Reset form when existingCard changes
+    form.reset({
+      name: existingCard?.name || '',
+      limit: existingCard?.limit || undefined,
+      dueDateDay: existingCard?.dueDateDay || undefined,
+      closingDateDay: existingCard?.closingDateDay || undefined,
+      cardImageUri: null, 
+    });
+    // Clear image preview if the card changes or we switch to add mode
+    setImagePreviewUrl(null); 
+  }, [existingCard, form]);
+  
   
   const startCamera = async () => {
     try {
@@ -188,36 +207,65 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
 
   const onSubmit = async (values: CreditCardFormValues) => {
     setIsSubmitting(true);
+    const token = getToken();
+    if (!token) {
+      toast({ variant: 'destructive', title: 'Erro de Autenticação', description: 'Sessão inválida.' });
+      setIsSubmitting(false);
+      return;
+    }
 
-    const creditCardData: NewCreditCardData = {
+    const apiData: NewCreditCardData | UpdateCreditCardData = {
       name: values.name,
       limit: values.limit,
       dueDateDay: values.dueDateDay,
       closingDateDay: values.closingDateDay,
     };
 
-    try {
-      const result: AddCreditCardResult = await addCreditCard(userId, creditCardData);
+    let response;
+    let result;
 
-      if (result.success && result.creditCardId) {
+    try {
+      if (existingCard) {
+        response = await fetch(`/api/credit-cards/${existingCard.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(apiData),
+        });
+      } else {
+        response = await fetch('/api/credit-cards', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(apiData),
+        });
+      }
+
+      result = await response.json();
+
+      if (response.ok && result.success) {
         toast({
           title: 'Sucesso!',
-          description: 'Cartão de crédito adicionado com sucesso.',
+          description: `Cartão de crédito ${existingCard ? 'atualizado' : 'adicionado'} com sucesso.`,
         });
-        form.reset();
+        form.reset(defaultFormValues); // Reset to default or existing after success
         handleClearImage();
         if (onSuccess) onSuccess();
         setOpen(false);
       } else {
         toast({
           variant: 'destructive',
-          title: 'Erro ao Adicionar Cartão',
-          description: result.error || 'Ocorreu um erro desconhecido.',
+          title: `Erro ao ${existingCard ? 'Atualizar' : 'Adicionar'} Cartão`,
+          description: result.message || 'Ocorreu um erro desconhecido.',
         });
       }
     } catch (error: any) {
       const errorMessage = (error && typeof error.message === 'string') ? error.message : 'An unknown error occurred.';
-      console.error('Client-side error calling addCreditCard:', errorMessage);
+      console.error('Client-side error submitting credit card:', errorMessage);
       toast({
         variant: 'destructive',
         title: 'Erro de Comunicação',
@@ -365,7 +413,7 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
                 {isProcessingImage ? 'Processando...' : 'Salvando...'}
               </>
             ) : (
-              'Salvar Cartão'
+              existingCard ? 'Salvar Alterações' : 'Salvar Cartão'
             )}
           </Button>
         </div>

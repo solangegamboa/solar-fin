@@ -27,7 +27,7 @@ import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, Alert
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
 import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
 import { ImportCardInvoiceDialog } from "@/components/credit-cards/ImportCardInvoiceDialog";
-import { getCreditCardsForUser, getCreditCardPurchasesForUser, deleteCreditCardPurchase } from "@/lib/databaseService";
+import { getCreditCardsForUser, getCreditCardPurchasesForUser, deleteCreditCardPurchase, deleteCreditCard } from "@/lib/databaseService";
 import type { CreditCard, CreditCardPurchase } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
@@ -63,8 +63,11 @@ const ptBRMonthNames = [
 ];
 
 export default function CreditCardsPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, getToken } = useAuth();
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [isEditCardModalOpen, setIsEditCardModalOpen] = useState(false);
+  const [cardToEdit, setCardToEdit] = useState<CreditCard | null>(null);
+
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false); 
   const [isEditPurchaseModalOpen, setIsEditPurchaseModalOpen] = useState(false); 
   const [isImportInvoiceModalOpen, setIsImportInvoiceModalOpen] = useState(false);
@@ -83,14 +86,29 @@ export default function CreditCardsPage() {
   const [purchaseToDelete, setPurchaseToDelete] = useState<CreditCardPurchase | null>(null);
   const [purchaseToEdit, setPurchaseToEdit] = useState<CreditCardPurchase | null>(null);
 
+  // States for deleting a credit card
+  const [cardToDelete, setCardToDelete] = useState<CreditCard | null>(null);
+  const [showDeleteCardConfirmDialog, setShowDeleteCardConfirmDialog] = useState(false);
+  const [isDeletingCardId, setIsDeletingCardId] = useState<string | null>(null);
+
 
   const fetchUserCreditCards = useCallback(async () => {
     if (!user) return;
     setIsLoadingCards(true);
     setError(null);
     try {
-      const userCreditCards = await getCreditCardsForUser(user.id);
-      setCreditCards(userCreditCards);
+      // Changed from direct DB call to API call
+      const token = getToken();
+      if (!token) throw new Error("Not authenticated");
+      const response = await fetch('/api/credit-cards', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setCreditCards(data.cards);
+      } else {
+        throw new Error(data.message || "Falha ao carregar cartões.");
+      }
     } catch (e: any) {
       const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Falha ao carregar cartões.';
       console.error("Failed to fetch credit cards:", errorMessage);
@@ -99,14 +117,24 @@ export default function CreditCardsPage() {
     } finally {
       setIsLoadingCards(false);
     }
-  }, [toast, user]);
+  }, [toast, user, getToken]);
 
   const fetchUserPurchases = useCallback(async () => {
     if (!user) return;
     setIsLoadingPurchases(true);
     try {
-      const userPurchases = await getCreditCardPurchasesForUser(user.id);
-      setPurchases(userPurchases);
+      // Changed from direct DB call to API call
+      const token = getToken();
+      if (!token) throw new Error("Not authenticated");
+      const response = await fetch('/api/credit-card-purchases', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setPurchases(data.purchases);
+      } else {
+        throw new Error(data.message || "Falha ao carregar compras.");
+      }
     } catch (e: any) {
       const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Falha ao carregar compras.';
       console.error("Failed to fetch purchases:", errorMessage);
@@ -114,7 +142,8 @@ export default function CreditCardsPage() {
     } finally {
       setIsLoadingPurchases(false);
     }
-  }, [toast, user]);
+  }, [toast, user, getToken]);
+
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -123,8 +152,10 @@ export default function CreditCardsPage() {
     }
   }, [fetchUserCreditCards, fetchUserPurchases, user, authLoading]);
 
-  const handleCreditCardAdded = () => {
+  const handleCreditCardUpserted = () => {
     setIsCardModalOpen(false);
+    setIsEditCardModalOpen(false);
+    setCardToEdit(null);
     fetchUserCreditCards(); 
   };
 
@@ -140,6 +171,10 @@ export default function CreditCardsPage() {
     fetchUserPurchases(); 
   };
 
+  const handleOpenEditCardModal = (card: CreditCard) => {
+    setCardToEdit(card);
+    setIsEditCardModalOpen(true);
+  };
 
   const handleOpenEditPurchaseModal = (purchase: CreditCardPurchase) => {
     setPurchaseToEdit(purchase);
@@ -275,9 +310,21 @@ export default function CreditCardsPage() {
     if (!purchaseToDelete || !user) return;
     setIsDeletingPurchaseId(purchaseToDelete.id);
     setShowDeletePurchaseConfirmDialog(false);
+    const token = getToken();
+    if (!token) {
+        toast({ variant: "destructive", title: "Erro de Autenticação", description: "Sessão inválida." });
+        setIsDeletingPurchaseId(null);
+        setPurchaseToDelete(null);
+        return;
+    }
 
     try {
-      const result = await deleteCreditCardPurchase(user.id, purchaseToDelete.id);
+      const response = await fetch(`/api/credit-card-purchases/${purchaseToDelete.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const result = await response.json();
+
       if (result.success) {
         toast({
           title: 'Compra Excluída!',
@@ -288,7 +335,7 @@ export default function CreditCardsPage() {
         toast({
           variant: 'destructive',
           title: 'Erro ao Excluir Compra',
-          description: result.error || 'Não foi possível excluir a compra.',
+          description: result.message || 'Não foi possível excluir a compra.',
         });
       }
     } catch (e: any) {
@@ -305,6 +352,58 @@ export default function CreditCardsPage() {
     }
   };
   
+  // Delete Card Handlers
+  const handleDeleteCard = (card: CreditCard) => {
+    setCardToDelete(card);
+    setShowDeleteCardConfirmDialog(true);
+  };
+
+  const confirmDeleteCard = async () => {
+    if (!cardToDelete || !user) return;
+    setIsDeletingCardId(cardToDelete.id);
+    setShowDeleteCardConfirmDialog(false);
+    const token = getToken();
+    if (!token) {
+        toast({ variant: "destructive", title: "Erro de Autenticação", description: "Sessão inválida." });
+        setIsDeletingCardId(null);
+        setCardToDelete(null);
+        return;
+    }
+    try {
+      const response = await fetch(`/api/credit-cards/${cardToDelete.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Cartão Excluído!',
+          description: `O cartão "${cardToDelete.name}" e todas as suas compras associadas foram excluídos.`,
+        });
+        fetchUserCreditCards(); // Refreshes cards
+        fetchUserPurchases(); // Refreshes purchases (as they might have been deleted)
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao Excluir Cartão',
+          description: result.message || 'Não foi possível excluir o cartão.',
+        });
+      }
+    } catch (e: any) {
+      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Ocorreu um erro desconhecido.';
+      console.error('Error deleting credit card:', errorMessage);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao Excluir Cartão',
+        description: 'Ocorreu um erro ao tentar excluir o cartão.',
+      });
+    } finally {
+      setIsDeletingCardId(null);
+      setCardToDelete(null);
+    }
+  };
+
   if (authLoading) {
     return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando dados do usuário...</p></div>;
   }
@@ -335,12 +434,41 @@ export default function CreditCardsPage() {
       const currentClosingDate = setDate(currentDate, card.closingDateDay);
       let nextClosingDate = addMonths(currentDate, 1);
       nextClosingDate = setDate(nextClosingDate, card.closingDateDay);
+      const actionButtonsDisabled = !!isDeletingCardId || !user;
 
       return (
         <Card key={card.id} className="shadow-md hover:shadow-lg transition-shadow">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between">
               <CardTitle className="flex items-center text-xl"><CreditCardLucideIcon className="mr-2 h-6 w-6 text-primary" />{card.name}</CardTitle>
+              <div className="flex space-x-1">
+                 <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleOpenEditCardModal(card)}
+                    disabled={actionButtonsDisabled}
+                    aria-label="Editar cartão"
+                    className="h-7 w-7 text-primary hover:text-primary/80"
+                    title="Editar cartão"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                 </Button>
+                 <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDeleteCard(card)}
+                    disabled={isDeletingCardId === card.id || actionButtonsDisabled}
+                    aria-label="Excluir cartão"
+                    className="h-7 w-7 text-destructive hover:text-destructive/80"
+                    title="Excluir cartão"
+                  >
+                    {isDeletingCardId === card.id ? (
+                      <Sun className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -486,7 +614,7 @@ export default function CreditCardsPage() {
             <DialogTrigger asChild><Button className="w-full sm:w-auto" disabled={!user}><PlusCircle className="mr-2 h-4 w-4" />Novo Cartão</Button></DialogTrigger>
             <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Adicionar Novo Cartão</DialogTitle><DialogDescription>Preencha os detalhes do seu novo cartão.</DialogDescription></DialogHeader>
-              {user && <CreditCardForm onSuccess={handleCreditCardAdded} setOpen={setIsCardModalOpen} userId={user.id} />}
+              {user && <CreditCardForm onSuccess={handleCreditCardUpserted} setOpen={setIsCardModalOpen} userId={user.id} existingCard={null}/>}
             </DialogContent>
           </Dialog>
           <Dialog open={isPurchaseModalOpen} onOpenChange={setIsPurchaseModalOpen}>
@@ -522,6 +650,24 @@ export default function CreditCardsPage() {
         </div>
       </div>
       
+      {/* Dialog for Editing Credit Card */}
+      <Dialog open={isEditCardModalOpen} onOpenChange={(isOpen) => { setIsEditCardModalOpen(isOpen); if (!isOpen) setCardToEdit(null); }}>
+        <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Cartão de Crédito</DialogTitle>
+            <DialogDescription>Atualize os detalhes do seu cartão.</DialogDescription>
+          </DialogHeader>
+          {user && cardToEdit && (
+            <CreditCardForm
+              onSuccess={handleCreditCardUpserted}
+              setOpen={setIsEditCardModalOpen}
+              userId={user.id}
+              existingCard={cardToEdit}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog for Editing Purchase */}
       <Dialog open={isEditPurchaseModalOpen} onOpenChange={(isOpen) => { setIsEditPurchaseModalOpen(isOpen); if (!isOpen) setPurchaseToEdit(null); }}>
         <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
@@ -562,7 +708,7 @@ export default function CreditCardsPage() {
       <AlertDialog open={showDeletePurchaseConfirmDialog} onOpenChange={setShowDeletePurchaseConfirmDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar Exclusão de Compra</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir a compra "{purchaseToDelete?.description || 'selecionada'}" no valor total de {formatCurrency(purchaseToDelete?.totalAmount || 0)}? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
@@ -575,11 +721,34 @@ export default function CreditCardsPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeletingPurchaseId ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Excluir
+              Excluir Compra
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={showDeleteCardConfirmDialog} onOpenChange={setShowDeleteCardConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão de Cartão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o cartão "{cardToDelete?.name || 'selecionado'}"? Todas as compras parceladas associadas a este cartão também serão excluídas. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCardToDelete(null)} disabled={!!isDeletingCardId}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteCard}
+              disabled={!!isDeletingCardId || !user}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingCardId ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Excluir Cartão
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }

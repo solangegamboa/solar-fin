@@ -691,11 +691,11 @@ export const addCreditCard = async (userId: string, cardData: NewCreditCardData)
     const now = new Date();
     if (DATABASE_MODE === 'postgres' && pool) {
        try {
-            await pool.query(
-                'INSERT INTO credit_cards (id, user_id, name, limit_amount, due_date_day, closing_date_day, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)', 
+            const res = await pool.query(
+                'INSERT INTO credit_cards (id, user_id, name, limit_amount, due_date_day, closing_date_day, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7) RETURNING id', 
                 [newCardId, userId, cardData.name, cardData.limit, cardData.dueDateDay, cardData.closingDateDay, now]
             );
-            return { success: true, creditCardId: newCardId };
+            return { success: true, creditCardId: res.rows[0].id };
         } catch (error: any) {
             console.error("Error adding credit card to PostgreSQL:", error.message);
             return { success: false, error: "Database error adding credit card." };
@@ -830,11 +830,11 @@ export const addCreditCardPurchase = async (userId: string, purchaseData: NewCre
     const now = new Date();
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
-            await pool.query(
-                'INSERT INTO credit_card_purchases (id, user_id, card_id, purchase_date, description, category, total_amount, installments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)', 
+            const res = await pool.query(
+                'INSERT INTO credit_card_purchases (id, user_id, card_id, purchase_date, description, category, total_amount, installments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9) RETURNING id', 
                 [newPurchaseId, userId, purchaseData.cardId, purchaseData.date, purchaseData.description, purchaseData.category, purchaseData.totalAmount, purchaseData.installments, now]
             );
-            return { success: true, purchaseId: newPurchaseId };
+            return { success: true, purchaseId: res.rows[0].id };
         } catch (error: any) {
             console.error("Error adding credit card purchase to PostgreSQL:", error.message);
             return { success: false, error: "Database error adding credit card purchase." };
@@ -1036,8 +1036,8 @@ export const addFinancialGoal = async (userId: string, goalData: NewFinancialGoa
 
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
-      await pool.query(
-        'INSERT INTO financial_goals (id, user_id, name, target_amount, current_amount, target_date, description, icon, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)', 
+      const res = await pool.query(
+        'INSERT INTO financial_goals (id, user_id, name, target_amount, current_amount, target_date, description, icon, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10) RETURNING id', 
         [
           newGoalId, userId, goalData.name, goalData.targetAmount,
           goalData.currentAmount || 0, goalData.targetDate || null,
@@ -1045,7 +1045,7 @@ export const addFinancialGoal = async (userId: string, goalData: NewFinancialGoa
           goalData.status || 'active', now
         ]
       );
-      return { success: true, goalId: newGoalId };
+      return { success: true, goalId: res.rows[0].id };
     } catch (error: any) {
       console.error("Error adding financial goal to PostgreSQL:", error.message);
       return { success: false, error: "Database error adding financial goal." };
@@ -1183,8 +1183,8 @@ export const addInvestment = async (userId: string, investmentData: NewInvestmen
 
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
-      await pool.query(
-        'INSERT INTO investments (id, user_id, name, type, initial_amount, current_value, quantity, symbol, institution, acquisition_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)', 
+      const res = await pool.query(
+        'INSERT INTO investments (id, user_id, name, type, initial_amount, current_value, quantity, symbol, institution, acquisition_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12) RETURNING id', 
         [
           newInvestmentId, userId, investmentData.name, investmentData.type,
           investmentData.initialAmount || null, investmentData.currentValue,
@@ -1193,7 +1193,7 @@ export const addInvestment = async (userId: string, investmentData: NewInvestmen
           investmentData.notes || null, now
         ]
       );
-      return { success: true, investmentId: newInvestmentId };
+      return { success: true, investmentId: res.rows[0].id };
     } catch (error: any) {
       console.error("Error adding investment to PostgreSQL:", error.message);
       return { success: false, error: "Database error adding investment." };
@@ -1603,3 +1603,4 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
 }
 
 migrateOldDbStructure().catch(err => console.error("Migration check failed:", err));
+

@@ -339,5 +339,3 @@ export interface UpdateResult {
   error?: string;
 }
 
-
-    
