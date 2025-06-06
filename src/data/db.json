@@ -690,13 +690,13 @@
           "id": "ccp-solange-1",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "cardId": "cc-solange-1",
-          "date": "2025-06-02",
+          "date": "2025-06-19",
           "description": "Compras Renner",
           "category": "Vestuário",
           "totalAmount": 300,
           "installments": 3,
           "createdAt": 1749165600000,
-          "updatedAt": 1749165600000
+          "updatedAt": 1749251709845
         }
       ],
       "categories": [

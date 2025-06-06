@@ -33,7 +33,7 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
     *   Ícone de notificações no cabeçalho que exibe lembretes de transações recorrentes agendadas para datas próximas (7 dias antes e 14 dias depois do dia atual).
     *   Indicador de notificações lidas/não lidas gerenciado localmente.
 *   **Gerenciamento de Conta e Segurança:**
-    *   Sistema de cadastro e login para que múltiplos usuários possam gerenciar suas finanças de forma independente e segura (usando JWT com Cookies HTTPOnly).
+    *   Sistema de cadastro e login para que múltiplos usuários possam gerenciar suas finanças de forma independente e segura (usando JWT com localStorage).
     *   Altere seu nome de exibição e senha diretamente nas configurações.
     *   Opção para configurar preferência de recebimento de notificações por e-mail sobre transações agendadas (o envio real de e-mails requer configuração adicional no servidor e um sistema de cron job).
     *   Funcionalidade de backup local para salvar todos os seus dados (perfil, transações, cartões, empréstimos, categorias, metas, investimentos) em um arquivo JSON.
@@ -49,7 +49,7 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
 *   **Frontend:** Next.js (App Router), React, TypeScript
 *   **UI:** ShadCN UI Components, Tailwind CSS
 *   **Inteligência Artificial:** Genkit (Google AI)
-*   **Autenticação:** JWT com Cookies HTTPOnly
+*   **Autenticação:** JWT com localStorage
 *   **Banco de Dados (Opções):**
     *   Arquivo JSON local (`src/data/db.json`)
     *   PostgreSQL
@@ -98,7 +98,7 @@ JWT_SECRET=SEU_SEGREDO_JWT_AQUI
 
 # Opção 2: Usar PostgreSQL (recomendado para uso com Docker ou servidor PostgreSQL separado)
 DATABASE_MODE=postgres
-DATABASE_URL="postgresql://solaruser:solarpass@localhost:5433/solar_fin_db" 
+DATABASE_URL="postgresql://solaruser:solarpass@localhost:5433/solar_fin_db"
 # A porta aqui é 5433 se você estiver acessando o PostgreSQL rodando no Docker (configurado no docker-compose.yml).
 # Se estiver usando o docker-compose.yml fornecido, o host para o app dentro do Docker será 'db' e a porta 5432,
 # mas para acesso externo ao banco (ex: via DBeaver), use 'localhost:5433'.
@@ -227,24 +227,26 @@ Se você utilizou `docker-compose up --build` (Opção 4A):
     *   O servidor de desenvolvimento do Genkit (`npm run genkit:dev`) ainda precisa ser rodado separadamente na sua máquina local, pois ele não está incluído na configuração do Docker Compose. A aplicação dentro do Docker se conectará ao servidor Genkit rodando em `localhost:3400` da sua máquina host (o Docker geralmente permite essa conexão por padrão).
 
 *   **Atualizando o Schema do Banco de Dados com Docker:**
-    *   O script `sql/init.sql` é executado pela imagem do PostgreSQL apenas quando o volume de dados (definido como `pgdata` no `docker-compose.yml`) está vazio, ou seja, na primeira vez que o contêiner do banco (`db`) é iniciado e cria esse volume.
-    *   Se você fizer alterações no `sql/init.sql` (por exemplo, adicionar novas tabelas, alterar colunas) e o volume `pgdata` já existir de uma execução anterior, o script **não será executado novamente de forma automática**.
-    *   **Para aplicar as alterações do `sql/init.sql` a um banco de dados PostgreSQL rodando com Docker e recriar as tabelas com o novo schema:**
-        1.  Pare todos os contêineres:
+    *   **Para novas instalações ou para recriar o banco com o schema mais recente (PERDE DADOS):**
+        1.  Pare todos os contêineres: `docker-compose down`
+        2.  Remova o volume de dados do PostgreSQL (apagará dados existentes): `docker-compose down -v`
+        3.  Inicie os contêineres: `docker-compose up --build`
+        Isso fará com que o PostgreSQL inicialize com um volume de dados vazio, e o script `sql/init.sql` (que deve conter o schema completo e atualizado) será executado.
+
+    *   **Para aplicar atualizações a um banco de dados EXISTENTE sem perder dados:**
+        1.  Certifique-se de que seus contêineres estão rodando (`docker-compose up -d db` se só o banco, ou `docker-compose up -d` para tudo).
+        2.  Copie o script `sql/update_schema.sql` para dentro do contêiner do banco. O nome do contêiner do banco, conforme definido no `docker-compose.yml`, é `solar-fin-db`.
             ```bash
-            docker-compose down
+            docker cp ./sql/update_schema.sql solar-fin-db:/tmp/update_schema.sql
             ```
-        2.  **Importante:** Remova o volume de dados do PostgreSQL. Isso apagará todos os dados existentes no banco.
+        3.  Execute o script de atualização dentro do contêiner usando `docker exec` e `psql`:
             ```bash
-            docker-compose down -v
+            docker exec -it solar-fin-db psql -U solaruser -d solar_fin_db -f /tmp/update_schema.sql
             ```
-            Alternativamente, você pode remover o volume nomeado `pgdata` manualmente se ele não for anônimo (no `docker-compose.yml` atual, ele é um bind mount para `./pgdata`, então `docker-compose down -v` é o correto).
-        3.  Inicie os contêineres novamente, reconstruindo a imagem do app se necessário:
-            ```bash
-            docker-compose up --build
-            ```
-        Isso fará com que o PostgreSQL inicialize com um volume de dados vazio, e o script `sql/init.sql` será executado, criando as tabelas com a estrutura mais recente.
-    *   **Atenção:** Este processo **apaga todos os dados** do banco. Para ambientes de produção ou desenvolvimento onde os dados precisam ser preservados, seria necessário usar um sistema de migração de banco de dados (como Flyway, Liquibase, ou migrações de ORM), que está fora do escopo da configuração atual deste projeto.
+            Você pode ser solicitado a inserir a senha `solarpass`.
+            Este script `sql/update_schema.sql` é projetado para adicionar novas tabelas e colunas que podem estar faltando, tentando ser idempotente. Ele não removerá colunas ou tabelas.
+
+        **Nota:** O script `sql/update_schema.sql` é para adicionar funcionalidades. Se você precisar de migrações mais complexas (ex: renomear colunas, alterar tipos de dados com dados existentes), um sistema de migração de banco de dados dedicado (como Flyway, Liquibase) seria mais apropriado, o que está fora do escopo da configuração atual.
 
 ### Pronto!
 
@@ -263,6 +265,7 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
         *   `goals/[goalId]/`: Endpoints para atualizar e excluir metas específicas.
         *   `investments/`: Endpoints para criar e listar investimentos.
         *   `investments/[investmentId]/`: Endpoints para atualizar e excluir investimentos específicos.
+        *   `credit-card-purchases/`: Endpoints para criar e listar compras de cartão de crédito.
         *   `credit-card-purchases/[purchaseId]/`: Endpoint para atualizar e excluir compras de cartão específicas.
         *   `user/`: Endpoints para gerenciamento de perfil do usuário (atualizar nome, senha, backup, restauração, preferências de e-mail).
         *   `system/`: Endpoint para informações do sistema (ex: modo do banco de dados).
@@ -277,7 +280,7 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
 *   `src/ai/`: Lógica relacionada à Inteligência Artificial com Genkit.
     *   `flows/`: Definições dos fluxos de IA.
 *   `src/data/`: (Para modo local) Arquivo `db.json` que armazena os dados.
-*   `sql/`: Scripts SQL para configuração do banco de dados PostgreSQL (contém `init.sql`).
+*   `sql/`: Scripts SQL para configuração do banco de dados PostgreSQL (contém `init.sql` e `update_schema.sql`).
 *   `public/`: Arquivos estáticos (incluindo `manifest.json` e ícones).
 *   `docker-compose.yml`: Define os serviços Docker para a aplicação e o banco de dados.
 *   `Dockerfile`: Define como construir a imagem Docker para a aplicação Next.js.
@@ -326,5 +329,3 @@ yarn add --dev jest @types/jest ts-jest @testing-library/react @testing-library/
 ### Nota sobre os Exemplos de Teste
 
 Os exemplos de código de teste fornecidos nas interações com o AI são conceituais e servem como um guia. Eles podem precisar de adaptações para se integrarem perfeitamente à sua configuração de teste específica, incluindo a configuração de mocks e a interação detalhada com os componentes da UI (especialmente componentes ShadCN UI que podem ter estruturas DOM específicas).
-
-  
