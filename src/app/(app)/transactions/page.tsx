@@ -31,8 +31,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { TransactionForm } from "@/components/transactions/TransactionForm";
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Sun, AlertTriangleIcon, SearchX, Copy, RefreshCw, Trash2 } from "lucide-react";
-import type { Transaction, NewTransactionData } from '@/types';
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Sun, AlertTriangleIcon, SearchX, Copy, RefreshCw, Trash2, CalendarClock } from "lucide-react";
+import type { Transaction, NewTransactionData, RecurrenceFrequency } from '@/types';
 import { getTransactionsForUser, addTransaction, deleteTransaction } from '@/lib/databaseService';
 import { formatCurrency, cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
@@ -40,6 +40,13 @@ import { ptBR } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+
+const recurrenceFrequencyMap: Record<RecurrenceFrequency, string> = {
+  none: 'Não Recorrente',
+  monthly: 'Mensal',
+  weekly: 'Semanal',
+  annually: 'Anual',
+};
 
 export default function TransactionsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -94,7 +101,8 @@ export default function TransactionsPage() {
         category: transaction.category,
         description: transaction.description || '',
         date: format(new Date(), 'yyyy-MM-dd'), 
-        isRecurring: transaction.isRecurring,
+        recurrenceFrequency: transaction.recurrenceFrequency || 'none',
+        receiptImageUri: transaction.receiptImageUri, // Copy receipt URI if exists
       };
 
       const result = await addTransaction(user.id, newTransactionData);
@@ -102,7 +110,7 @@ export default function TransactionsPage() {
       if (result.success) {
         toast({
           title: 'Transação Duplicada!',
-          description: 'A transação recorrente foi duplicada para a data atual.',
+          description: 'A transação foi duplicada para a data atual.',
         });
         fetchUserTransactions(); 
       } else {
@@ -170,55 +178,132 @@ export default function TransactionsPage() {
 
   const renderMobileTransactionCards = () => (
     <div className="space-y-4 md:hidden">
-      {transactions.map((transaction) => (
-        <Card key={transaction.id} className="shadow-sm">
-          <CardHeader className="pb-3">
-            <div className="flex justify-between items-start">
-              <div>
-                <CardTitle className="text-base font-semibold">{transaction.description || 'Sem descrição'}</CardTitle>
-                <CardDescription className="text-xs">{format(parseISO(transaction.date), 'dd/MM/yyyy', { locale: ptBR })}</CardDescription>
+      {transactions.map((transaction) => {
+        const isActuallyRecurring = transaction.recurrenceFrequency && transaction.recurrenceFrequency !== 'none';
+        return (
+          <Card key={transaction.id} className="shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle className="text-base font-semibold">{transaction.description || 'Sem descrição'}</CardTitle>
+                  <CardDescription className="text-xs">{format(parseISO(transaction.date), 'dd/MM/yyyy', { locale: ptBR })}</CardDescription>
+                </div>
+                <Badge 
+                  variant={transaction.type === 'income' ? 'default' : 'destructive'} 
+                  className={cn(
+                    "text-xs",
+                    transaction.type === 'income' ? 'bg-positive/20 text-positive-foreground border-positive/30' : 'bg-negative/20 text-negative-foreground border-negative/30'
+                  )}
+                >
+                  {transaction.type === 'income' ? <ArrowUpCircle className="mr-1 h-3 w-3"/> : <ArrowDownCircle className="mr-1 h-3 w-3"/>}
+                  {transaction.type === 'income' ? 'Receita' : 'Despesa'}
+                </Badge>
               </div>
-              <Badge 
-                variant={transaction.type === 'income' ? 'default' : 'destructive'} 
-                className={cn(
-                  "text-xs",
-                  transaction.type === 'income' ? 'bg-positive/20 text-positive-foreground border-positive/30' : 'bg-negative/20 text-negative-foreground border-negative/30'
+            </CardHeader>
+            <CardContent className="space-y-1 pb-3 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Valor:</span>
+                <span className={`font-medium ${transaction.type === 'income' ? 'text-positive' : 'text-negative'}`}>
+                  {formatCurrency(transaction.amount)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Categoria:</span>
+                <Badge variant={isActuallyRecurring ? "default" : "secondary"} className={cn("text-xs", isActuallyRecurring ? "bg-blue-100 text-blue-700 border-blue-300" : "")}>
+                  {transaction.category}
+                  {isActuallyRecurring && <CalendarClock className="ml-1.5 h-3 w-3" />}
+                </Badge>
+              </div>
+               {isActuallyRecurring && (
+                 <div className="flex justify-between items-center text-xs text-muted-foreground">
+                   <span>Recorrência:</span>
+                   <span>{recurrenceFrequencyMap[transaction.recurrenceFrequency!]}</span>
+                 </div>
                 )}
-              >
-                {transaction.type === 'income' ? <ArrowUpCircle className="mr-1 h-3 w-3"/> : <ArrowDownCircle className="mr-1 h-3 w-3"/>}
-                {transaction.type === 'income' ? 'Receita' : 'Despesa'}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-1 pb-3 text-sm">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Valor:</span>
-              <span className={`font-medium ${transaction.type === 'income' ? 'text-positive' : 'text-negative'}`}>
-                {formatCurrency(transaction.amount)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Categoria:</span>
-              <Badge variant={transaction.isRecurring ? "default" : "secondary"} className={cn("text-xs", transaction.isRecurring ? "bg-blue-100 text-blue-700 border-blue-300" : "")}>
-                {transaction.category}
-                {transaction.isRecurring && <RefreshCw className="ml-1.5 h-3 w-3" />}
-              </Badge>
-            </div>
-          </CardContent>
-          <CardFooter className="flex justify-end space-x-1 pt-2 pb-3">
-            {transaction.isRecurring && (
+            </CardContent>
+            <CardFooter className="flex justify-end space-x-1 pt-2 pb-3">
+              {isActuallyRecurring && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDuplicateTransaction(transaction)}
+                  disabled={isDuplicatingId === transaction.id || !!isDeletingId || !user}
+                  aria-label="Duplicar transação"
+                  className="h-7 w-7"
+                  title="Duplicar para hoje"
+                >
+                  {isDuplicatingId === transaction.id ? (
+                    <Sun className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </Button>
+              )}
+              <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDeleteTransaction(transaction)}
+                  disabled={isDeletingId === transaction.id || !!isDuplicatingId || !user}
+                  aria-label="Excluir transação"
+                  className="h-7 w-7 text-destructive hover:text-destructive/80"
+                >
+                  {isDeletingId === transaction.id ? (
+                    <Sun className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                </Button>
+            </CardFooter>
+          </Card>
+        )
+      })}
+    </div>
+  );
+  
+
+  const renderTransactionTableRows = () => {
+    return transactions.map((transaction) => {
+       const isActuallyRecurring = transaction.recurrenceFrequency && transaction.recurrenceFrequency !== 'none';
+       return (
+        <TableRow key={transaction.id}>
+          <TableCell>
+            {format(parseISO(transaction.date), 'dd/MM/yyyy', { locale: ptBR })}
+          </TableCell>
+          <TableCell className="font-medium max-w-[120px] sm:max-w-[200px] truncate" title={transaction.description}>
+            {transaction.description || '-'}
+          </TableCell>
+          <TableCell>
+            <Badge variant={isActuallyRecurring ? "default" : "secondary"} className={cn(isActuallyRecurring ? "bg-blue-500 hover:bg-blue-600 text-white" : "", "whitespace-nowrap")}>
+              {transaction.category}
+              {isActuallyRecurring && <CalendarClock className="ml-1.5 h-3 w-3" title={recurrenceFrequencyMap[transaction.recurrenceFrequency!]}/>}
+            </Badge>
+          </TableCell>
+          <TableCell className={`flex items-center ${transaction.type === 'income' ? 'text-positive' : 'text-negative'}`}>
+            {transaction.type === 'income' ? (
+              <ArrowUpCircle className="mr-2 h-4 w-4" />
+            ) : (
+              <ArrowDownCircle className="mr-2 h-4 w-4" />
+            )}
+            {transaction.type === 'income' ? 'Receita' : 'Despesa'}
+          </TableCell>
+          <TableCell className={`text-right font-semibold ${transaction.type === 'income' ? 'text-positive' : 'text-negative'}`}>
+            {formatCurrency(transaction.amount)}
+          </TableCell>
+          <TableCell className="text-right space-x-1">
+            {isActuallyRecurring && (
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => handleDuplicateTransaction(transaction)}
                 disabled={isDuplicatingId === transaction.id || !!isDeletingId || !user}
                 aria-label="Duplicar transação"
-                className="h-7 w-7"
+                className="h-8 w-8"
+                title="Duplicar para hoje"
               >
                 {isDuplicatingId === transaction.id ? (
-                  <Sun className="h-3 w-3 animate-spin" />
+                  <Sun className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Copy className="h-3 w-3" />
+                  <Copy className="h-4 w-4" />
                 )}
               </Button>
             )}
@@ -228,81 +313,18 @@ export default function TransactionsPage() {
                 onClick={() => handleDeleteTransaction(transaction)}
                 disabled={isDeletingId === transaction.id || !!isDuplicatingId || !user}
                 aria-label="Excluir transação"
-                className="h-7 w-7 text-destructive hover:text-destructive/80"
+                className="h-8 w-8 text-destructive hover:text-destructive/80"
               >
                 {isDeletingId === transaction.id ? (
-                  <Sun className="h-3 w-3 animate-spin" />
+                  <Sun className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Trash2 className="h-3 w-3" />
+                  <Trash2 className="h-4 w-4" />
                 )}
               </Button>
-          </CardFooter>
-        </Card>
-      ))}
-    </div>
-  );
-  
-
-  const renderTransactionTableRows = () => {
-    return transactions.map((transaction) => (
-      <TableRow key={transaction.id}>
-        <TableCell>
-          {format(parseISO(transaction.date), 'dd/MM/yyyy', { locale: ptBR })}
-        </TableCell>
-        <TableCell className="font-medium max-w-[120px] sm:max-w-[200px] truncate" title={transaction.description}>
-          {transaction.description || '-'}
-        </TableCell>
-        <TableCell>
-          <Badge variant={transaction.isRecurring ? "default" : "secondary"} className={transaction.isRecurring ? "bg-blue-500 hover:bg-blue-600 text-white" : ""}>
-            {transaction.category}
-            {transaction.isRecurring && <RefreshCw className="ml-1.5 h-3 w-3" />}
-          </Badge>
-        </TableCell>
-        <TableCell className={`flex items-center ${transaction.type === 'income' ? 'text-positive' : 'text-negative'}`}>
-          {transaction.type === 'income' ? (
-            <ArrowUpCircle className="mr-2 h-4 w-4" />
-          ) : (
-            <ArrowDownCircle className="mr-2 h-4 w-4" />
-          )}
-          {transaction.type === 'income' ? 'Receita' : 'Despesa'}
-        </TableCell>
-        <TableCell className={`text-right font-semibold ${transaction.type === 'income' ? 'text-positive' : 'text-negative'}`}>
-          {formatCurrency(transaction.amount)}
-        </TableCell>
-        <TableCell className="text-right space-x-1">
-          {transaction.isRecurring && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => handleDuplicateTransaction(transaction)}
-              disabled={isDuplicatingId === transaction.id || !!isDeletingId || !user}
-              aria-label="Duplicar transação"
-              className="h-8 w-8"
-            >
-              {isDuplicatingId === transaction.id ? (
-                <Sun className="h-4 w-4 animate-spin" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </Button>
-          )}
-           <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => handleDeleteTransaction(transaction)}
-              disabled={isDeletingId === transaction.id || !!isDuplicatingId || !user}
-              aria-label="Excluir transação"
-              className="h-8 w-8 text-destructive hover:text-destructive/80"
-            >
-              {isDeletingId === transaction.id ? (
-                <Sun className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </Button>
-        </TableCell>
-      </TableRow>
-    ));
+          </TableCell>
+        </TableRow>
+       );
+    });
   };
 
   return (
@@ -404,5 +426,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-
-    

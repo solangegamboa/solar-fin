@@ -10,6 +10,7 @@ export interface UserProfile {
 }
 
 export type TransactionType = 'income' | 'expense';
+export type RecurrenceFrequency = 'none' | 'monthly' | 'weekly' | 'annually';
 
 export interface Transaction {
   id: string;
@@ -19,8 +20,9 @@ export interface Transaction {
   category: string; // This will now reference a UserCategory.name
   date: string;
   description?: string;
-  isRecurring?: boolean;
+  recurrenceFrequency?: RecurrenceFrequency; // Added
   createdAt: number;
+  updatedAt?: number; // Added for consistency
   receiptImageUri?: string | null; 
 }
 
@@ -34,6 +36,7 @@ export interface Loan {
   startDate: string; 
   endDate: string;   
   createdAt: number;
+  updatedAt?: number; // Added
 }
 
 export interface CreditCard {
@@ -44,6 +47,7 @@ export interface CreditCard {
   dueDateDay: number;
   closingDateDay: number;
   createdAt: number;
+  updatedAt?: number; // Added
 }
 
 export interface CreditCardPurchase {
@@ -56,6 +60,7 @@ export interface CreditCardPurchase {
   totalAmount: number;
   installments: number;
   createdAt: number;
+  updatedAt?: number; // Added
 }
 
 export interface UserCategory {
@@ -97,8 +102,8 @@ export interface NewTransactionData {
   category: string; // Will be the category name string
   date: string;
   description?: string;
-  isRecurring?: boolean;
-  receiptImageUri?: string | null; // Added for new feature
+  recurrenceFrequency?: RecurrenceFrequency; // Added
+  receiptImageUri?: string | null; 
 }
 
 export interface NewCreditCardData {
@@ -189,7 +194,5 @@ export interface UserBackupData {
   creditCards: CreditCard[];
   creditCardPurchases: CreditCardPurchase[];
   categories: UserCategory[];
-  financialGoals: FinancialGoal[]; // Added financial goals
-  // Note: We don't backup password or user ID directly from backup.
-  // The restore will apply to the currently logged-in user.
+  financialGoals: FinancialGoal[]; 
 }

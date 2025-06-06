@@ -3,7 +3,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData, UserCategory, NewUserCategoryData, UserBackupData, FinancialGoal, NewFinancialGoalData, UpdateFinancialGoalData } from '@/types';
+import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData, UserCategory, NewUserCategoryData, UserBackupData, FinancialGoal, NewFinancialGoalData, UpdateFinancialGoalData, RecurrenceFrequency } from '@/types';
 import { randomUUID } from 'crypto';
 import { parseISO, addMonths, format as formatDateFns } from 'date-fns';
 import { Pool, type QueryResult } from 'pg';
@@ -18,7 +18,7 @@ interface UserRecord extends UserProfile {
   creditCards: CreditCard[];
   creditCardPurchases: CreditCardPurchase[];
   categories: UserCategory[];
-  financialGoals: FinancialGoal[]; // Added financial goals
+  financialGoals: FinancialGoal[];
 }
 interface LocalDB {
   users: {
@@ -153,10 +153,10 @@ export async function createUser(email: string, password_plain: string, displayN
       creditCards: [],
       creditCardPurchases: [],
       categories: [],
-      financialGoals: [], // Initialize financialGoals
+      financialGoals: [],
     };
-    await writeDB(db); // Write first to ensure user exists
-    await addDefaultCategoriesForUser(userId); // Then add categories (which also writes to DB)
+    await writeDB(db);
+    await addDefaultCategoriesForUser(userId); 
     return newUserProfile;
   }
 }
@@ -303,16 +303,18 @@ export interface AddTransactionResult {
 export const addTransaction = async (userId: string, transactionData: NewTransactionData): Promise<AddTransactionResult> => {
   if (!userId) return { success: false, error: "User ID is required." };
 
+  const newTransactionId = randomUUID();
+  const now = new Date();
+  const recurrenceFrequency = transactionData.recurrenceFrequency || 'none';
+
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
-      const newTransactionId = randomUUID();
-      // For PG, receipt_image_uri might be a TEXT column that can be null.
       const res = await pool.query(
-        'INSERT INTO transactions (id, user_id, type, amount, category, date, description, is_recurring, created_at, receipt_image_uri, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id',
+        'INSERT INTO transactions (id, user_id, type, amount, category, date, description, recurrence_frequency, receipt_image_uri, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id',
         [
           newTransactionId, userId, transactionData.type, transactionData.amount,
           transactionData.category, transactionData.date, transactionData.description || null,
-          transactionData.isRecurring || false, new Date(), transactionData.receiptImageUri || null, new Date()
+          recurrenceFrequency, transactionData.receiptImageUri || null, now, now
         ]
       );
       return { success: true, transactionId: res.rows[0].id };
@@ -327,11 +329,19 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
         return { success: false, error: "User not found." };
     }
     if (!db.users[userId].transactions) db.users[userId].transactions = [];
-    const now = Date.now();
+    const nowTs = now.getTime();
     const newTransaction: Transaction = {
-      id: randomUUID(), userId, ...transactionData,
-      isRecurring: transactionData.isRecurring || false, createdAt: now, updatedAt: now,
-      // receiptImageUri is part of transactionData now
+      id: newTransactionId,
+      userId,
+      type: transactionData.type,
+      amount: transactionData.amount,
+      category: transactionData.category,
+      date: transactionData.date,
+      description: transactionData.description,
+      recurrenceFrequency: recurrenceFrequency,
+      receiptImageUri: transactionData.receiptImageUri,
+      createdAt: nowTs,
+      updatedAt: nowTs,
     };
     db.users[userId].transactions.push(newTransaction);
     await writeDB(db);
@@ -344,16 +354,17 @@ export async function getTransactionsForUser(userId: string): Promise<Transactio
 
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
-      const res: QueryResult<Transaction> = await pool.query(
-        'SELECT id, user_id as "userId", type, amount, category, date, description, is_recurring as "isRecurring", created_at as "createdAt", updated_at as "updatedAt", receipt_image_uri as "receiptImageUri" FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC',
+      const res = await pool.query<Transaction>(
+        'SELECT id, user_id as "userId", type, amount, category, date, description, recurrence_frequency as "recurrenceFrequency", created_at as "createdAt", updated_at as "updatedAt", receipt_image_uri as "receiptImageUri" FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC',
         [userId]
       );
       return res.rows.map(tx => ({
         ...tx,
         date: formatDateFns(new Date(tx.date), 'yyyy-MM-dd'),
         amount: Number(tx.amount),
+        recurrenceFrequency: (tx.recurrenceFrequency || 'none') as RecurrenceFrequency,
         createdAt: new Date(tx.createdAt).getTime(),
-        updatedAt: new Date(tx.updatedAt).getTime(),
+        updatedAt: tx.updatedAt ? new Date(tx.updatedAt).getTime() : new Date(tx.createdAt).getTime(),
       }));
     } catch (error: any) {
       console.error(`Error fetching transactions for user ${userId} from PostgreSQL:`, error.message);
@@ -363,7 +374,21 @@ export async function getTransactionsForUser(userId: string): Promise<Transactio
     const db = await readDB();
     const userData = db.users[userId];
     if (!userData || !userData.transactions) return [];
-    return [...userData.transactions].sort((a, b) => {
+    
+    // Migration logic for old 'isRecurring' field
+    const migratedTransactions = userData.transactions.map(tx => {
+      let frequency = tx.recurrenceFrequency || 'none';
+      const txAsAny = tx as any; // To access old field for migration
+      if (txAsAny.hasOwnProperty('isRecurring') && typeof txAsAny.isRecurring === 'boolean') {
+          if (txAsAny.isRecurring && frequency === 'none') {
+              frequency = 'monthly'; 
+          }
+          delete txAsAny.isRecurring; 
+      }
+      return { ...tx, recurrenceFrequency: frequency as RecurrenceFrequency, updatedAt: tx.updatedAt || tx.createdAt };
+    });
+
+    return migratedTransactions.sort((a, b) => {
       const dateComparison = new Date(b.date).getTime() - new Date(a.date).getTime();
       return dateComparison !== 0 ? dateComparison : (b.createdAt || 0) - (a.createdAt || 0);
     });
@@ -421,12 +446,12 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
       amount,
     }));
     
-    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000; // Fallback for AI if no income
+    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000;
 
     const loansForAI = userLoans.map(loan => ({
       description: `${loan.bankName} - ${loan.description}`,
       amount: loan.installmentAmount * loan.installmentsCount,
-      interestRate: 0, // Placeholder, as we don't store this
+      interestRate: 0, 
       monthlyPayment: loan.installmentAmount,
     }));
     
@@ -437,7 +462,7 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
       creditCards: userCreditCards.map(cc => ({
         name: cc.name,
         limit: cc.limit,
-        balance: 0, // Placeholder, balance is dynamic and not stored directly this way
+        balance: 0, 
         dueDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(cc.dueDateDay).padStart(2, '0')}`
       })),
     };
@@ -499,7 +524,7 @@ export async function getLoansForUser(userId: string): Promise<Loan[]> {
                 installmentAmount: Number(loan.installmentAmount),
                 installmentsCount: Number(loan.installmentsCount),
                 createdAt: new Date(loan.createdAt).getTime(),
-                updatedAt: new Date(loan.updatedAt).getTime(),
+                updatedAt: loan.updatedAt ? new Date(loan.updatedAt).getTime() : new Date(loan.createdAt).getTime(),
             }));
         } catch (error:any) {
             console.error(`Error fetching loans for user ${userId} from PG:`, error.message); return [];
@@ -508,7 +533,7 @@ export async function getLoansForUser(userId: string): Promise<Loan[]> {
         const db = await readDB();
         const userData = db.users[userId];
         if (!userData || !userData.loans) return [];
-        return userData.loans.sort((a,b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime());
+        return userData.loans.map(l => ({...l, updatedAt: l.updatedAt || l.createdAt})).sort((a,b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime());
     }
 }
 
@@ -570,7 +595,7 @@ export async function getCreditCardsForUser(userId: string): Promise<CreditCard[
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
             const res = await pool.query<CreditCard>('SELECT id, user_id as "userId", name, limit_amount as "limit", due_date_day as "dueDateDay", closing_date_day as "closingDateDay", created_at as "createdAt", updated_at as "updatedAt" FROM credit_cards WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
-            return res.rows.map(cc => ({ ...cc, limit: Number(cc.limit), createdAt: new Date(cc.createdAt).getTime(), updatedAt: new Date(cc.updatedAt).getTime() }));
+            return res.rows.map(cc => ({ ...cc, limit: Number(cc.limit), createdAt: new Date(cc.createdAt).getTime(), updatedAt: cc.updatedAt ? new Date(cc.updatedAt).getTime() : new Date(cc.createdAt).getTime() }));
         } catch (error: any) {
             console.error(`Error fetching credit cards for user ${userId} from PG:`, error.message); return [];
         }
@@ -578,7 +603,7 @@ export async function getCreditCardsForUser(userId: string): Promise<CreditCard[
         const db = await readDB();
         const userData = db.users[userId];
         if (!userData || !userData.creditCards) return [];
-        return userData.creditCards.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+        return userData.creditCards.map(cc => ({...cc, updatedAt: cc.updatedAt || cc.createdAt})).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
     }
 }
 
@@ -618,7 +643,7 @@ export async function getCreditCardPurchasesForUser(userId: string): Promise<Cre
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
             const res = await pool.query<CreditCardPurchase>('SELECT id, user_id as "userId", card_id as "cardId", purchase_date as "date", description, category, total_amount as "totalAmount", installments, created_at as "createdAt", updated_at as "updatedAt" FROM credit_card_purchases WHERE user_id = $1 ORDER BY purchase_date DESC, created_at DESC', [userId]);
-            return res.rows.map(p => ({...p, date: formatDateFns(new Date(p.date), 'yyyy-MM-dd'), totalAmount: Number(p.totalAmount), createdAt: new Date(p.createdAt).getTime(), updatedAt: new Date(p.updatedAt).getTime()}));
+            return res.rows.map(p => ({...p, date: formatDateFns(new Date(p.date), 'yyyy-MM-dd'), totalAmount: Number(p.totalAmount), createdAt: new Date(p.createdAt).getTime(), updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : new Date(p.createdAt).getTime()}));
         } catch (error: any) {
             console.error(`Error fetching credit card purchases for user ${userId} from PG:`, error.message); return [];
         }
@@ -626,7 +651,7 @@ export async function getCreditCardPurchasesForUser(userId: string): Promise<Cre
         const db = await readDB();
         const userData = db.users[userId];
         if (!userData || !userData.creditCardPurchases) return [];
-        return userData.creditCardPurchases.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return userData.creditCardPurchases.map(p => ({...p, updatedAt: p.updatedAt || p.createdAt})).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
 }
 
@@ -692,17 +717,16 @@ export const addCategoryForUser = async (userId: string, categoryName: string, i
                  const cat = res.rows[0];
                  return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime()} };
             } else {
-                // If ON CONFLICT DO NOTHING happened, fetch the existing one
                 const existingRes = await pool.query('SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt" FROM user_categories WHERE user_id = $1 AND name = $2', [userId, categoryName.trim()]);
                 if (existingRes.rows.length > 0) {
                     const cat = existingRes.rows[0];
-                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime()}, error: "Category already exists." }; // technically success as it exists
+                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime()}, error: "Category already exists." }; 
                 }
                 return { success: false, error: "Category already exists, but failed to retrieve." };
             }
         } catch (error: any) {
             console.error("Error adding category to PostgreSQL:", error.message);
-             if (error.code === '23505') { // Unique violation (should be caught by ON CONFLICT)
+             if (error.code === '23505') { 
                 return { success: false, error: "Category already exists." };
             }
             return { success: false, error: "Database error adding category." };
@@ -733,7 +757,6 @@ export const addCategoryForUser = async (userId: string, categoryName: string, i
     }
 };
 
-// Financial Goals CRUD
 export interface AddFinancialGoalResult { success: boolean; goalId?: string; error?: string; }
 export const addFinancialGoal = async (userId: string, goalData: NewFinancialGoalData): Promise<AddFinancialGoalResult> => {
   if (!userId) return { success: false, error: "User ID is required." };
@@ -802,7 +825,7 @@ export async function getFinancialGoalsForUser(userId: string): Promise<Financia
   } else {
     const db = await readDB();
     const userData = db.users[userId];
-    return userData?.financialGoals?.sort((a, b) => b.createdAt - a.createdAt) || [];
+    return userData?.financialGoals?.map(g => ({...g, updatedAt: g.updatedAt || g.createdAt})).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) || [];
   }
 }
 
@@ -816,19 +839,19 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
       let queryIndex = 1;
 
       Object.entries(updateData).forEach(([key, value]) => {
-        if (value !== undefined) {
+        if (value !== undefined) { // Important: Allow null for nullable fields like targetDate, description, icon
           const dbKey = key === 'targetAmount' ? 'target_amount' : key === 'currentAmount' ? 'current_amount' : key === 'targetDate' ? 'target_date' : key;
           fields.push(`${dbKey} = $${queryIndex++}`);
           values.push(value);
         }
       });
 
-      if (fields.length === 0) return { success: true }; // No fields to update
+      if (fields.length === 0) return { success: true }; 
 
-      fields.push(`updated_at = $${queryIndex++}`); // Add updated_at field
-      values.push(new Date()); // Add current timestamp for updated_at
+      fields.push(`updated_at = $${queryIndex++}`); 
+      values.push(new Date()); 
       
-      values.push(goalId, userId); // For WHERE clause
+      values.push(goalId, userId); 
 
       const query = `UPDATE financial_goals SET ${fields.join(', ')} WHERE id = $${queryIndex++} AND user_id = $${queryIndex++}`;
       const res = await pool.query(query, values);
@@ -847,7 +870,7 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
 
     db.users[userId].financialGoals[goalIndex] = {
       ...db.users[userId].financialGoals[goalIndex],
-      ...updateData,
+      ...updateData, // Handles undefined correctly by not overriding
       updatedAt: Date.now(),
     };
     await writeDB(db);
@@ -900,12 +923,16 @@ async function migrateOldDbStructure() {
                                     lastLoginAt: Date.now(),
                                 },
                                 hashedPassword: await bcrypt.hash("password", 10),
-                                transactions: (db.transactions || []).map((tx: any) => ({...tx, userId: defaultUserId})),
-                                loans: (db.loans || []).map((l: any) => ({...l, userId: defaultUserId})),
-                                creditCards: (db.creditCards || []).map((cc: any) => ({...cc, userId: defaultUserId})),
-                                creditCardPurchases: (db.creditCardPurchases || []).map((p: any) => ({...p, userId: defaultUserId})),
+                                transactions: (db.transactions || []).map((tx: any) => {
+                                    const migratedTx: Transaction = {...tx, userId: defaultUserId, recurrenceFrequency: tx.isRecurring ? 'monthly' : 'none', updatedAt: tx.updatedAt || tx.createdAt };
+                                    delete (migratedTx as any).isRecurring;
+                                    return migratedTx;
+                                }),
+                                loans: (db.loans || []).map((l: any) => ({...l, userId: defaultUserId, updatedAt: l.updatedAt || l.createdAt})),
+                                creditCards: (db.creditCards || []).map((cc: any) => ({...cc, userId: defaultUserId, updatedAt: cc.updatedAt || cc.createdAt})),
+                                creditCardPurchases: (db.creditCardPurchases || []).map((p: any) => ({...p, userId: defaultUserId, updatedAt: p.updatedAt || p.createdAt})),
                                 categories: (defaultCategories.map(cat => ({id: randomUUID(), userId: defaultUserId, name: cat.name, isSystemDefined: cat.isSystemDefined || false, createdAt: Date.now() }))),
-                                financialGoals: [], // Initialize financialGoals
+                                financialGoals: [],
                             }
                         }
                     };
@@ -917,27 +944,49 @@ async function migrateOldDbStructure() {
                  }
             } else {
                 for (const userId in db.users) {
-                    if (!db.users[userId].categories) {
-                        db.users[userId].categories = [];
-                         defaultCategories.forEach(cat => {
-                             if (!db.users[userId].categories.find(c => c.name === cat.name)) {
-                                db.users[userId].categories.push({
-                                    id: randomUUID(), userId: userId, name: cat.name,
-                                    isSystemDefined: cat.isSystemDefined || false, createdAt: Date.now()
-                                });
-                             }
-                        });
-                        modified = true;
-                    }
-                    if (!db.users[userId].financialGoals) { // Ensure financialGoals array exists
-                        db.users[userId].financialGoals = [];
-                        modified = true;
+                    if (db.users[userId]) {
+                        const userRecord = db.users[userId];
+                        if (!userRecord.categories) {
+                            userRecord.categories = [];
+                            defaultCategories.forEach(cat => {
+                                if (!userRecord.categories.find(c => c.name === cat.name)) {
+                                    userRecord.categories.push({
+                                        id: randomUUID(), userId: userId, name: cat.name,
+                                        isSystemDefined: cat.isSystemDefined || false, createdAt: Date.now()
+                                    });
+                                }
+                            });
+                            modified = true;
+                        }
+                        if (!userRecord.financialGoals) { 
+                            userRecord.financialGoals = [];
+                            modified = true;
+                        }
+                        // Migrate transactions for existing users
+                        if (userRecord.transactions) {
+                            userRecord.transactions = userRecord.transactions.map(tx => {
+                                const txAsAny = tx as any;
+                                let frequency = tx.recurrenceFrequency || 'none';
+                                if (txAsAny.hasOwnProperty('isRecurring') && typeof txAsAny.isRecurring === 'boolean') {
+                                    if (txAsAny.isRecurring && frequency === 'none') {
+                                        frequency = 'monthly';
+                                    }
+                                    delete txAsAny.isRecurring;
+                                    modified = true;
+                                }
+                                return { ...tx, recurrenceFrequency: frequency as RecurrenceFrequency, updatedAt: tx.updatedAt || tx.createdAt };
+                            });
+                        }
+                        // Ensure updatedAt for other entities
+                        if (userRecord.loans) userRecord.loans = userRecord.loans.map(l => ({...l, updatedAt: l.updatedAt || l.createdAt}));
+                        if (userRecord.creditCards) userRecord.creditCards = userRecord.creditCards.map(cc => ({...cc, updatedAt: cc.updatedAt || cc.createdAt}));
+                        if (userRecord.creditCardPurchases) userRecord.creditCardPurchases = userRecord.creditCardPurchases.map(p => ({...p, updatedAt: p.updatedAt || p.createdAt}));
                     }
                 }
             }
             if (modified) {
                 await writeDB(db);
-                console.log("Ensured all users have categories and financialGoals arrays.");
+                console.log("db.json structure updated for all users (categories, financialGoals, recurrenceFrequency).");
             }
         } catch (error: any) {
             if (error.code === 'ENOENT') {
@@ -969,9 +1018,24 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
     const db = await readDB();
     const userData = db.users[userId];
     if (!userData) return null;
+
+    // Ensure recurrenceFrequency is set for backup from local file, and old isRecurring is removed
+    const cleanedTransactions = (userData.transactions || []).map(tx => {
+      const { ...cleanedTx } = tx; // Create a copy
+      if ((cleanedTx as any).isRecurring !== undefined) { // Check if old property exists
+        if (!cleanedTx.recurrenceFrequency || cleanedTx.recurrenceFrequency === 'none') {
+          cleanedTx.recurrenceFrequency = (cleanedTx as any).isRecurring ? 'monthly' : 'none';
+        }
+        delete (cleanedTx as any).isRecurring;
+      } else if (!cleanedTx.recurrenceFrequency) {
+        cleanedTx.recurrenceFrequency = 'none';
+      }
+      return cleanedTx;
+    });
+
     return {
       profile: { email: userData.profile.email, displayName: userData.profile.displayName || undefined },
-      transactions: userData.transactions || [],
+      transactions: cleanedTransactions,
       loans: userData.loans || [],
       creditCards: userData.creditCards || [],
       creditCardPurchases: userData.creditCardPurchases || [],
@@ -1004,8 +1068,8 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
       }
 
       for (const tx of backupData.transactions) {
-        await client.query('INSERT INTO transactions (id, user_id, type, amount, category, date, description, is_recurring, created_at, receipt_image_uri, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
-          [tx.id, userId, tx.type, tx.amount, tx.category, tx.date, tx.description, tx.isRecurring, new Date(tx.createdAt), tx.receiptImageUri, new Date(tx.updatedAt || tx.createdAt)]);
+        await client.query('INSERT INTO transactions (id, user_id, type, amount, category, date, description, recurrence_frequency, created_at, receipt_image_uri, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+          [tx.id, userId, tx.type, tx.amount, tx.category, tx.date, tx.description, tx.recurrenceFrequency || 'none', new Date(tx.createdAt), tx.receiptImageUri, new Date(tx.updatedAt || tx.createdAt)]);
       }
       for (const loan of backupData.loans) {
          await client.query('INSERT INTO loans (id, user_id, bank_name, description, installment_amount, installments_count, start_date, end_date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
@@ -1020,7 +1084,7 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
           [purchase.id, userId, purchase.cardId, purchase.date, purchase.description, purchase.category, purchase.totalAmount, purchase.installments, new Date(purchase.createdAt), new Date(purchase.updatedAt || purchase.createdAt)]);
       }
       for (const category of backupData.categories) {
-         await client.query('INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at) VALUES ($1, $2, $3, $4, $5)', // Assuming categories don't have updated_at in this model
+         await client.query('INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at) VALUES ($1, $2, $3, $4, $5)', 
           [category.id, userId, category.name, category.isSystemDefined, new Date(category.createdAt)]);
       }
       for (const goal of backupData.financialGoals) {
@@ -1037,7 +1101,6 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
       client.release();
     }
   } else {
-    // Local db.json mode
     const db = await readDB();
     const userRecord = db.users[userId];
     if (!userRecord) return { success: false, error: "User not found." };
@@ -1046,7 +1109,7 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
         userRecord.profile.displayName = backupData.profile.displayName;
     }
 
-    userRecord.transactions = backupData.transactions.map(t => ({...t, userId}));
+    userRecord.transactions = backupData.transactions.map(t => ({...t, userId, recurrenceFrequency: t.recurrenceFrequency || 'none'}));
     userRecord.loans = backupData.loans.map(l => ({...l, userId}));
     userRecord.creditCards = backupData.creditCards.map(cc => ({...cc, userId}));
     userRecord.creditCardPurchases = backupData.creditCardPurchases.map(p => ({...p, userId}));

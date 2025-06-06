@@ -23,13 +23,12 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-import { Checkbox } from '@/components/ui/checkbox';
 import { addTransaction, type NewTransactionData, type AddTransactionResult, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
 import { useToast } from '@/hooks/use-toast';
 import { Sun, Camera, Paperclip, ScanLine, Trash2, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { UserCategory } from '@/types';
+import type { UserCategory, RecurrenceFrequency } from '@/types';
 import { Combobox } from '@/components/ui/combobox';
 import { useAuth } from '@/contexts/AuthContext';
 import { extractTransactionDetailsFromImage } from '@/ai/flows/extract-transaction-details-flow';
@@ -50,7 +49,7 @@ const transactionFormSchema = z.object({
     required_error: 'A data da transação é obrigatória.',
   }),
   description: z.string().max(200, { message: 'A descrição deve ter no máximo 200 caracteres.'}).optional(),
-  isRecurring: z.boolean().optional(),
+  recurrenceFrequency: z.enum(['none', 'monthly', 'weekly', 'annually']).default('none'),
   receiptImageUri: z.string().nullable().optional(),
 });
 
@@ -95,7 +94,6 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
 
   useEffect(() => {
     fetchCategories();
-    // Cleanup camera stream on unmount
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -115,7 +113,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
         videoRef.current.srcObject = stream;
       }
       setIsCameraMode(true);
-      setImagePreviewUrl(null); // Clear any existing uploaded image
+      setImagePreviewUrl(null); 
     } catch (error) {
       console.error('Error accessing camera:', error);
       setHasCameraPermission(false);
@@ -169,7 +167,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
     setImagePreviewUrl(null);
     form.setValue('receiptImageUri', null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = ""; // Reset file input
+      fileInputRef.current.value = ""; 
     }
     stopCamera();
   };
@@ -205,7 +203,7 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
       category: '',
       date: new Date(),
       description: '',
-      isRecurring: false,
+      recurrenceFrequency: 'none',
       receiptImageUri: null,
     },
   });
@@ -232,8 +230,8 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
       ...values,
       date: format(values.date, 'yyyy-MM-dd'),
       amount: Number(values.amount),
-      isRecurring: values.isRecurring || false,
-      receiptImageUri: imagePreviewUrl, // Send the image URI
+      recurrenceFrequency: values.recurrenceFrequency || 'none',
+      receiptImageUri: imagePreviewUrl, 
     };
 
     try {
@@ -250,10 +248,10 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
             category: '', 
             date: new Date(), 
             description: '', 
-            isRecurring: false,
+            recurrenceFrequency: 'none',
             receiptImageUri: null,
         });
-        handleClearImage(); // Clear image after successful submission
+        handleClearImage(); 
         if (onSuccess) onSuccess();
         setOpen(false);
       } else {
@@ -425,21 +423,24 @@ export function TransactionForm({ onSuccess, setOpen, userId }: TransactionFormP
 
         <FormField
           control={form.control}
-          name="isRecurring"
+          name="recurrenceFrequency"
           render={({ field }) => (
-            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                  disabled={isSubmitting || isProcessingImage}
-                />
-              </FormControl>
-              <div className="space-y-1 leading-none">
-                <FormLabel className="font-normal">
-                  Transação Recorrente?
-                </FormLabel>
-              </div>
+            <FormItem>
+              <FormLabel>Frequência da Recorrência</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting || isProcessingImage}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a frequência" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="none">Não Recorrente</SelectItem>
+                  <SelectItem value="monthly">Mensal</SelectItem>
+                  <SelectItem value="weekly">Semanal</SelectItem>
+                  <SelectItem value="annually">Anual</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
             </FormItem>
           )}
         />
