@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"; // Adicionado CardFooter
 import { Repeat, Sun, AlertTriangleIcon, SearchX, CalendarDays, Tag, DollarSign } from "lucide-react";
 import type { Transaction, RecurrenceFrequency } from '@/types';
 import { getTransactionsForUser } from '@/lib/databaseService';
@@ -39,7 +39,7 @@ export default function SubscriptionsPage() {
       const filteredExpenses = allTransactions.filter(
         (tx) => tx.type === 'expense' && tx.recurrenceFrequency && tx.recurrenceFrequency !== 'none'
       );
-      setRecurringExpenses(filteredExpenses.sort((a,b) => a.category.localeCompare(b.category) || a.description!.localeCompare(b.description!)));
+      setRecurringExpenses(filteredExpenses.sort((a,b) => a.category.localeCompare(b.category) || (a.description || "").localeCompare(b.description || "")));
     } catch (e: any) {
       const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Falha ao carregar despesas recorrentes.';
       console.error("Failed to fetch recurring expenses:", errorMessage);
