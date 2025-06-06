@@ -13,7 +13,7 @@ import {
   Settings,
   Target, 
   Briefcase,
-  Calculator, // Added Calculator icon
+  Calculator,
 } from 'lucide-react';
 import Logo from './Logo';
 import {
@@ -33,11 +33,12 @@ import * as React from "react";
 const navItems = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
   { href: '/transactions', label: 'Transações', icon: Repeat },
+  { href: '/subscriptions', label: 'Assinaturas', icon: Repeat }, // Renomeado e ícone consistente
   { href: '/loans', label: 'Empréstimos', icon: Landmark },
   { href: '/credit-cards', label: 'Cartões', icon: CreditCard },
   { href: '/goals', label: 'Metas', icon: Target },
   { href: '/investments', label: 'Investimentos', icon: Briefcase },
-  { href: '/calculators', label: 'Calculadoras', icon: Calculator }, // Added Calculators item
+  { href: '/calculators', label: 'Calculadoras', icon: Calculator },
   { href: '/insights', label: 'Insights IA', icon: Sparkles },
 ];
 
