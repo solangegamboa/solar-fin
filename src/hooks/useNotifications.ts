@@ -176,7 +176,7 @@ export function useNotifications() {
             id: notificationId,
             type: 'scheduled_transaction',
             relatedId: tx.id,
-            message: `Agendamento: ${tx.description || tx.category} - ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}`,
+            message: `${tx.description || tx.category} - ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}`,
             projectedDate: projectedDateString,
             isRead: readIds.includes(notificationId),
             isPast: occurrence.isPast,
