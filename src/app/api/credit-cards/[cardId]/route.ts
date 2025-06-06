@@ -24,17 +24,25 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     const updateData = await req.json() as UpdateCreditCardData;
     
     // Basic validation for update data
-    if (updateData.name !== undefined && (typeof updateData.name !== 'string' || updateData.name.trim().length === 0 || updateData.name.length > 50)) {
-        return NextResponse.json({ success: false, message: 'Invalid card name.' }, { status: 400 });
+    if (updateData.name !== undefined) {
+        if (typeof updateData.name !== 'string' || updateData.name.trim().length === 0 || updateData.name.length > 50) {
+            return NextResponse.json({ success: false, message: 'Invalid card name: must be a non-empty string up to 50 chars.' }, { status: 400 });
+        }
     }
-    if (updateData.limit !== undefined && (typeof updateData.limit !== 'number' || updateData.limit <= 0)) {
-        return NextResponse.json({ success: false, message: 'Limit must be a positive number.' }, { status: 400 });
+    if (updateData.limit !== undefined) {
+        if (typeof updateData.limit !== 'number' || isNaN(updateData.limit) || updateData.limit <= 0) {
+            return NextResponse.json({ success: false, message: 'Limit must be a positive number.' }, { status: 400 });
+        }
     }
-    if (updateData.dueDateDay !== undefined && (typeof updateData.dueDateDay !== 'number' || updateData.dueDateDay < 1 || updateData.dueDateDay > 31)) {
-        return NextResponse.json({ success: false, message: 'Due date day must be between 1 and 31.' }, { status: 400 });
+    if (updateData.dueDateDay !== undefined) {
+        if (typeof updateData.dueDateDay !== 'number' || isNaN(updateData.dueDateDay) || !Number.isInteger(updateData.dueDateDay) || updateData.dueDateDay < 1 || updateData.dueDateDay > 31) {
+            return NextResponse.json({ success: false, message: 'Due date day must be an integer between 1 and 31.' }, { status: 400 });
+        }
     }
-    if (updateData.closingDateDay !== undefined && (typeof updateData.closingDateDay !== 'number' || updateData.closingDateDay < 1 || updateData.closingDateDay > 31)) {
-        return NextResponse.json({ success: false, message: 'Closing date day must be between 1 and 31.' }, { status: 400 });
+    if (updateData.closingDateDay !== undefined) {
+        if (typeof updateData.closingDateDay !== 'number' || isNaN(updateData.closingDateDay) || !Number.isInteger(updateData.closingDateDay) || updateData.closingDateDay < 1 || updateData.closingDateDay > 31) {
+            return NextResponse.json({ success: false, message: 'Closing date day must be an integer between 1 and 31.' }, { status: 400 });
+        }
     }
 
 

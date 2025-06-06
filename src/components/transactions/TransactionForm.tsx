@@ -34,15 +34,31 @@ import { useAuth } from '@/contexts/AuthContext';
 import { extractTransactionDetailsFromImage } from '@/ai/flows/extract-transaction-details-flow';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-// CurrencyInput is no longer used
 
-const amountSchema = z.coerce
-  .number({
+const amountSchema = z.preprocess(
+  (val) => {
+    if (typeof val === 'string') {
+      // Attempt to clean common currency formatting and use dot as decimal
+      const cleaned = val
+        .replace(/R\$\s?/, '') // Remove R$ symbol and optional space
+        .replace(/\./g, '')    // Remove thousand separators (dots)
+        .replace(',', '.');   // Replace decimal comma with dot
+      const num = parseFloat(cleaned);
+      return isNaN(num) ? undefined : num; // Return undefined if not a number after cleaning
+    }
+    if (typeof val === 'number') {
+      return val;
+    }
+    // For null, boolean, or other types, return undefined to let coerce.number handle or for Zod to report error if it can't coerce
+    return undefined;
+  },
+  z.coerce.number({
     required_error: 'O valor é obrigatório.',
     invalid_type_error: 'O valor deve ser um número válido.',
   })
   .positive({ message: 'O valor deve ser positivo.' })
-  .min(0.01, { message: 'O valor deve ser maior que R$ 0,00.' });
+  .min(0.01, { message: 'O valor deve ser maior que R$ 0,00.' })
+);
 
 
 const transactionFormSchema = z.object({
@@ -442,7 +458,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
                   lang="pt-BR"
                   placeholder="R$ 1.234,56"
                   {...field}
-                  value={field.value === undefined ? '' : field.value} // Ensure value is string for input
+                  value={field.value === undefined ? '' : field.value} 
                   onChange={e => field.onChange(e.target.valueAsNumber === undefined || isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber)}
                   disabled={isSubmitting || isProcessingImage}
                 />
