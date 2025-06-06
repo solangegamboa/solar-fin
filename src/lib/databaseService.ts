@@ -3,7 +3,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData, UserCategory, NewUserCategoryData, UserBackupData, FinancialGoal, NewFinancialGoalData, UpdateFinancialGoalData, RecurrenceFrequency, Investment, NewInvestmentData, UpdateInvestmentData, InvestmentType } from '@/types';
+import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData, UserCategory, NewUserCategoryData, UserBackupData, FinancialGoal, NewFinancialGoalData, UpdateFinancialGoalData, RecurrenceFrequency, Investment, NewInvestmentData, UpdateInvestmentData, InvestmentType, UpdateTransactionData, UpdateResult, UpdateCreditCardPurchaseData, UpdateCreditCardData } from '@/types';
 import { randomUUID } from 'crypto';
 import { parseISO, addMonths, format as formatDateFns } from 'date-fns';
 import { Pool, type QueryResult } from 'pg';
@@ -117,7 +117,7 @@ export async function createUser(email: string, password_plain: string, displayN
         [userId, email, hashedPassword, displayName || null, new Date(now), new Date(now), notifyByEmailDefault]
       );
       const dbUser = res.rows[0];
-      
+
       for (const catData of defaultCategories) {
           const categoryId = randomUUID();
           await client.query(
@@ -161,7 +161,7 @@ export async function createUser(email: string, password_plain: string, displayN
       investments: [],
     };
     await writeDB(db);
-    await addDefaultCategoriesForUser(userId); 
+    await addDefaultCategoriesForUser(userId);
     return newUserProfile;
   }
 }
@@ -277,7 +277,7 @@ export async function updateUserPassword(userId: string, currentPasswordPlain: s
     try {
       const userRes = await pool.query('SELECT hashed_password FROM app_users WHERE id = $1', [userId]);
       if (userRes.rowCount === 0) return { success: false, error: "User not found." };
-      
+
       const hashedPasswordFromDb = userRes.rows[0].hashed_password;
       const isCurrentPasswordValid = await bcrypt.compare(currentPasswordPlain, hashedPasswordFromDb);
       if (!isCurrentPasswordValid) return { success: false, error: "Invalid current password." };
@@ -423,15 +423,15 @@ export async function getTransactionsForUser(userId: string): Promise<Transactio
     const db = await readDB();
     const userData = db.users[userId];
     if (!userData || !userData.transactions) return [];
-    
+
     const migratedTransactions = userData.transactions.map(tx => {
       let frequency = tx.recurrenceFrequency || 'none';
-      const txAsAny = tx as any; 
+      const txAsAny = tx as any;
       if (txAsAny.hasOwnProperty('isRecurring') && typeof txAsAny.isRecurring === 'boolean') {
           if (txAsAny.isRecurring && frequency === 'none') {
-              frequency = 'monthly'; 
+              frequency = 'monthly';
           }
-          delete txAsAny.isRecurring; 
+          delete txAsAny.isRecurring;
       }
       return { ...tx, recurrenceFrequency: frequency as RecurrenceFrequency, updatedAt: tx.updatedAt || tx.createdAt };
     });
@@ -443,9 +443,7 @@ export async function getTransactionsForUser(userId: string): Promise<Transactio
   }
 }
 
-export interface DeleteResult { success: boolean; error?: string; }
-
-export const deleteTransaction = async (userId: string, transactionId: string): Promise<DeleteResult> => {
+export const deleteTransaction = async (userId: string, transactionId: string): Promise<UpdateResult> => {
   if (!userId) return { success: false, error: "User ID is required." };
 
   if (DATABASE_MODE === 'postgres' && pool) {
@@ -460,22 +458,83 @@ export const deleteTransaction = async (userId: string, transactionId: string): 
   } else {
     const db = await readDB();
     if (!db.users[userId] || !db.users[userId].transactions) return { success: false, error: "User or transactions not found." };
-    
+
     const initialLength = db.users[userId].transactions.length;
     db.users[userId].transactions = db.users[userId].transactions.filter(tx => tx.id !== transactionId);
     if (db.users[userId].transactions.length === initialLength) return { success: false, error: "Transaction not found." };
-    
+
     await writeDB(db);
     return { success: true };
   }
 };
 
+export const updateTransaction = async (userId: string, transactionId: string, data: UpdateTransactionData): Promise<UpdateResult> => {
+  if (!userId || !transactionId) return { success: false, error: "User ID and Transaction ID are required." };
+
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const fields: string[] = [];
+      const values: any[] = [];
+      let queryIndex = 1;
+
+      Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined) {
+          const dbKey = key === 'recurrenceFrequency' ? 'recurrence_frequency' : key === 'receiptImageUri' ? 'receipt_image_uri' : key;
+          fields.push(`${dbKey} = $${queryIndex++}`);
+          values.push(value);
+        }
+      });
+
+      if (fields.length === 0) return { success: true }; // No fields to update
+
+      fields.push(`updated_at = $${queryIndex++}`);
+      values.push(new Date());
+      values.push(transactionId, userId); // For WHERE clause
+
+      const query = `UPDATE transactions SET ${fields.join(', ')} WHERE id = $${queryIndex++} AND user_id = $${queryIndex++}`;
+      const res = await pool.query(query, values);
+
+      if (res.rowCount === 0) return { success: false, error: "Transaction not found or not owned by user." };
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error updating transaction in PostgreSQL:", error.message);
+      return { success: false, error: "Database error updating transaction." };
+    }
+  } else {
+    const db = await readDB();
+    if (!db.users[userId]?.transactions) return { success: false, error: "User or transactions not found." };
+
+    const txIndex = db.users[userId].transactions.findIndex(tx => tx.id === transactionId);
+    if (txIndex === -1) return { success: false, error: "Transaction not found." };
+
+    // Merge existing data with new data
+    const updatedTx: Transaction = {
+      ...db.users[userId].transactions[txIndex],
+      ...data,
+      date: data.date ? data.date : db.users[userId].transactions[txIndex].date, // Ensure date is handled correctly
+      amount: data.amount !== undefined ? data.amount : db.users[userId].transactions[txIndex].amount,
+      type: data.type !== undefined ? data.type : db.users[userId].transactions[txIndex].type,
+      category: data.category !== undefined ? data.category : db.users[userId].transactions[txIndex].category,
+      updatedAt: Date.now(),
+    };
+    // Handle nullable fields explicitly if they can be set to null
+    if (data.description !== undefined) updatedTx.description = data.description === null ? undefined : data.description;
+    if (data.receiptImageUri !== undefined) updatedTx.receiptImageUri = data.receiptImageUri;
+
+
+    db.users[userId].transactions[txIndex] = updatedTx;
+    await writeDB(db);
+    return { success: true };
+  }
+};
+
+
 export async function getFinancialDataForUser(userId: string): Promise<FinancialDataInput | null> {
   if (!userId) return null;
-  
+
   const userTransactions = await getTransactionsForUser(userId);
-  const userLoans = await getLoansForUser(userId); 
-  const userCreditCards = await getCreditCardsForUser(userId); 
+  const userLoans = await getLoansForUser(userId);
+  const userCreditCards = await getCreditCardsForUser(userId);
   const userInvestments = await getInvestmentsForUser(userId);
 
   try {
@@ -494,13 +553,13 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
       category,
       amount,
     }));
-    
+
     const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000;
 
     const loansForAI = userLoans.map(loan => ({
       description: `${loan.bankName} - ${loan.description}`,
       amount: loan.installmentAmount * loan.installmentsCount,
-      interestRate: 0, 
+      interestRate: 0,
       monthlyPayment: loan.installmentAmount,
     }));
 
@@ -511,7 +570,7 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
         initialAmount: inv.initialAmount,
         symbol: inv.symbol,
     }));
-    
+
     return {
       income: incomeForAI,
       expenses: expensesArray,
@@ -519,7 +578,7 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
       creditCards: userCreditCards.map(cc => ({
         name: cc.name,
         limit: cc.limit,
-        balance: 0, 
+        balance: 0,
         dueDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(cc.dueDateDay).padStart(2, '0')}`
       })),
       investments: investmentsForAI,
@@ -534,7 +593,7 @@ export interface AddLoanResult { success: boolean; loanId?: string; error?: stri
 export const addLoan = async (userId: string, loanData: NewLoanData): Promise<AddLoanResult> => {
    if (!userId) return { success: false, error: "User ID is required." };
     const startDateObj = parseISO(loanData.startDate);
-    const endDateObj = addMonths(startDateObj, loanData.installmentsCount -1); 
+    const endDateObj = addMonths(startDateObj, loanData.installmentsCount -1);
     const calculatedEndDate = formatDateFns(endDateObj, 'yyyy-MM-dd');
 
     const newLoanId = randomUUID();
@@ -595,7 +654,7 @@ export async function getLoansForUser(userId: string): Promise<Loan[]> {
     }
 }
 
-export const deleteLoan = async (userId: string, loanId: string): Promise<DeleteResult> => {
+export const deleteLoan = async (userId: string, loanId: string): Promise<UpdateResult> => {
     if (!userId) return { success: false, error: "User ID required." };
     if (DATABASE_MODE === 'postgres' && pool) {
        try {
@@ -665,6 +724,96 @@ export async function getCreditCardsForUser(userId: string): Promise<CreditCard[
     }
 }
 
+export const updateCreditCard = async (userId: string, cardId: string, data: UpdateCreditCardData): Promise<UpdateResult> => {
+  if (!userId || !cardId) return { success: false, error: "User ID and Card ID are required." };
+
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const fields: string[] = [];
+      const values: any[] = [];
+      let queryIndex = 1;
+
+      (Object.keys(data) as Array<keyof UpdateCreditCardData>).forEach(key => {
+        if (data[key] !== undefined) {
+          const dbKeyMap: Record<keyof UpdateCreditCardData, string> = {
+            name: 'name', limit: 'limit_amount', dueDateDay: 'due_date_day', closingDateDay: 'closing_date_day'
+          };
+          const dbKey = dbKeyMap[key] || key;
+          fields.push(`${dbKey} = $${queryIndex++}`);
+          values.push(data[key]);
+        }
+      });
+
+      if (fields.length === 0) return { success: true };
+
+      fields.push(`updated_at = $${queryIndex++}`);
+      values.push(new Date());
+      values.push(cardId, userId);
+
+      const query = `UPDATE credit_cards SET ${fields.join(', ')} WHERE id = $${queryIndex++} AND user_id = $${queryIndex++}`;
+      const res = await pool.query(query, values);
+
+      if (res.rowCount === 0) return { success: false, error: "Credit card not found or not owned by user." };
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error updating credit card in PostgreSQL:", error.message);
+      return { success: false, error: "Database error updating credit card." };
+    }
+  } else {
+    const db = await readDB();
+    if (!db.users[userId]?.creditCards) return { success: false, error: "User or credit cards not found." };
+    const cardIndex = db.users[userId].creditCards.findIndex(cc => cc.id === cardId);
+    if (cardIndex === -1) return { success: false, error: "Credit card not found." };
+
+    db.users[userId].creditCards[cardIndex] = {
+      ...db.users[userId].creditCards[cardIndex],
+      ...data,
+      updatedAt: Date.now(),
+    };
+    await writeDB(db);
+    return { success: true };
+  }
+};
+
+export const deleteCreditCard = async (userId: string, cardId: string): Promise<UpdateResult> => {
+  if (!userId || !cardId) return { success: false, error: "User ID and Card ID are required." };
+
+  if (DATABASE_MODE === 'postgres' && pool) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // First delete associated purchases
+      await client.query('DELETE FROM credit_card_purchases WHERE card_id = $1 AND user_id = $2', [cardId, userId]);
+      // Then delete the card
+      const res = await client.query('DELETE FROM credit_cards WHERE id = $1 AND user_id = $2', [cardId, userId]);
+      await client.query('COMMIT');
+      if (res.rowCount === 0) return { success: false, error: "Credit card not found or not owned by user." };
+      return { success: true };
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      console.error("Error deleting credit card and its purchases from PostgreSQL:", error.message);
+      return { success: false, error: "Database error deleting credit card." };
+    } finally {
+      client.release();
+    }
+  } else {
+    const db = await readDB();
+    if (!db.users[userId]?.creditCards) return { success: false, error: "User or credit cards not found." };
+    const initialLength = db.users[userId].creditCards.length;
+    db.users[userId].creditCards = db.users[userId].creditCards.filter(cc => cc.id !== cardId);
+    if (db.users[userId].creditCards.length === initialLength) return { success: false, error: "Credit card not found." };
+
+    // Also delete associated purchases for local DB
+    if (db.users[userId].creditCardPurchases) {
+      db.users[userId].creditCardPurchases = db.users[userId].creditCardPurchases.filter(p => p.cardId !== cardId);
+    }
+
+    await writeDB(db);
+    return { success: true };
+  }
+};
+
+
 export interface AddCreditCardPurchaseResult { success: boolean; purchaseId?: string; error?: string; }
 export const addCreditCardPurchase = async (userId: string, purchaseData: NewCreditCardPurchaseData): Promise<AddCreditCardPurchaseResult> => {
     if (!userId) return { success: false, error: "User ID required." };
@@ -713,7 +862,60 @@ export async function getCreditCardPurchasesForUser(userId: string): Promise<Cre
     }
 }
 
-export const deleteCreditCardPurchase = async (userId: string, purchaseId: string): Promise<DeleteResult> => {
+export const updateCreditCardPurchase = async (userId: string, purchaseId: string, data: UpdateCreditCardPurchaseData): Promise<UpdateResult> => {
+  if (!userId || !purchaseId) return { success: false, error: "User ID and Purchase ID are required." };
+
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const fields: string[] = [];
+      const values: any[] = [];
+      let queryIndex = 1;
+
+      (Object.keys(data) as Array<keyof UpdateCreditCardPurchaseData>).forEach(key => {
+        if (data[key] !== undefined) {
+          const dbKeyMap: Record<keyof UpdateCreditCardPurchaseData, string> = {
+            cardId: 'card_id', date: 'purchase_date', description: 'description', category: 'category',
+            totalAmount: 'total_amount', installments: 'installments'
+          };
+          const dbKey = dbKeyMap[key] || key;
+          fields.push(`${dbKey} = $${queryIndex++}`);
+          values.push(data[key]);
+        }
+      });
+
+      if (fields.length === 0) return { success: true };
+
+      fields.push(`updated_at = $${queryIndex++}`);
+      values.push(new Date());
+      values.push(purchaseId, userId);
+
+      const query = `UPDATE credit_card_purchases SET ${fields.join(', ')} WHERE id = $${queryIndex++} AND user_id = $${queryIndex++}`;
+      const res = await pool.query(query, values);
+
+      if (res.rowCount === 0) return { success: false, error: "Credit card purchase not found or not owned by user." };
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error updating credit card purchase in PostgreSQL:", error.message);
+      return { success: false, error: "Database error updating credit card purchase." };
+    }
+  } else {
+    const db = await readDB();
+    if (!db.users[userId]?.creditCardPurchases) return { success: false, error: "User or credit card purchases not found." };
+    const purchaseIndex = db.users[userId].creditCardPurchases.findIndex(p => p.id === purchaseId);
+    if (purchaseIndex === -1) return { success: false, error: "Credit card purchase not found." };
+
+    db.users[userId].creditCardPurchases[purchaseIndex] = {
+      ...db.users[userId].creditCardPurchases[purchaseIndex],
+      ...data,
+      updatedAt: Date.now(),
+    };
+    await writeDB(db);
+    return { success: true };
+  }
+};
+
+
+export const deleteCreditCardPurchase = async (userId: string, purchaseId: string): Promise<UpdateResult> => {
     if (!userId) return { success: false, error: "User ID required." };
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
@@ -778,7 +980,7 @@ export const addCategoryForUser = async (userId: string, categoryName: string, i
                 const existingRes = await pool.query('SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at FROM user_categories WHERE user_id = $1 AND name = $2', [userId, categoryName.trim()]);
                 if (existingRes.rows.length > 0) {
                     const cat = existingRes.rows[0];
-                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()}, error: "Category already exists." }; 
+                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()}, error: "Category already exists." };
                 }
                 return { success: false, error: "Category already exists, but failed to retrieve." };
             }
@@ -808,7 +1010,7 @@ export const addCategoryForUser = async (userId: string, categoryName: string, i
             name: categoryName.trim(),
             isSystemDefined,
             createdAt: nowTs,
-            // updatedAt: nowTs, // Not explicitly adding updatedAt here for local as it's not in UserCategory type for creation
+            updatedAt: nowTs,
         };
         db.users[userId].categories.push(newCategory);
         await writeDB(db);
@@ -888,8 +1090,7 @@ export async function getFinancialGoalsForUser(userId: string): Promise<Financia
   }
 }
 
-export interface UpdateFinancialGoalResult { success: boolean; error?: string; }
-export const updateFinancialGoal = async (userId: string, goalId: string, updateData: UpdateFinancialGoalData): Promise<UpdateFinancialGoalResult> => {
+export const updateFinancialGoal = async (userId: string, goalId: string, updateData: UpdateFinancialGoalData): Promise<UpdateResult> => {
   if (!userId || !goalId) return { success: false, error: "User ID and Goal ID are required." };
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
@@ -898,23 +1099,23 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
       let queryIndex = 1;
 
       (Object.keys(updateData) as Array<keyof UpdateFinancialGoalData>).forEach(key => {
-        if (updateData[key] !== undefined) { 
+        if (updateData[key] !== undefined) {
           const dbKeyMap: Record<keyof UpdateFinancialGoalData, string> = { // Ensure all keys are mapped
              name: 'name', targetAmount: 'target_amount', currentAmount: 'current_amount',
              targetDate: 'target_date', description: 'description', icon: 'icon', status: 'status',
           };
-          const dbKey = dbKeyMap[key] || key; 
+          const dbKey = dbKeyMap[key] || key;
           fields.push(`${dbKey} = $${queryIndex++}`);
           values.push(updateData[key]);
         }
       });
 
-      if (fields.length === 0) return { success: true }; 
+      if (fields.length === 0) return { success: true };
 
-      fields.push(`updated_at = $${queryIndex++}`); 
-      values.push(new Date()); 
-      
-      values.push(goalId, userId); 
+      fields.push(`updated_at = $${queryIndex++}`);
+      values.push(new Date());
+
+      values.push(goalId, userId);
 
       const query = `UPDATE financial_goals SET ${fields.join(', ')} WHERE id = $${queryIndex++} AND user_id = $${queryIndex++}`;
       const res = await pool.query(query, values);
@@ -933,7 +1134,7 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
 
     db.users[userId].financialGoals[goalIndex] = {
       ...db.users[userId].financialGoals[goalIndex],
-      ...updateData, 
+      ...updateData,
       updatedAt: Date.now(),
     };
     await writeDB(db);
@@ -941,7 +1142,7 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
   }
 };
 
-export const deleteFinancialGoal = async (userId: string, goalId: string): Promise<DeleteResult> => {
+export const deleteFinancialGoal = async (userId: string, goalId: string): Promise<UpdateResult> => {
   if (!userId || !goalId) return { success: false, error: "User ID and Goal ID are required." };
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
@@ -1031,8 +1232,7 @@ export async function getInvestmentsForUser(userId: string): Promise<Investment[
   }
 }
 
-export interface UpdateInvestmentResult { success: boolean; error?: string; }
-export const updateInvestment = async (userId: string, investmentId: string, updateData: UpdateInvestmentData): Promise<UpdateInvestmentResult> => {
+export const updateInvestment = async (userId: string, investmentId: string, updateData: UpdateInvestmentData): Promise<UpdateResult> => {
   if (!userId || !investmentId) return { success: false, error: "User ID and Investment ID are required." };
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
@@ -1052,7 +1252,7 @@ export const updateInvestment = async (userId: string, investmentId: string, upd
           values.push(updateData[key]);
         }
       });
-      
+
       if (fields.length === 0) return { success: true };
 
       fields.push(`updated_at = $${queryIndex++}`);
@@ -1084,7 +1284,7 @@ export const updateInvestment = async (userId: string, investmentId: string, upd
   }
 };
 
-export const deleteInvestment = async (userId: string, investmentId: string): Promise<DeleteResult> => {
+export const deleteInvestment = async (userId: string, investmentId: string): Promise<UpdateResult> => {
   if (!userId || !investmentId) return { success: false, error: "User ID and Investment ID are required." };
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
@@ -1112,12 +1312,12 @@ async function migrateOldDbStructure() {
         try {
             const rawData = await fs.readFile(DB_PATH, 'utf-8');
             const db = JSON.parse(rawData);
-            
+
             let modified = false;
             if (!db.users || (db.users && !Object.keys(db.users).every(key => typeof db.users[key]?.profile === 'object'))) {
-                 if (db.transactions || db.loans || db.creditCards || db.creditCardPurchases) { 
+                 if (db.transactions || db.loans || db.creditCards || db.creditCardPurchases) {
                     console.log("Old db.json structure detected. Migrating to multi-user structure...");
-                    const defaultUserId = "default-user-migrated-id"; 
+                    const defaultUserId = "default-user-migrated-id";
                     const newDb: LocalDB = {
                         users: {
                             [defaultUserId]: {
@@ -1138,7 +1338,7 @@ async function migrateOldDbStructure() {
                                 loans: (db.loans || []).map((l: any) => ({...l, userId: defaultUserId, updatedAt: l.updatedAt || l.createdAt})),
                                 creditCards: (db.creditCards || []).map((cc: any) => ({...cc, userId: defaultUserId, updatedAt: cc.updatedAt || cc.createdAt})),
                                 creditCardPurchases: (db.creditCardPurchases || []).map((p: any) => ({...p, userId: defaultUserId, updatedAt: p.updatedAt || p.createdAt})),
-                                categories: (defaultCategories.map(cat => ({id: randomUUID(), userId: defaultUserId, name: cat.name, isSystemDefined: cat.isSystemDefined || false, createdAt: Date.now() }))),
+                                categories: (defaultCategories.map(cat => ({id: randomUUID(), userId: defaultUserId, name: cat.name, isSystemDefined: cat.isSystemDefined || false, createdAt: Date.now(), updatedAt: Date.now() }))),
                                 financialGoals: [],
                                 investments: [],
                             }
@@ -1146,16 +1346,16 @@ async function migrateOldDbStructure() {
                     };
                     await writeDB(newDb);
                     console.log("db.json migrated. Data moved under 'migrated@example.local'. Please update password or create new users.");
-                    modified = true; 
-                 } else if (!db.users) { 
+                    modified = true;
+                 } else if (!db.users) {
                     await writeDB({ users: {} });
                     console.log("Initialized empty users object in db.json.");
                  }
             }
-            
+
             if (db.users) {
               for (const userId in db.users) {
-                  if (db.users[userId] && db.users[userId].profile) { 
+                  if (db.users[userId] && db.users[userId].profile) {
                       const userRecord = db.users[userId];
                       if (!userRecord.categories) {
                           userRecord.categories = [];
@@ -1163,13 +1363,18 @@ async function migrateOldDbStructure() {
                               if (!userRecord.categories.find(c => c.name === cat.name)) {
                                   userRecord.categories.push({
                                       id: randomUUID(), userId: userId, name: cat.name,
-                                      isSystemDefined: cat.isSystemDefined || false, createdAt: Date.now()
+                                      isSystemDefined: cat.isSystemDefined || false, createdAt: Date.now(), updatedAt: Date.now()
                                   });
                               }
                           });
                           modified = true;
+                      } else { // Ensure categories have updatedAt
+                        userRecord.categories = userRecord.categories.map(c => ({...c, updatedAt: c.updatedAt || c.createdAt}));
+                        modified = true;
                       }
-                      if (!userRecord.financialGoals) { 
+
+
+                      if (!userRecord.financialGoals) {
                           userRecord.financialGoals = [];
                           modified = true;
                       }
@@ -1203,18 +1408,24 @@ async function migrateOldDbStructure() {
                       }
                       const ensureUpdatedAt = (items: any[] | undefined) => {
                         if(items) {
-                          return items.map(item => {
-                            if(!item.updatedAt) { modified = true; return {...item, updatedAt: item.createdAt}; }
+                          let arrayModified = false;
+                          const newArray = items.map(item => {
+                            if(!item.updatedAt) {
+                                arrayModified = true;
+                                modified = true;
+                                return {...item, updatedAt: item.createdAt};
+                            }
                             return item;
                           });
+                          return arrayModified ? newArray : items;
                         }
-                        return items;
+                        return items || [];
                       };
-                      userRecord.loans = ensureUpdatedAt(userRecord.loans) || [];
-                      userRecord.creditCards = ensureUpdatedAt(userRecord.creditCards) || [];
-                      userRecord.creditCardPurchases = ensureUpdatedAt(userRecord.creditCardPurchases) || [];
-                      userRecord.financialGoals = ensureUpdatedAt(userRecord.financialGoals) || [];
-                      userRecord.investments = ensureUpdatedAt(userRecord.investments) || [];
+                      userRecord.loans = ensureUpdatedAt(userRecord.loans);
+                      userRecord.creditCards = ensureUpdatedAt(userRecord.creditCards);
+                      userRecord.creditCardPurchases = ensureUpdatedAt(userRecord.creditCardPurchases);
+                      userRecord.financialGoals = ensureUpdatedAt(userRecord.financialGoals);
+                      userRecord.investments = ensureUpdatedAt(userRecord.investments);
 
                   }
               }
@@ -1222,11 +1433,11 @@ async function migrateOldDbStructure() {
 
             if (modified) {
                 await writeDB(db);
-                console.log("db.json structure updated for all users (categories, financialGoals, investments, recurrenceFrequency, notifyByEmail, updatedAt fields).");
+                console.log("db.json structure updated for all users.");
             }
         } catch (error: any) {
             if (error.code === 'ENOENT') {
-                await writeDB({ users: {} }); 
+                await writeDB({ users: {} });
                  console.log("Initialized empty db.json as it was not found during migration check.");
             } else {
                 console.error("Error during DB migration check:", error);
@@ -1264,8 +1475,8 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
     if (!userData) return null;
 
     const cleanedTransactions = (userData.transactions || []).map(tx => {
-      const { ...cleanedTx } = tx; 
-      if ((cleanedTx as any).isRecurring !== undefined) { 
+      const { ...cleanedTx } = tx;
+      if ((cleanedTx as any).isRecurring !== undefined) {
         if (!cleanedTx.recurrenceFrequency || cleanedTx.recurrenceFrequency === 'none') {
           cleanedTx.recurrenceFrequency = (cleanedTx as any).isRecurring ? 'monthly' : 'none';
         }
@@ -1289,13 +1500,13 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
   }
 }
 
-export async function restoreUserBackupData(userId: string, backupData: UserBackupData): Promise<DeleteResult> {
+export async function restoreUserBackupData(userId: string, backupData: UserBackupData): Promise<UpdateResult> {
   if (!userId) return { success: false, error: "User ID is required for restore." };
 
   if (!backupData || typeof backupData.profile !== 'object' || !Array.isArray(backupData.transactions) || !Array.isArray(backupData.loans) || !Array.isArray(backupData.creditCards) || !Array.isArray(backupData.creditCardPurchases) || !Array.isArray(backupData.categories) || !Array.isArray(backupData.financialGoals) || !Array.isArray(backupData.investments) ) {
     return { success: false, error: "Invalid backup file structure." };
   }
-  
+
   if (DATABASE_MODE === 'postgres' && pool) {
     const client = await pool.connect();
     try {
@@ -1307,7 +1518,7 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
       await client.query('DELETE FROM credit_card_purchases WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM credit_cards WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM user_categories WHERE user_id = $1', [userId]);
-      
+
       let updateUserQuery = 'UPDATE app_users SET updated_at = NOW(), ';
       const updateUserValues = [];
       let valueIndex = 1;
@@ -1337,7 +1548,7 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
           [purchase.id, userId, purchase.cardId, purchase.date, purchase.description, purchase.category, purchase.totalAmount, purchase.installments, new Date(purchase.createdAt), new Date(purchase.updatedAt || purchase.createdAt)]);
       }
       for (const category of backupData.categories) {
-         await client.query('INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)', 
+         await client.query('INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)',
           [category.id, userId, category.name, category.isSystemDefined, new Date(category.createdAt)]);
       }
       for (const goal of backupData.financialGoals) {
@@ -1380,6 +1591,3 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
 }
 
 migrateOldDbStructure().catch(err => console.error("Migration check failed:", err));
-
-
-    

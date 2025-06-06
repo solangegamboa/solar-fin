@@ -24,7 +24,7 @@ export interface Transaction {
   recurrenceFrequency?: RecurrenceFrequency;
   createdAt: number;
   updatedAt?: number; // Added for consistency
-  receiptImageUri?: string | null; 
+  receiptImageUri?: string | null;
 }
 
 export interface Loan {
@@ -34,8 +34,8 @@ export interface Loan {
   description: string;
   installmentAmount: number;
   installmentsCount: number;
-  startDate: string; 
-  endDate: string;   
+  startDate: string;
+  endDate: string;
   createdAt: number;
   updatedAt?: number; // Added
 }
@@ -70,6 +70,7 @@ export interface UserCategory {
   name: string;
   isSystemDefined: boolean; // To differentiate default from user-added
   createdAt: number;
+  updatedAt?: number; // Added for consistency
 }
 
 export type FinancialGoalStatus = 'active' | 'achieved' | 'abandoned';
@@ -124,7 +125,17 @@ export interface NewTransactionData {
   date: string;
   description?: string;
   recurrenceFrequency?: RecurrenceFrequency;
-  receiptImageUri?: string | null; 
+  receiptImageUri?: string | null;
+}
+
+export interface UpdateTransactionData {
+  type?: TransactionType;
+  amount?: number;
+  category?: string;
+  date?: string; // ISO string
+  description?: string | null;
+  recurrenceFrequency?: RecurrenceFrequency;
+  receiptImageUri?: string | null;
 }
 
 export interface NewCreditCardData {
@@ -132,6 +143,13 @@ export interface NewCreditCardData {
   limit: number;
   dueDateDay: number;
   closingDateDay: number;
+}
+
+export interface UpdateCreditCardData {
+  name?: string;
+  limit?: number;
+  dueDateDay?: number;
+  closingDateDay?: number;
 }
 
 export interface NewCreditCardPurchaseData {
@@ -143,6 +161,16 @@ export interface NewCreditCardPurchaseData {
   installments: number;
 }
 
+export interface UpdateCreditCardPurchaseData {
+    cardId?: string;
+    date?: string; // ISO string
+    description?: string;
+    category?: string;
+    totalAmount?: number;
+    installments?: number;
+}
+
+
 export interface NewLoanData {
   bankName: string;
   description: string;
@@ -150,6 +178,10 @@ export interface NewLoanData {
   installmentsCount: number;
   startDate: string;
 }
+
+// UpdateLoanData could be added if editing loans is implemented
+// export interface UpdateLoanData { ... }
+
 
 export interface NewUserCategoryData {
   name: string;
@@ -231,6 +263,27 @@ export interface ExtractCardInfoOutput {
   suggestedCardName: string | null; // A combined suggestion
 }
 
+// Genkit Flow for extracting multiple transactions from a statement image
+export interface ExtractStatementTransactionsInput {
+  imageDataUri: string;
+  defaultYear?: number;
+}
+
+export interface ExtractedTransaction {
+  rawText: string | null;
+  description: string | null;
+  amount: number | null;
+  date: string | null; // YYYY-MM-DD
+  typeSuggestion: 'income' | 'expense' | 'unknown' | null;
+}
+
+export interface ExtractStatementTransactionsOutput {
+  transactions: ExtractedTransaction[];
+  statementPeriod: string | null;
+  accountName: string | null;
+}
+
+
 // Backup and Restore types
 export interface UserBackupData {
   profile: Pick<UserProfile, 'email' | 'displayName' | 'notifyByEmail'>;
@@ -239,7 +292,7 @@ export interface UserBackupData {
   creditCards: CreditCard[];
   creditCardPurchases: CreditCardPurchase[];
   categories: UserCategory[];
-  financialGoals: FinancialGoal[]; 
+  financialGoals: FinancialGoal[];
   investments: Investment[];
 }
 
@@ -257,4 +310,10 @@ export interface NotificationItem {
   isRead: boolean;
   isPast: boolean; // True if the projected date is in the past relative to today
   originalTransaction: Transaction; // The original recurring transaction template for context
+}
+
+// General update result
+export interface UpdateResult {
+  success: boolean;
+  error?: string;
 }

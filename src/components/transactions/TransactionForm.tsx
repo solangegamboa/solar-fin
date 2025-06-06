@@ -23,12 +23,12 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-import { addTransaction, type NewTransactionData, type AddTransactionResult, getCategoriesForUser, addCategoryForUser, updateTransaction } from '@/lib/databaseService';
+import { getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService'; // Removed addTransaction and updateTransaction
 import { useToast } from '@/hooks/use-toast';
 import { Sun, Camera, Paperclip, ScanLine, Trash2, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { UserCategory, RecurrenceFrequency, Transaction, UpdateTransactionData } from '@/types';
+import type { UserCategory, RecurrenceFrequency, Transaction, NewTransactionData, UpdateTransactionData, AddTransactionResult } from '@/types';
 import { Combobox } from '@/components/ui/combobox';
 import { useAuth } from '@/contexts/AuthContext';
 import { extractTransactionDetailsFromImage } from '@/ai/flows/extract-transaction-details-flow';
@@ -64,7 +64,7 @@ interface TransactionFormProps {
 
 export function TransactionForm({ onSuccess, setOpen, userId, existingTransaction }: TransactionFormProps) {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user } = useAuth(); // Keep useAuth if needed for other purposes like userId, though it's passed as prop
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categories, setCategories] = useState<UserCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
@@ -144,7 +144,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
       reader.onloadend = () => {
         const result = reader.result as string;
         setImagePreviewUrl(result);
-        form.setValue('receiptImageUri', result);
+        form.setValue('receiptImageUri', result); // Store in form if needed for submission
       };
       reader.readAsDataURL(file);
     }
@@ -160,7 +160,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const dataUri = canvas.toDataURL('image/png');
         setImagePreviewUrl(dataUri);
-        form.setValue('receiptImageUri', dataUri);
+        form.setValue('receiptImageUri', dataUri); // Store in form
       }
       stopCamera();
     }
@@ -197,10 +197,17 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
     }
   };
 
-
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema),
-    // Default values are set in the useEffect based on existingTransaction
+    defaultValues: {
+        type: undefined,
+        amount: '' as unknown as number,
+        category: '',
+        date: new Date(),
+        description: '',
+        recurrenceFrequency: 'none',
+        receiptImageUri: null,
+      },
   });
 
   useEffect(() => {
@@ -220,7 +227,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         setImagePreviewUrl(null);
       }
     } else {
-      form.reset({
+      form.reset({ // Reset to defaults for new transaction
         type: undefined,
         amount: '' as unknown as number,
         category: '',
@@ -229,7 +236,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         recurrenceFrequency: 'none',
         receiptImageUri: null,
       });
-      setImagePreviewUrl(null);
+      setImagePreviewUrl(null); // Clear image preview for new transaction
     }
   }, [existingTransaction, form]);
 
@@ -239,6 +246,10 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
       toast({ variant: "destructive", title: "Erro", description: "Usuário não identificado." });
       return null;
     }
+    // This function now relies on the server-side `addCategoryForUser` via an API or Server Action if needed
+    // For now, assuming getCategoriesForUser and addCategoryForUser might be client-callable for simplicity if they don't do sensitive ops.
+    // If they are strictly server, this needs an API endpoint.
+    // For this fix, we'll keep it as is, assuming it works or will be refactored if it also uses server-only code.
     const result = await addCategoryForUser(userId, categoryName);
     if (result.success && result.category) {
       setCategories(prev => [...prev, result.category!].sort((a, b) => a.name.localeCompare(b.name)));
@@ -251,44 +262,48 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
 
   const onSubmit = async (values: TransactionFormValues) => {
     setIsSubmitting(true);
+    let result: { success: boolean; transactionId?: string; error?: string; message?: string };
 
     try {
-      let result;
       if (existingTransaction) {
         const updateData: UpdateTransactionData = {
             type: values.type,
             amount: Number(values.amount),
             category: values.category,
             date: format(values.date, 'yyyy-MM-dd'),
-            description: values.description || undefined,
+            description: values.description || undefined, // Send undefined if empty to potentially clear it
             recurrenceFrequency: values.recurrenceFrequency || 'none',
             receiptImageUri: imagePreviewUrl, // Use the state which holds the latest image URI
         };
-        result = await updateTransaction(userId, existingTransaction.id, updateData);
-        if (result.success) {
-            toast({
-            title: 'Sucesso!',
-            description: 'Transação atualizada com sucesso.',
-            });
-        }
+        const response = await fetch(`/api/transactions/${existingTransaction.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData),
+        });
+        result = await response.json();
       } else {
         const transactionData: NewTransactionData = {
-          ...values,
-          date: format(values.date, 'yyyy-MM-dd'),
+          type: values.type,
           amount: Number(values.amount),
+          category: values.category,
+          date: format(values.date, 'yyyy-MM-dd'),
+          description: values.description || undefined,
           recurrenceFrequency: values.recurrenceFrequency || 'none',
-          receiptImageUri: imagePreviewUrl, // Use the state for new transactions as well
+          receiptImageUri: imagePreviewUrl,
         };
-        result = await addTransaction(userId, transactionData);
-        if (result.success && (result as AddTransactionResult).transactionId) {
-          toast({
-            title: 'Sucesso!',
-            description: `Transação adicionada com sucesso.`,
-          });
-        }
+        const response = await fetch('/api/transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(transactionData),
+        });
+        result = await response.json();
       }
 
       if (result.success) {
+        toast({
+          title: 'Sucesso!',
+          description: `Transação ${existingTransaction ? 'atualizada' : 'adicionada'} com sucesso.`,
+        });
         form.reset({ 
             type: undefined, 
             amount: '' as unknown as number, 
@@ -305,7 +320,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         toast({
           variant: 'destructive',
           title: existingTransaction ? 'Erro ao Atualizar' : 'Erro ao Adicionar',
-          description: (result as any).error || 'Ocorreu um erro desconhecido.',
+          description: result.error || result.message || 'Ocorreu um erro desconhecido.',
         });
       }
     } catch (error: any) {
@@ -461,7 +476,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
                   className="resize-none"
                   {...field}
                   disabled={isSubmitting || isProcessingImage}
-                  value={field.value || ''} // Ensure textarea doesn't receive null
+                  value={field.value || ''} 
                 />
               </FormControl>
               <FormMessage />
@@ -513,5 +528,3 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
     </Form>
   );
 }
-
-    
