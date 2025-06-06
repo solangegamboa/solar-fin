@@ -636,13 +636,14 @@
           "id": "0dad5a71-37ef-4c8f-abd0-2dd496b800e7",
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "type": "expense",
-          "amount": 2260,
-          "category": "Importado",
+          "amount": 12352.59,
+          "category": "Contas Fixas",
           "date": "2025-06-02",
           "description": "Transferencia Pix Des: Solange da Silva Gamb 02/06-",
           "recurrenceFrequency": "none",
           "createdAt": 1749240186054,
-          "updatedAt": 1749240186054
+          "updatedAt": 1749242548886,
+          "receiptImageUri": null
         },
         {
           "id": "067a2ac7-81f1-41f1-abbe-25f776cdab1f",
@@ -654,7 +655,8 @@
           "description": "Transferencia Pix",
           "recurrenceFrequency": "none",
           "createdAt": 1749240186238,
-          "updatedAt": 1749240186238
+          "updatedAt": 1749242512200,
+          "receiptImageUri": null
         }
       ],
       "loans": [
