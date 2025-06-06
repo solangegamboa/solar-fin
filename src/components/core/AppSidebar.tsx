@@ -12,7 +12,8 @@ import {
   Sparkles,
   Settings,
   Target, 
-  Briefcase, // Added Briefcase icon
+  Briefcase,
+  Calculator, // Added Calculator icon
 } from 'lucide-react';
 import Logo from './Logo';
 import {
@@ -35,7 +36,8 @@ const navItems = [
   { href: '/loans', label: 'Empréstimos', icon: Landmark },
   { href: '/credit-cards', label: 'Cartões', icon: CreditCard },
   { href: '/goals', label: 'Metas', icon: Target },
-  { href: '/investments', label: 'Investimentos', icon: Briefcase }, // Added Investments item
+  { href: '/investments', label: 'Investimentos', icon: Briefcase },
+  { href: '/calculators', label: 'Calculadoras', icon: Calculator }, // Added Calculators item
   { href: '/insights', label: 'Insights IA', icon: Sparkles },
 ];
 

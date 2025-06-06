@@ -375,7 +375,8 @@
           "createdAt": 1749164220000
         }
       ],
-      "financialGoals": []
+      "financialGoals": [],
+      "investments": []
     },
     "06f570fe-5f3b-42de-929c-ff426be76d93": {
       "profile": {
@@ -383,7 +384,7 @@
         "email": "solange.gamboa@gmail.com",
         "displayName": "Solange Gamboa",
         "createdAt": 1749158998992,
-        "lastLoginAt": 1749175158263,
+        "lastLoginAt": 1749175381969,
         "notifyByEmail": false
       },
       "hashedPassword": "$2a$10$GoGdmUtF2CJ1CveO7PRqDuy6mYmapH1PhHkCwyU8SPQIUCwiUbyrW",
@@ -642,7 +643,8 @@
           "createdAt": 1749165700000
         }
       ],
-      "financialGoals": []
+      "financialGoals": [],
+      "investments": []
     },
     "74d9ffb4-1159-465c-9c1e-03c8ff5342c9": {
       "profile": {
@@ -786,7 +788,8 @@
           "createdAt": 1749167625558
         }
       ],
-      "financialGoals": []
+      "financialGoals": [],
+      "investments": []
     }
   }
 }
