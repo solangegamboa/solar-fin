@@ -60,6 +60,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
   const [userCategories, setUserCategories] = useState<UserCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [extractionAttemptId, setExtractionAttemptId] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -111,6 +112,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
       toast({ variant: 'destructive', title: 'Nenhuma Imagem', description: 'Por favor, carregue uma imagem do extrato.' });
       return;
     }
+    setExtractionAttemptId(prev => prev + 1); // Increment attempt ID to refresh key
     setIsProcessingImage(true);
     setExtractionResult(null);
     setEditableTransactions([]);
@@ -269,7 +271,14 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
 
   return (
     <>
-      <div className="space-y-4 p-1 max-h-[calc(85vh-180px)] flex flex-col"> {/* Removed overflow-hidden */}
+      <DialogHeader>
+        <DialogTitle>Importar Transações de Extrato Bancário</DialogTitle>
+        <DialogDescription>
+            Envie uma imagem (printscreen) do seu extrato. A IA tentará identificar as transações.
+            Revise e ajuste as informações antes de importar.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-4 p-1 max-h-[calc(85vh-180px)] flex flex-col">
         <div className="space-y-2">
           <Label htmlFor="statement-image">Imagem do Extrato</Label>
           <div className="flex items-center gap-2">
@@ -303,7 +312,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
         )}
 
         {extractionResult && editableTransactions.length > 0 && (
-          <div className="space-y-4 flex-grow min-h-0 flex flex-col"> {/* Added min-h-0 */}
+          <div key={extractionAttemptId} className="space-y-4 flex-grow min-h-0 flex flex-col"> 
             <div className="p-2 border rounded-md bg-muted/20 text-sm">
               {extractionResult.accountName && <p><strong>Conta/Banco:</strong> {extractionResult.accountName}</p>}
               {extractionResult.statementPeriod && <p><strong>Período do Extrato:</strong> {extractionResult.statementPeriod}</p>}

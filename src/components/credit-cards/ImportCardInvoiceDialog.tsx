@@ -31,7 +31,7 @@ import { extractCardInvoiceItemsFromImage } from '@/ai/flows/extract-card-invoic
 import type { ExtractCardInvoiceOutput, ExtractedInvoiceItem, UserCategory, NewCreditCardPurchaseData, CreditCard } from '@/types';
 import { addCreditCardPurchase, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
 import { format, parseISO, isValid as isValidDate, getYear, getMonth } from 'date-fns';
-import { Card } from '../ui/card'; // Assuming Card component is available
+import { Card } from '../ui/card'; 
 
 interface EditableExtractedInvoiceItem extends ExtractedInvoiceItem {
   id: string; // For unique key in UI
@@ -61,6 +61,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
   const [userCategories, setUserCategories] = useState<UserCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [extractionAttemptId, setExtractionAttemptId] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -119,17 +120,17 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
       toast({ variant: 'destructive', title: 'Nenhum Cartão Selecionado', description: 'Selecione um cartão de crédito para associar as compras.' });
       return;
     }
+    setExtractionAttemptId(prev => prev + 1); // Increment attempt ID
     setIsProcessingImage(true);
     setExtractionResult(null);
     setEditableItems([]);
 
-    // Try to infer defaultMonthYear from invoice closing/due date if card selected
+    
     let defaultMonthYearForAI: string | undefined = undefined;
     const selectedCard = userCreditCards.find(c => c.id === selectedCardId);
     if (selectedCard) {
-        // This is a heuristic. Faturas geralmente são do mês anterior ao vencimento.
-        // We'll use the current month as a default if defaultDate is set, or based on card's due date.
-        const invoiceMonth = getMonth(defaultDate || new Date()); // 0-indexed
+        
+        const invoiceMonth = getMonth(defaultDate || new Date()); 
         const invoiceYear = getYear(defaultDate || new Date());
         defaultMonthYearForAI = `${String(invoiceMonth + 1).padStart(2, '0')}/${invoiceYear}`;
     }
@@ -159,7 +160,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
               userSelectedCategory: '',
               userDescription: item.description || item.rawText || '',
               userAmount: item.amount,
-              userInstallments: 1, // Default to 1 installment
+              userInstallments: 1, 
             };
           })
         );
@@ -283,7 +284,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
           Revise e ajuste as informações antes de importar.
         </DialogDescription>
       </DialogHeader>
-      <div className="space-y-4 p-1 max-h-[calc(85vh-200px)] overflow-hidden flex flex-col">
+      <div className="space-y-4 p-1 max-h-[calc(85vh-200px)] flex flex-col">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <Label htmlFor="credit-card-select">Cartão de Crédito</Label>
@@ -344,7 +345,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
         )}
 
         {extractionResult && editableItems.length > 0 && (
-          <div className="space-y-4 flex-grow min-h-0 flex flex-col"> {/* Removed overflow-hidden here */}
+          <div key={extractionAttemptId} className="space-y-4 flex-grow min-h-0 flex flex-col">
             <div className="p-2 border rounded-md bg-muted/20 text-sm">
               {extractionResult.cardNameHint && <p><strong>Cartão (Extrato):</strong> {extractionResult.cardNameHint}</p>}
               {extractionResult.cardLastDigits && <p><strong>Final:</strong> {extractionResult.cardLastDigits}</p>}
