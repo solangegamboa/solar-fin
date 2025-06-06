@@ -309,7 +309,7 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
             <FormItem>
               <FormLabel>Limite (R$)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="5000.00" {...field} step="0.01" disabled={isSubmitting || isProcessingImage} />
+                <Input lang="pt-BR" type="number" placeholder="R$ 5.000,00" {...field} step="0.01" disabled={isSubmitting || isProcessingImage} />
               </FormControl>
               <FormMessage />
             </FormItem>

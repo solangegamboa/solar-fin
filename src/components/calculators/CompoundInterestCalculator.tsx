@@ -107,7 +107,7 @@ export function CompoundInterestCalculator() {
               <FormItem>
                 <FormLabel className="flex items-center"><TrendingUp className="mr-2 h-4 w-4 text-muted-foreground" />Valor Principal (R$)</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="Ex: 1000.00" {...field} step="0.01" />
+                  <Input lang="pt-BR" type="number" placeholder="R$ 1.000,00" {...field} step="0.01" />
                 </FormControl>
                 <FormMessage />
               </FormItem>

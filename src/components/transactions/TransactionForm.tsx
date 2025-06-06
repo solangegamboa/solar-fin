@@ -430,7 +430,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
             <FormItem>
               <FormLabel>Valor (R$)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="0.00" {...field} step="0.01" disabled={isSubmitting || isProcessingImage} />
+                <Input lang="pt-BR" type="number" placeholder="R$ 0,00" {...field} step="0.01" disabled={isSubmitting || isProcessingImage} />
               </FormControl>
               <FormMessage />
             </FormItem>

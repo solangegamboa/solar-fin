@@ -311,7 +311,7 @@ export function CreditCardTransactionForm({
               <FormItem>
                 <FormLabel>Valor Total (R$)</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="300.00" {...field} step="0.01" disabled={isSubmitting} />
+                  <Input lang="pt-BR" type="number" placeholder="R$ 300,00" {...field} step="0.01" disabled={isSubmitting} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

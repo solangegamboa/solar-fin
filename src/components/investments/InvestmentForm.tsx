@@ -224,7 +224,7 @@ export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen 
             <FormItem>
               <FormLabel>Valor Atual (R$)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="1500.00" {...field} step="0.01" />
+                <Input lang="pt-BR" type="number" placeholder="R$ 1.500,00" {...field} step="0.01" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -239,7 +239,7 @@ export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen 
               <FormItem>
                 <FormLabel>Valor Inicial Investido (R$, Opcional)</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="1000.00" {...field} value={field.value ?? ''} step="0.01" />
+                  <Input lang="pt-BR" type="number" placeholder="R$ 1.000,00" {...field} value={field.value ?? ''} step="0.01" />
                 </FormControl>
                 <FormMessage />
               </FormItem>

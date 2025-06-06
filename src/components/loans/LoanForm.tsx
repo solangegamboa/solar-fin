@@ -151,7 +151,7 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
             <FormItem>
               <FormLabel>Valor da Parcela (R$)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="500.00" {...field} step="0.01" />
+                <Input lang="pt-BR" type="number" placeholder="R$ 500,00" {...field} step="0.01" />
               </FormControl>
               <FormMessage />
             </FormItem>

@@ -195,7 +195,7 @@ export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: 
               <FormItem>
                 <FormLabel>Valor Alvo (R$)</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="10000.00" {...field} step="0.01" />
+                  <Input lang="pt-BR" type="number" placeholder="R$ 10.000,00" {...field} step="0.01" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -208,7 +208,7 @@ export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: 
               <FormItem>
                 <FormLabel>Valor Atual (R$)</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="500.00" {...field} step="0.01" />
+                  <Input lang="pt-BR" type="number" placeholder="R$ 500,00" {...field} step="0.01" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
