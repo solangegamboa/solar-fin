@@ -22,6 +22,7 @@ import { useState } from 'react';
 import { addLoan, type NewLoanData } from '@/lib/databaseService';
 import type { Loan } from '@/types';
 import { format, parseISO } from 'date-fns';
+import { CurrencyInput } from '@/components/ui/currency-input';
 
 const loanFormSchema = z.object({
   bankName: z.string().min(1, { message: 'O nome do banco é obrigatório.' }).max(50, { message: 'Máximo de 50 caracteres.'}),
@@ -44,7 +45,7 @@ interface LoanFormProps {
   onSuccess?: () => void;
   setOpen: (open: boolean) => void;
   existingLoan?: Loan | null; 
-  userId: string; // Added userId prop
+  userId: string; 
 }
 
 export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormProps) {
@@ -56,14 +57,14 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
     defaultValues: existingLoan ? {
         ...existingLoan,
         startDate: parseISO(existingLoan.startDate),
-        installmentAmount: existingLoan.installmentAmount || '' as unknown as number,
-        installmentsCount: existingLoan.installmentsCount || '' as unknown as number,
+        installmentAmount: existingLoan.installmentAmount || undefined,
+        installmentsCount: existingLoan.installmentsCount || undefined,
       } : {
       bankName: '',
       description: '',
-      installmentAmount: '' as unknown as number,
+      installmentAmount: undefined,
       startDate: new Date(),
-      installmentsCount: '' as unknown as number,
+      installmentsCount: undefined,
     },
   });
 
@@ -79,10 +80,6 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
     };
 
     try {
-      // For now, only adding is implemented.
-      // if (existingLoan) {
-      //   // Call updateLoan(userId, existingLoan.id, loanData) if it existed
-      // } else {
       const result = await addLoan(userId, loanData);
       if (result.success && result.loanId) {
         toast({
@@ -99,7 +96,6 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
           description: result.error || 'Ocorreu um erro desconhecido.',
         });
       }
-      // }
     } catch (error: any) {
       const errorMessage = (error && typeof error.message === 'string') ? error.message : 'Ocorreu um erro ao salvar o empréstimo.';
       console.error('Client-side error calling addLoan/updateLoan:', errorMessage);
@@ -147,11 +143,19 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
         <FormField
           control={form.control}
           name="installmentAmount"
-          render={({ field }) => (
+          render={({ field: { onChange, onBlur, value, name, ref } }) => (
             <FormItem>
               <FormLabel>Valor da Parcela (R$)</FormLabel>
               <FormControl>
-                <Input lang="pt-BR" type="number" placeholder="R$ 500,00" {...field} step="0.01" />
+                <CurrencyInput
+                  name={name}
+                  value={value}
+                  onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
+                  onBlur={onBlur}
+                  ref={ref}
+                  placeholder="R$ 500,00"
+                  disabled={isSubmitting}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

@@ -13,7 +13,6 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -34,6 +33,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { extractTransactionDetailsFromImage } from '@/ai/flows/extract-transaction-details-flow';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CurrencyInput } from '@/components/ui/currency-input';
 
 const transactionFormSchema = z.object({
   type: z.enum(['income', 'expense'], {
@@ -81,9 +81,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
     if (!userId) return;
     setIsLoadingCategories(true);
     try {
-      // Assuming getCategoriesForUser can be called client-side or via a GET API route if needed.
-      // If it's a server function, it needs to be callable from client (e.g. Server Action or via API route)
-      const userCategories = await getCategoriesForUser(userId); // This might need adjustment if it's server-only
+      const userCategories = await getCategoriesForUser(userId); 
       setCategories(userCategories);
     } catch (error) {
       console.error("Failed to fetch categories:", error);
@@ -184,7 +182,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
     try {
       const result = await extractTransactionDetailsFromImage({ imageDataUri: imagePreviewUrl });
       if (result.extractedAmount !== null && typeof result.extractedAmount === 'number') {
-        form.setValue('amount', result.extractedAmount);
+        form.setValue('amount', result.extractedAmount, { shouldValidate: true });
         toast({ title: 'Valor Extraído!', description: `Valor R$ ${result.extractedAmount.toFixed(2)} preenchido.` });
       } else {
         toast({ variant: 'destructive', title: 'Valor Não Encontrado', description: 'Não foi possível extrair um valor da imagem.' });
@@ -201,7 +199,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
     resolver: zodResolver(transactionFormSchema),
     defaultValues: {
         type: undefined,
-        amount: '' as unknown as number,
+        amount: undefined,
         category: '',
         date: new Date(),
         description: '',
@@ -229,7 +227,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
     } else {
       form.reset({
         type: undefined,
-        amount: '' as unknown as number,
+        amount: undefined,
         category: '',
         date: new Date(),
         description: '',
@@ -245,7 +243,6 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
       toast({ variant: "destructive", title: "Erro", description: "Usuário não identificado." });
       return null;
     }
-    // Assuming addCategoryForUser is a server function that can be called or is an API endpoint
     const result = await addCategoryForUser(userId, categoryName);
     if (result.success && result.category) {
       setCategories(prev => [...prev, result.category!].sort((a, b) => a.name.localeCompare(b.name)));
@@ -313,7 +310,7 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         });
         form.reset({ 
             type: undefined, 
-            amount: '' as unknown as number, 
+            amount: undefined, 
             category: '', 
             date: new Date(), 
             description: '', 
@@ -426,11 +423,19 @@ export function TransactionForm({ onSuccess, setOpen, userId, existingTransactio
         <FormField
           control={form.control}
           name="amount"
-          render={({ field }) => (
+          render={({ field: { onChange, onBlur, value, name, ref } }) => (
             <FormItem>
               <FormLabel>Valor (R$)</FormLabel>
               <FormControl>
-                <Input lang="pt-BR" type="number" placeholder="R$ 0,00" {...field} step="0.01" disabled={isSubmitting || isProcessingImage} />
+                <CurrencyInput
+                  name={name}
+                  value={value}
+                  onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
+                  onBlur={onBlur}
+                  ref={ref}
+                  placeholder="R$ 0,00"
+                  disabled={isSubmitting || isProcessingImage}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

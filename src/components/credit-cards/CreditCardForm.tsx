@@ -21,6 +21,7 @@ import { addCreditCard, type NewCreditCardData, type AddCreditCardResult } from 
 import { extractCardInfoFromImage } from '@/ai/flows/extract-card-info-flow';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CurrencyInput } from '@/components/ui/currency-input';
 
 const creditCardFormSchema = z.object({
   name: z.string().min(1, { message: 'O nome do cartão é obrigatório.' }).max(50, {message: 'O nome do cartão deve ter no máximo 50 caracteres.'}),
@@ -38,7 +39,7 @@ const creditCardFormSchema = z.object({
     .int({ message: 'O dia de fechamento deve ser um número inteiro.' })
     .min(1, { message: 'O dia de fechamento deve ser entre 1 e 31.' })
     .max(31, { message: 'O dia de fechamento deve ser entre 1 e 31.' }),
-  cardImageUri: z.string().nullable().optional(), // For storing image data if needed, not directly used by AI for all fields
+  cardImageUri: z.string().nullable().optional(), 
 });
 
 type CreditCardFormValues = z.infer<typeof creditCardFormSchema>;
@@ -62,7 +63,6 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
   const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    // Cleanup camera stream on unmount
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -74,9 +74,9 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
     resolver: zodResolver(creditCardFormSchema),
     defaultValues: {
       name: '',
-      limit: '' as unknown as number,
-      dueDateDay: '' as unknown as number,
-      closingDateDay: '' as unknown as number,
+      limit: undefined,
+      dueDateDay: undefined,
+      closingDateDay: undefined,
       cardImageUri: null,
     },
   });
@@ -172,8 +172,6 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
       }
       
       if (result.issuerName) form.setValue('name', form.getValues('name') || result.issuerName, { shouldValidate: true });
-      // Note: The AI won't reliably get limit, due date, or closing date from a card image.
-      // These will still need manual input.
 
       if (!infoExtracted && !result.issuerName && !result.cardNetwork && !result.cardProductName) {
          toast({ variant: 'destructive', title: 'Nenhuma Informação Encontrada', description: 'Não foi possível extrair detalhes do cartão da imagem. Por favor, preencha manualmente.' });
@@ -305,11 +303,19 @@ export function CreditCardForm({ onSuccess, setOpen, userId }: CreditCardFormPro
         <FormField
           control={form.control}
           name="limit"
-          render={({ field }) => (
+          render={({ field: { onChange, onBlur, value, name, ref } }) => (
             <FormItem>
               <FormLabel>Limite (R$)</FormLabel>
               <FormControl>
-                <Input lang="pt-BR" type="number" placeholder="R$ 5.000,00" {...field} step="0.01" disabled={isSubmitting || isProcessingImage} />
+                <CurrencyInput
+                  name={name}
+                  value={value}
+                  onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
+                  onBlur={onBlur}
+                  ref={ref}
+                  placeholder="R$ 5.000,00"
+                  disabled={isSubmitting || isProcessingImage}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

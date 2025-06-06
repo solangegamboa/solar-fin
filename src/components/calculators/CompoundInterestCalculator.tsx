@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useState } from 'react';
 import { formatCurrency } from '@/lib/utils';
 import { TrendingUp, Percent, CalendarClock, Layers, RefreshCw, Equal } from 'lucide-react';
+import { CurrencyInput } from '@/components/ui/currency-input';
 
 const compoundInterestSchema = z.object({
   principal: z.coerce
@@ -59,10 +60,10 @@ export function CompoundInterestCalculator() {
 
   const onSubmit = (values: CompoundInterestFormValues) => {
     const principal = values.principal;
-    const annualRateDecimal = values.annualRate / 100; // Convert annual rate to decimal
+    const annualRateDecimal = values.annualRate / 100; 
     const timeInYears = values.timeInYears;
     
-    let n = 1; // Compounding periods per year
+    let n = 1; 
     let ratePerPeriod = annualRateDecimal;
     let numberOfPeriods = timeInYears;
 
@@ -72,12 +73,10 @@ export function CompoundInterestCalculator() {
       numberOfPeriods = timeInYears * n;
     } else { // annually
       n = 1;
-      ratePerPeriod = annualRateDecimal / n; // Effectively annualRateDecimal
-      numberOfPeriods = timeInYears * n;   // Effectively timeInYears
+      ratePerPeriod = annualRateDecimal / n; 
+      numberOfPeriods = timeInYears * n;   
     }
     
-    // M = P * (1 + i/n)^(n*t)
-    // Using ratePerPeriod and numberOfPeriods makes it: M = P * (1 + ratePerPeriod)^numberOfPeriods
     const finalAmount = principal * Math.pow((1 + ratePerPeriod), numberOfPeriods);
     const interest = finalAmount - principal;
 
@@ -103,11 +102,18 @@ export function CompoundInterestCalculator() {
           <FormField
             control={form.control}
             name="principal"
-            render={({ field }) => (
+            render={({ field: { onChange, onBlur, value, name, ref } }) => (
               <FormItem>
                 <FormLabel className="flex items-center"><TrendingUp className="mr-2 h-4 w-4 text-muted-foreground" />Valor Principal (R$)</FormLabel>
                 <FormControl>
-                  <Input lang="pt-BR" type="number" placeholder="R$ 1.000,00" {...field} step="0.01" />
+                  <CurrencyInput
+                    name={name}
+                    value={value}
+                    onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
+                    onBlur={onBlur}
+                    ref={ref}
+                    placeholder="R$ 1.000,00"
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -157,7 +163,6 @@ export function CompoundInterestCalculator() {
                   <SelectContent>
                     <SelectItem value="annually">Anual</SelectItem>
                     <SelectItem value="monthly">Mensal</SelectItem>
-                    {/* Could add: "semiannually", "quarterly" */}
                   </SelectContent>
                 </Select>
                 <FormMessage />

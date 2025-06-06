@@ -28,7 +28,8 @@ import { Sun, PiggyBank, Target, TrendingUp, Flag, XCircle } from 'lucide-react'
 import { useState } from 'react';
 import type { FinancialGoal, NewFinancialGoalData, UpdateFinancialGoalData, FinancialGoalStatus } from '@/types';
 import { format, parseISO } from 'date-fns';
-import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
+import { useAuth } from '@/contexts/AuthContext'; 
+import { CurrencyInput } from '@/components/ui/currency-input';
 
 const goalFormSchema = z.object({
   name: z.string().min(1, 'O nome da meta é obrigatório.').max(100, 'Máximo de 100 caracteres.'),
@@ -70,7 +71,7 @@ const iconOptions = [
 
 export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: FinancialGoalFormProps) {
   const { toast } = useToast();
-  const { getToken } = useAuth(); // Get getToken from AuthContext
+  const { getToken } = useAuth(); 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const defaultValues: Partial<GoalFormValues> = existingGoal
@@ -191,11 +192,19 @@ export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: 
           <FormField
             control={form.control}
             name="targetAmount"
-            render={({ field }) => (
+            render={({ field: { onChange, onBlur, value, name, ref } }) => (
               <FormItem>
                 <FormLabel>Valor Alvo (R$)</FormLabel>
                 <FormControl>
-                  <Input lang="pt-BR" type="number" placeholder="R$ 10.000,00" {...field} step="0.01" />
+                  <CurrencyInput
+                    name={name}
+                    value={value}
+                    onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
+                    onBlur={onBlur}
+                    ref={ref}
+                    placeholder="R$ 10.000,00"
+                    disabled={isSubmitting}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -204,11 +213,19 @@ export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: 
           <FormField
             control={form.control}
             name="currentAmount"
-            render={({ field }) => (
+            render={({ field: { onChange, onBlur, value, name, ref } }) => (
               <FormItem>
                 <FormLabel>Valor Atual (R$)</FormLabel>
                 <FormControl>
-                  <Input lang="pt-BR" type="number" placeholder="R$ 500,00" {...field} step="0.01" />
+                  <CurrencyInput
+                    name={name}
+                    value={value}
+                    onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
+                    onBlur={onBlur}
+                    ref={ref}
+                    placeholder="R$ 500,00"
+                    disabled={isSubmitting}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>

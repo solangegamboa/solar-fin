@@ -25,17 +25,18 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { useToast } from '@/hooks/use-toast';
 import { Sun } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
-import { addCreditCardPurchase, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService'; // addCreditCardPurchase might need to become an API call
+import { addCreditCardPurchase, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
 import type { CreditCard, NewCreditCardPurchaseData, UserCategory, CreditCardPurchase, UpdateCreditCardPurchaseData } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { Combobox } from '@/components/ui/combobox';
 import { useAuth } from '@/contexts/AuthContext';
+import { CurrencyInput } from '@/components/ui/currency-input';
 
 const purchaseSchema = z.object({
   cardId: z.string().min(1, { message: 'Selecione um cartão de crédito.' }),
   date: z.date({ required_error: 'A data da compra é obrigatória.' }),
   description: z.string().min(1, { message: 'A descrição é obrigatória.' }).max(100, { message: 'Máximo de 100 caracteres.'}),
-  category: z.string().min(1, { message: 'A categoria é obrigatória.' }).max(50, { message: 'Máximo de 50 caracteres.'}),
+  category: z.string().min(1, { message: 'A categoria é obrigatória.' }).max(50, { message: 'A categoria deve ter no máximo 50 caracteres.'}),
   totalAmount: z.coerce
     .number({ invalid_type_error: 'O valor total deve ser um número.', required_error: 'O valor total é obrigatório.' })
     .positive({ message: 'O valor total deve ser positivo.' })
@@ -74,7 +75,7 @@ export function CreditCardTransactionForm({
     if (!userId) return;
     setIsLoadingCategories(true);
     try {
-      const userCategories = await getCategoriesForUser(userId); // This might need to be an API call with Auth header
+      const userCategories = await getCategoriesForUser(userId); 
       setCategories(userCategories);
     } catch (error) {
       console.error("Failed to fetch categories:", error);
@@ -95,7 +96,7 @@ export function CreditCardTransactionForm({
       date: new Date(),
       description: '',
       category: '',
-      totalAmount: '' as unknown as number,
+      totalAmount: undefined,
       installments: 1,
     },
   });
@@ -116,7 +117,7 @@ export function CreditCardTransactionForm({
         date: new Date(),
         description: '',
         category: '',
-        totalAmount: '' as unknown as number,
+        totalAmount: undefined,
         installments: 1,
       });
     }
@@ -127,8 +128,7 @@ export function CreditCardTransactionForm({
       toast({ variant: "destructive", title: "Erro", description: "Usuário não identificado." });
       return null;
     }
-    setIsSubmitting(true); // Disable form while adding category via potential API call
-    // Assuming addCategoryForUser is robust (server action or API call)
+    setIsSubmitting(true); 
     const result = await addCategoryForUser(userId, categoryName);
     setIsSubmitting(false);
     if (result.success && result.category) {
@@ -172,25 +172,16 @@ export function CreditCardTransactionForm({
         });
         result = await response.json();
       } else {
-        // For new purchases, we'll create a new API endpoint /api/credit-card-purchases
         const purchaseData: NewCreditCardPurchaseData = {
           ...values,
           date: format(values.date, 'yyyy-MM-dd'), 
         };
-        // TODO: Create /api/credit-card-purchases POST endpoint
-        // For now, I'll keep the direct call to databaseService, but this is inconsistent
-        // with localStorage token strategy if databaseService doesn't get the token.
-        // This part of the logic will need a dedicated API route similar to transactions.
-        // For the purpose of this change, I will assume it's being converted to an API call.
-        // Let's temporarily use a placeholder, this WILL fail until the API is made.
-        // result = await addCreditCardPurchase(userId, purchaseData); // Old direct call
-         const response = await fetch(`/api/credit-card-purchases`, { // Assuming POST endpoint exists
+         const response = await fetch(`/api/credit-card-purchases`, { 
             method: 'POST',
             headers,
             body: JSON.stringify(purchaseData),
         });
         result = await response.json();
-
       }
 
       if (result.success) {
@@ -203,7 +194,7 @@ export function CreditCardTransactionForm({
             date: new Date(),
             description: '',
             category: '',
-            totalAmount: '' as unknown as number,
+            totalAmount: undefined,
             installments: 1,
         });
         if (onSuccess) onSuccess();
@@ -307,11 +298,19 @@ export function CreditCardTransactionForm({
           <FormField
             control={form.control}
             name="totalAmount"
-            render={({ field }) => (
+            render={({ field: { onChange, onBlur, value, name, ref } }) => (
               <FormItem>
                 <FormLabel>Valor Total (R$)</FormLabel>
                 <FormControl>
-                  <Input lang="pt-BR" type="number" placeholder="R$ 300,00" {...field} step="0.01" disabled={isSubmitting} />
+                  <CurrencyInput
+                    name={name}
+                    value={value}
+                    onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
+                    onBlur={onBlur}
+                    ref={ref}
+                    placeholder="R$ 300,00"
+                    disabled={isSubmitting}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>

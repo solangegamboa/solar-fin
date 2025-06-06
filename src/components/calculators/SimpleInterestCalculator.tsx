@@ -18,6 +18,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { useState } from 'react';
 import { formatCurrency } from '@/lib/utils';
 import { TrendingUp, Percent, CalendarClock, RefreshCw, Equal } from 'lucide-react';
+import { CurrencyInput } from '@/components/ui/currency-input';
 
 const simpleInterestSchema = z.object({
   principal: z.coerce
@@ -75,11 +76,18 @@ export function SimpleInterestCalculator() {
           <FormField
             control={form.control}
             name="principal"
-            render={({ field }) => (
+            render={({ field: { onChange, onBlur, value, name, ref } }) => (
               <FormItem>
                 <FormLabel className="flex items-center"><TrendingUp className="mr-2 h-4 w-4 text-muted-foreground" />Valor Principal (R$)</FormLabel>
                 <FormControl>
-                  <Input lang="pt-BR" type="number" placeholder="R$ 1.000,00" {...field} step="0.01" />
+                  <CurrencyInput
+                    name={name}
+                    value={value}
+                    onValueChangeNumeric={(floatVal) => onChange(floatVal === undefined ? null : floatVal)}
+                    onBlur={onBlur}
+                    ref={ref}
+                    placeholder="R$ 1.000,00"
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
