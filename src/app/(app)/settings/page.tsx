@@ -16,7 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Info, Sun, KeyRound, UserCircle2, Download, Upload, AlertTriangle as AlertTriangleIcon } from 'lucide-react';
+import { Info, Sun, KeyRound, UserCircle2, Download, Upload, AlertTriangle as AlertTriangleIcon, Database } from 'lucide-react';
 import type { AuthApiResponse, UserBackupData } from '@/types';
 import { format } from 'date-fns';
 import {
@@ -30,6 +30,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Skeleton } from '@/components/ui/skeleton';
 
 
 type DataStorageMode = "local" | "postgres";
@@ -53,7 +54,8 @@ type PasswordChangeFormValues = z.infer<typeof passwordChangeSchema>;
 export default function SettingsPage() {
   const { user, loading: authLoading, updateUserContext, logout } = useAuth();
   const { toast } = useToast();
-  const [selectedDbMode, setSelectedDbMode] = useState<DataStorageMode>("local");
+  const [currentServerDbMode, setCurrentServerDbMode] = useState<DataStorageMode | null>(null);
+  const [isLoadingDbMode, setIsLoadingDbMode] = useState(true);
   const [isDisplayNameSubmitting, setIsDisplayNameSubmitting] = useState(false);
   const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
   const [isBackupLoading, setIsBackupLoading] = useState(false);
@@ -82,6 +84,28 @@ export default function SettingsPage() {
       displayNameForm.reset({ displayName: user.displayName || '' });
     }
   }, [user, displayNameForm]);
+
+  useEffect(() => {
+    const fetchDbMode = async () => {
+      setIsLoadingDbMode(true);
+      try {
+        const response = await fetch('/api/system/db-mode');
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentServerDbMode(data.mode as DataStorageMode);
+        } else {
+          setCurrentServerDbMode('local'); // Fallback
+          toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível identificar o modo de banco de dados do servidor.' });
+        }
+      } catch (error) {
+        setCurrentServerDbMode('local'); // Fallback
+        toast({ variant: 'destructive', title: 'Erro de Rede', description: 'Não foi possível conectar para verificar o modo do banco.' });
+      } finally {
+        setIsLoadingDbMode(false);
+      }
+    };
+    fetchDbMode();
+  }, [toast]);
 
 
   const handleUpdateDisplayName = async (values: DisplayNameFormValues) => {
@@ -178,7 +202,6 @@ export default function SettingsPage() {
       fileReader.onload = async (e) => {
         try {
           const backupData = JSON.parse(e.target?.result as string) as UserBackupData;
-          // Basic validation client-side
           if (!backupData.profile || !backupData.transactions) {
             throw new Error("Formato de arquivo de backup inválido.");
           }
@@ -193,9 +216,8 @@ export default function SettingsPage() {
             toast({ title: 'Restauração Concluída', description: 'Seus dados foram restaurados. Você será deslogado para aplicar as mudanças.' });
             setSelectedRestoreFile(null);
             if (restoreFileInputRef.current) restoreFileInputRef.current.value = "";
-            // Force logout/reload for changes to take effect fully and avoid inconsistent state
             setTimeout(() => {
-                 logout(); // Use logout from AuthContext
+                 logout();
             }, 2000);
           } else {
             throw new Error(result.message || 'Falha ao restaurar os dados.');
@@ -414,39 +436,50 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-
       <Separator />
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>Armazenamento de Dados</CardTitle>
+          <CardTitle className="flex items-center"><Database className="mr-2 h-5 w-5 text-primary" />Armazenamento de Dados</CardTitle>
           <CardDescription>
-            Escolha como seus dados são armazenados. A alteração real requer configuração de variáveis de ambiente e reinício do servidor.
+            Verifique como seus dados estão armazenados atualmente. A alteração real requer configuração de variáveis de ambiente e reinício do servidor.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <RadioGroup value={selectedDbMode} onValueChange={(value) => setSelectedDbMode(value as DataStorageMode)}>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="local" id="dbLocal" />
-              <Label htmlFor="dbLocal">Arquivo Local (db.json)</Label>
+          {isLoadingDbMode ? (
+            <div className="space-y-2">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-5 w-48" />
             </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="postgres" id="dbPostgres" />
-              <Label htmlFor="dbPostgres">Servidor PostgreSQL Externo</Label>
-            </div>
-          </RadioGroup>
+          ) : (
+            <RadioGroup value={currentServerDbMode || 'local'} disabled>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="local" id="dbLocal" />
+                <Label htmlFor="dbLocal" className={currentServerDbMode === 'local' ? 'font-semibold' : ''}>
+                  Arquivo Local (db.json) {currentServerDbMode === 'local' && <span className="text-primary ml-1">(Ativo)</span>}
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="postgres" id="dbPostgres" />
+                <Label htmlFor="dbPostgres" className={currentServerDbMode === 'postgres' ? 'font-semibold' : ''}>
+                  Servidor PostgreSQL Externo {currentServerDbMode === 'postgres' && <span className="text-primary ml-1">(Ativo)</span>}
+                </Label>
+              </div>
+            </RadioGroup>
+          )}
           <Alert className="mt-4">
             <Info className="h-4 w-4" />
             <AlertTitle>Nota Importante</AlertTitle>
             <AlertDescription>
-              Esta configuração é apenas visual. Para usar o PostgreSQL, você deve:
+              A configuração acima mostra o modo de banco de dados atualmente ativo no servidor.
+              Para alterar para PostgreSQL (ou voltar para local), você deve:
               <ol className="list-decimal list-inside mt-1 text-xs">
-                <li>Configurar a variável de ambiente `DATABASE_URL` com sua string de conexão PostgreSQL.</li>
-                <li>Definir a variável de ambiente `DATABASE_MODE="postgres"`.</li>
+                <li>Configurar a variável de ambiente `DATABASE_URL` com sua string de conexão PostgreSQL (se for usar PostgreSQL).</li>
+                <li>Definir a variável de ambiente `DATABASE_MODE` como "postgres" ou "local".</li>
                 <li>Reiniciar o servidor da aplicação.</li>
-                <li>Certificar-se de que as tabelas do banco de dados foram criadas no seu servidor PostgreSQL. Você pode encontrar um script de inicialização de exemplo em `sql/init.sql` no seu projeto.</li>
+                <li>Se estiver usando PostgreSQL, certifique-se de que as tabelas do banco de dados foram criadas. Você pode encontrar um script de inicialização em `sql/init.sql`.</li>
               </ol>
-              A maioria das funcionalidades de dados (Transações, Empréstimos, Cartões, Categorias, Perfil) foram adaptadas para funcionar com PostgreSQL quando configurado. Se `DATABASE_MODE` não for "postgres", o sistema usará o arquivo `db.json` local.
+              A maioria das funcionalidades de dados (Perfil, Transações, Empréstimos, Cartões, Categorias) já foram adaptadas para funcionar com PostgreSQL.
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -468,4 +501,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-
