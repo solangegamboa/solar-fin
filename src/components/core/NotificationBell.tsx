@@ -1,8 +1,8 @@
 
 'use client';
 
-import { Bell, CheckCheck, Sun, CalendarClock, AlertTriangle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Bell, CheckCheck, Sun, CalendarClock } from 'lucide-react';
+import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNotifications } from '@/hooks/useNotifications';
-import { format, parseISO, isToday, isYesterday } from 'date-fns'; // Removed formatDistanceToNowStrict as it wasn't used and ensured 'format' is here
+import { format, parseISO, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { NotificationItem } from '@/types';
@@ -52,19 +52,23 @@ export function NotificationBell() {
 
   return (
     <DropdownMenu onOpenChange={handleOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative w-9 h-9">
+      <DropdownMenuTrigger asChild={false}>
+        <button 
+          type="button" 
+          className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "relative w-9 h-9")}
+          aria-label="Abrir notificações"
+        >
           <Bell className="h-[1.2rem] w-[1.2rem]" />
           {unreadCount > 0 && (
             <Badge
               variant="destructive"
-              className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 text-xs flex items-center justify-center rounded-full"
+              className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 text-xs flex items-center justify-center rounded-full pointer-events-none" 
             >
               {unreadCount > 9 ? '9+' : unreadCount}
             </Badge>
           )}
           <span className="sr-only">Abrir notificações</span>
-        </Button>
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 md:w-96">
         <DropdownMenuLabel className="flex justify-between items-center">
