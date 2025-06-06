@@ -6,6 +6,7 @@ export interface UserProfile {
   photoURL?: string | null; // Keep for potential future use
   createdAt?: number;
   lastLoginAt?: number;
+  notifyByEmail?: boolean; // Added for email notification preference
   // hashedPassword should not be part of UserProfile sent to client
 }
 
@@ -188,11 +189,15 @@ export interface ExtractCardInfoOutput {
 
 // Backup and Restore types
 export interface UserBackupData {
-  profile: Pick<UserProfile, 'email' | 'displayName'>; // Only backup non-sensitive profile parts
+  profile: Pick<UserProfile, 'email' | 'displayName' | 'notifyByEmail'>; // Added notifyByEmail
   transactions: Transaction[];
   loans: Loan[];
   creditCards: CreditCard[];
   creditCardPurchases: CreditCardPurchase[];
   categories: UserCategory[];
   financialGoals: FinancialGoal[]; 
+}
+
+export interface UpdateEmailNotificationPrefsData {
+    notifyByEmail: boolean;
 }

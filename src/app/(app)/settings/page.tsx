@@ -14,10 +14,11 @@ import { ThemeToggle } from "@/components/core/ThemeToggle";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Switch } from "@/components/ui/switch"; // Added Switch
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Info, Sun, KeyRound, UserCircle2, Download, Upload, AlertTriangle as AlertTriangleIcon, Database } from 'lucide-react';
-import type { AuthApiResponse, UserBackupData } from '@/types';
+import { Info, Sun, KeyRound, UserCircle2, Download, Upload, AlertTriangle as AlertTriangleIcon, Database, Mail } from 'lucide-react'; // Added Mail
+import type { AuthApiResponse, UserBackupData, UpdateEmailNotificationPrefsData } from '@/types';
 import { format } from 'date-fns';
 import {
   AlertDialog,
@@ -62,6 +63,8 @@ export default function SettingsPage() {
   const [isRestoreLoading, setIsRestoreLoading] = useState(false);
   const [selectedRestoreFile, setSelectedRestoreFile] = useState<File | null>(null);
   const restoreFileInputRef = useRef<HTMLInputElement>(null);
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(user?.notifyByEmail || false);
+  const [isEmailNotificationSubmitting, setIsEmailNotificationSubmitting] = useState(false);
 
   const displayNameForm = useForm<DisplayNameFormValues>({
     resolver: zodResolver(displayNameSchema),
@@ -82,6 +85,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (user) {
       displayNameForm.reset({ displayName: user.displayName || '' });
+      setEmailNotificationsEnabled(user.notifyByEmail || false);
     }
   }, [user, displayNameForm]);
 
@@ -157,6 +161,32 @@ export default function SettingsPage() {
     }
   };
 
+  const handleEmailNotificationChange = async (checked: boolean) => {
+    if (!user) return;
+    setIsEmailNotificationSubmitting(true);
+    setEmailNotificationsEnabled(checked); // Optimistic update
+    try {
+      const response = await fetch('/api/user/update-email-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notifyByEmail: checked } as UpdateEmailNotificationPrefsData),
+      });
+      const data: AuthApiResponse = await response.json();
+      if (response.ok && data.success && data.user) {
+        toast({ title: 'Sucesso!', description: `Notificações por e-mail ${checked ? 'ativadas' : 'desativadas'}.` });
+        updateUserContext({ notifyByEmail: data.user.notifyByEmail });
+      } else {
+        toast({ variant: 'destructive', title: 'Erro', description: data.message || 'Não foi possível atualizar a preferência.' });
+        setEmailNotificationsEnabled(!checked); // Revert optimistic update on error
+      }
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Erro de Rede', description: 'Não foi possível conectar ao servidor.' });
+      setEmailNotificationsEnabled(!checked); // Revert optimistic update on error
+    } finally {
+      setIsEmailNotificationSubmitting(false);
+    }
+  };
+
   const handleBackup = async () => {
     if (!user) return;
     setIsBackupLoading(true);
@@ -202,7 +232,7 @@ export default function SettingsPage() {
       fileReader.onload = async (e) => {
         try {
           const backupData = JSON.parse(e.target?.result as string) as UserBackupData;
-          if (!backupData.profile || !backupData.transactions) {
+          if (!backupData.profile || !backupData.transactions) { // Basic check, more thorough validation could be added
             throw new Error("Formato de arquivo de backup inválido.");
           }
 
@@ -217,7 +247,7 @@ export default function SettingsPage() {
             setSelectedRestoreFile(null);
             if (restoreFileInputRef.current) restoreFileInputRef.current.value = "";
             setTimeout(() => {
-                 logout();
+                 logout(); // AuthContext logout will redirect
             }, 2000);
           } else {
             throw new Error(result.message || 'Falha ao restaurar os dados.');
@@ -351,6 +381,42 @@ export default function SettingsPage() {
       </Card>
 
       <Separator />
+
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center"><Mail className="mr-2 h-5 w-5 text-primary" />Notificações por E-mail</CardTitle>
+          <CardDescription>Gerencie suas preferências de notificação por e-mail.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between space-x-2 p-1 rounded-md">
+            <div className="space-y-0.5">
+              <Label htmlFor="email-notifications" className="text-base">
+                Lembretes de Transações Agendadas
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Receber um e-mail diário com lembretes de transações recorrentes agendadas para o dia seguinte.
+              </p>
+            </div>
+            <Switch
+              id="email-notifications"
+              checked={emailNotificationsEnabled}
+              onCheckedChange={handleEmailNotificationChange}
+              disabled={isEmailNotificationSubmitting || authLoading}
+              aria-label="Ativar notificações por e-mail"
+            />
+          </div>
+           <Alert className="mt-4">
+            <Info className="h-4 w-4" />
+            <AlertTitle>Sobre as Notificações por E-mail</AlertTitle>
+            <AlertDescription>
+              A funcionalidade de envio de e-mails ainda precisa ser configurada no servidor (ex: usando um serviço como SendGrid ou Nodemailer) e uma rotina diária (cron job) precisa ser estabelecida para disparar os e-mails. Esta opção apenas salva sua preferência.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+      
+      <Separator />
+
 
       <Card className="shadow-lg">
         <CardHeader>

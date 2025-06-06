@@ -103,6 +103,7 @@ export async function createUser(email: string, password_plain: string, displayN
     displayName: displayName || email.split('@')[0],
     createdAt: now,
     lastLoginAt: now,
+    notifyByEmail: false, // Default notification preference
   };
 
   if (DATABASE_MODE === 'postgres' && pool) {
@@ -110,8 +111,8 @@ export async function createUser(email: string, password_plain: string, displayN
     try {
       await client.query('BEGIN');
       const res = await client.query(
-        'INSERT INTO app_users (id, email, hashed_password, display_name, created_at, last_login_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, display_name, created_at, last_login_at',
-        [userId, email, hashedPassword, displayName || null, new Date(now), new Date(now)]
+        'INSERT INTO app_users (id, email, hashed_password, display_name, created_at, last_login_at, notify_by_email) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, display_name, created_at, last_login_at, notify_by_email',
+        [userId, email, hashedPassword, displayName || null, new Date(now), new Date(now), false]
       );
       const dbUser = res.rows[0];
       
@@ -129,6 +130,7 @@ export async function createUser(email: string, password_plain: string, displayN
         displayName: dbUser.display_name,
         createdAt: new Date(dbUser.created_at).getTime(),
         lastLoginAt: new Date(dbUser.last_login_at).getTime(),
+        notifyByEmail: dbUser.notify_by_email,
       };
     } catch (error: any) {
       await client.query('ROLLBACK');
@@ -164,7 +166,7 @@ export async function createUser(email: string, password_plain: string, displayN
 export async function findUserByEmail(email: string): Promise<(UserProfile & { hashedPassword?: string }) | null> {
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
-      const res = await pool.query('SELECT id, email, display_name as "displayName", hashed_password as "hashedPassword", created_at as "createdAt", last_login_at as "lastLoginAt" FROM app_users WHERE email = $1', [email]);
+      const res = await pool.query('SELECT id, email, display_name as "displayName", hashed_password as "hashedPassword", created_at as "createdAt", last_login_at as "lastLoginAt", notify_by_email as "notifyByEmail" FROM app_users WHERE email = $1', [email]);
       if (res.rows.length === 0) return null;
       const user = res.rows[0];
       user.createdAt = new Date(user.createdAt).getTime();
@@ -185,7 +187,7 @@ export async function findUserByEmail(email: string): Promise<(UserProfile & { h
 export async function findUserById(userId: string): Promise<UserProfile | null> {
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
-      const res = await pool.query('SELECT id, email, display_name as "displayName", created_at as "createdAt", last_login_at as "lastLoginAt" FROM app_users WHERE id = $1', [userId]);
+      const res = await pool.query('SELECT id, email, display_name as "displayName", created_at as "createdAt", last_login_at as "lastLoginAt", notify_by_email as "notifyByEmail" FROM app_users WHERE id = $1', [userId]);
       if (res.rows.length === 0) return null;
       const user = res.rows[0];
       user.createdAt = new Date(user.createdAt).getTime();
@@ -228,7 +230,7 @@ export async function updateUserDisplayName(userId: string, newDisplayName: stri
   if (DATABASE_MODE === 'postgres' && pool) {
     try {
       const res = await pool.query(
-        'UPDATE app_users SET display_name = $1 WHERE id = $2 RETURNING id, email, display_name, created_at, last_login_at',
+        'UPDATE app_users SET display_name = $1 WHERE id = $2 RETURNING id, email, display_name, created_at, last_login_at, notify_by_email',
         [newDisplayName.trim(), userId]
       );
       if (res.rowCount === 0) return { success: false, error: "User not found." };
@@ -241,6 +243,7 @@ export async function updateUserDisplayName(userId: string, newDisplayName: stri
           displayName: dbUser.display_name,
           createdAt: new Date(dbUser.created_at).getTime(),
           lastLoginAt: new Date(dbUser.last_login_at).getTime(),
+          notifyByEmail: dbUser.notify_by_email,
         }
       };
     } catch (error: any) {
@@ -291,6 +294,44 @@ export async function updateUserPassword(userId: string, currentPasswordPlain: s
     userRecord.hashedPassword = await bcrypt.hash(newPasswordPlain, 10);
     await writeDB(db);
     return { success: true };
+  }
+}
+
+export interface UpdateEmailNotificationPrefsResult { success: boolean; user?: UserProfile; error?: string; }
+export async function updateUserEmailNotificationPreference(userId: string, notifyByEmail: boolean): Promise<UpdateEmailNotificationPrefsResult> {
+  if (!userId) return { success: false, error: "User ID is required." };
+
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const res = await pool.query(
+        'UPDATE app_users SET notify_by_email = $1 WHERE id = $2 RETURNING id, email, display_name, created_at, last_login_at, notify_by_email',
+        [notifyByEmail, userId]
+      );
+      if (res.rowCount === 0) return { success: false, error: "User not found." };
+      const dbUser = res.rows[0];
+      return {
+        success: true,
+        user: {
+          id: dbUser.id,
+          email: dbUser.email,
+          displayName: dbUser.display_name,
+          createdAt: new Date(dbUser.created_at).getTime(),
+          lastLoginAt: new Date(dbUser.last_login_at).getTime(),
+          notifyByEmail: dbUser.notify_by_email,
+        }
+      };
+    } catch (error: any) {
+      console.error("Error updating email notification preference in PostgreSQL:", error.message);
+      return { success: false, error: "Database error updating email notification preference." };
+    }
+  } else {
+    const db = await readDB();
+    if (!db.users[userId] || !db.users[userId].profile) {
+      return { success: false, error: "User not found." };
+    }
+    db.users[userId].profile.notifyByEmail = notifyByEmail;
+    await writeDB(db);
+    return { success: true, user: db.users[userId].profile };
   }
 }
 
@@ -921,6 +962,7 @@ async function migrateOldDbStructure() {
                                     displayName: "Migrated User",
                                     createdAt: Date.now(),
                                     lastLoginAt: Date.now(),
+                                    notifyByEmail: false,
                                 },
                                 hashedPassword: await bcrypt.hash("password", 10),
                                 transactions: (db.transactions || []).map((tx: any) => {
@@ -938,59 +980,89 @@ async function migrateOldDbStructure() {
                     };
                     await writeDB(newDb);
                     console.log("db.json migrated. Data moved under 'migrated@example.local'. Please update password or create new users.");
+                    modified = true; // Mark as modified to avoid re-running parts of the below loop unnecessarily
                  } else if (!db.users) { 
                     await writeDB({ users: {} });
                     console.log("Initialized empty users object in db.json.");
                  }
-            } else {
-                for (const userId in db.users) {
-                    if (db.users[userId]) {
-                        const userRecord = db.users[userId];
-                        if (!userRecord.categories) {
-                            userRecord.categories = [];
-                            defaultCategories.forEach(cat => {
-                                if (!userRecord.categories.find(c => c.name === cat.name)) {
-                                    userRecord.categories.push({
-                                        id: randomUUID(), userId: userId, name: cat.name,
-                                        isSystemDefined: cat.isSystemDefined || false, createdAt: Date.now()
-                                    });
-                                }
-                            });
-                            modified = true;
-                        }
-                        if (!userRecord.financialGoals) { 
-                            userRecord.financialGoals = [];
-                            modified = true;
-                        }
-                        // Migrate transactions for existing users
-                        if (userRecord.transactions) {
-                            userRecord.transactions = userRecord.transactions.map(tx => {
-                                const txAsAny = tx as any;
-                                let frequency = tx.recurrenceFrequency || 'none';
-                                if (txAsAny.hasOwnProperty('isRecurring') && typeof txAsAny.isRecurring === 'boolean') {
-                                    if (txAsAny.isRecurring && frequency === 'none') {
-                                        frequency = 'monthly';
-                                    }
-                                    delete txAsAny.isRecurring;
-                                    modified = true;
-                                }
-                                return { ...tx, recurrenceFrequency: frequency as RecurrenceFrequency, updatedAt: tx.updatedAt || tx.createdAt };
-                            });
-                        }
-                        // Ensure updatedAt for other entities
-                        if (userRecord.loans) userRecord.loans = userRecord.loans.map(l => ({...l, updatedAt: l.updatedAt || l.createdAt}));
-                        if (userRecord.creditCards) userRecord.creditCards = userRecord.creditCards.map(cc => ({...cc, updatedAt: cc.updatedAt || cc.createdAt}));
-                        if (userRecord.creditCardPurchases) userRecord.creditCardPurchases = userRecord.creditCardPurchases.map(p => ({...p, updatedAt: p.updatedAt || p.createdAt}));
-                    }
-                }
             }
+            
+            // Ensure all existing users have the new fields if the users object exists
+            if (db.users) {
+              for (const userId in db.users) {
+                  if (db.users[userId] && db.users[userId].profile) { // Check if profile exists
+                      const userRecord = db.users[userId];
+                      if (!userRecord.categories) {
+                          userRecord.categories = [];
+                          defaultCategories.forEach(cat => {
+                              if (!userRecord.categories.find(c => c.name === cat.name)) {
+                                  userRecord.categories.push({
+                                      id: randomUUID(), userId: userId, name: cat.name,
+                                      isSystemDefined: cat.isSystemDefined || false, createdAt: Date.now()
+                                  });
+                              }
+                          });
+                          modified = true;
+                      }
+                      if (!userRecord.financialGoals) { 
+                          userRecord.financialGoals = [];
+                          modified = true;
+                      }
+                      if (userRecord.profile.notifyByEmail === undefined) {
+                          userRecord.profile.notifyByEmail = false;
+                          modified = true;
+                      }
+                      if (userRecord.transactions) {
+                          userRecord.transactions = userRecord.transactions.map(tx => {
+                              const txAsAny = tx as any;
+                              let frequency = tx.recurrenceFrequency || 'none';
+                              let txModified = false;
+                              if (txAsAny.hasOwnProperty('isRecurring') && typeof txAsAny.isRecurring === 'boolean') {
+                                  if (txAsAny.isRecurring && frequency === 'none') {
+                                      frequency = 'monthly';
+                                  }
+                                  delete txAsAny.isRecurring;
+                                  txModified = true;
+                              }
+                              if (!tx.updatedAt) {
+                                  tx.updatedAt = tx.createdAt;
+                                  txModified = true;
+                              }
+                              if(txModified) modified = true;
+                              return { ...tx, recurrenceFrequency: frequency as RecurrenceFrequency, updatedAt: tx.updatedAt };
+                          });
+                      }
+                      // Ensure updatedAt for other entities
+                      if (userRecord.loans) {
+                        userRecord.loans = userRecord.loans.map(l => {
+                          if(!l.updatedAt) { modified = true; return {...l, updatedAt: l.createdAt}; }
+                          return l;
+                        });
+                      }
+                      if (userRecord.creditCards) {
+                        userRecord.creditCards = userRecord.creditCards.map(cc => {
+                           if(!cc.updatedAt) { modified = true; return {...cc, updatedAt: cc.createdAt}; }
+                           return cc;
+                        });
+                      }
+                      if (userRecord.creditCardPurchases) {
+                        userRecord.creditCardPurchases = userRecord.creditCardPurchases.map(p => {
+                          if(!p.updatedAt) { modified = true; return {...p, updatedAt: p.createdAt}; }
+                          return p;
+                        });
+                      }
+                  }
+              }
+            }
+
             if (modified) {
                 await writeDB(db);
-                console.log("db.json structure updated for all users (categories, financialGoals, recurrenceFrequency).");
+                console.log("db.json structure updated for all users (categories, financialGoals, recurrenceFrequency, notifyByEmail, updatedAt fields).");
             }
         } catch (error: any) {
             if (error.code === 'ENOENT') {
                 await writeDB({ users: {} }); 
+                 console.log("Initialized empty db.json as it was not found during migration check.");
             } else {
                 console.error("Error during DB migration check:", error);
             }
@@ -1003,6 +1075,12 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
   const userProfile = await findUserById(userId);
   if (!userProfile) return null;
 
+  const profileForBackup: UserBackupData['profile'] = {
+    email: userProfile.email,
+    displayName: userProfile.displayName || undefined,
+    notifyByEmail: userProfile.notifyByEmail || false,
+  };
+
   if (DATABASE_MODE === 'postgres' && pool) {
     const transactions = await getTransactionsForUser(userId);
     const loans = await getLoansForUser(userId);
@@ -1011,7 +1089,7 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
     const categories = await getCategoriesForUser(userId);
     const financialGoals = await getFinancialGoalsForUser(userId);
     return {
-      profile: { email: userProfile.email, displayName: userProfile.displayName || undefined },
+      profile: profileForBackup,
       transactions, loans, creditCards, creditCardPurchases, categories, financialGoals,
     };
   } else {
@@ -1034,7 +1112,7 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
     });
 
     return {
-      profile: { email: userData.profile.email, displayName: userData.profile.displayName || undefined },
+      profile: profileForBackup,
       transactions: cleanedTransactions,
       loans: userData.loans || [],
       creditCards: userData.creditCards || [],
@@ -1063,9 +1141,17 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
       await client.query('DELETE FROM credit_cards WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM user_categories WHERE user_id = $1', [userId]);
       
+      let updateUserQuery = 'UPDATE app_users SET ';
+      const updateUserValues = [];
+      let valueIndex = 1;
       if (backupData.profile.displayName) {
-        await client.query('UPDATE app_users SET display_name = $1 WHERE id = $2', [backupData.profile.displayName, userId]);
+        updateUserQuery += `display_name = $${valueIndex++}, `;
+        updateUserValues.push(backupData.profile.displayName);
       }
+      updateUserQuery += `notify_by_email = $${valueIndex++} WHERE id = $${valueIndex++}`;
+      updateUserValues.push(backupData.profile.notifyByEmail || false, userId);
+      await client.query(updateUserQuery, updateUserValues);
+
 
       for (const tx of backupData.transactions) {
         await client.query('INSERT INTO transactions (id, user_id, type, amount, category, date, description, recurrence_frequency, created_at, receipt_image_uri, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
@@ -1105,9 +1191,9 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
     const userRecord = db.users[userId];
     if (!userRecord) return { success: false, error: "User not found." };
 
-    if (backupData.profile.displayName) {
-        userRecord.profile.displayName = backupData.profile.displayName;
-    }
+    userRecord.profile.displayName = backupData.profile.displayName || userRecord.profile.displayName;
+    userRecord.profile.notifyByEmail = backupData.profile.notifyByEmail === undefined ? userRecord.profile.notifyByEmail : backupData.profile.notifyByEmail;
+
 
     userRecord.transactions = backupData.transactions.map(t => ({...t, userId, recurrenceFrequency: t.recurrenceFrequency || 'none'}));
     userRecord.loans = backupData.loans.map(l => ({...l, userId}));
