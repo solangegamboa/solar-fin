@@ -444,9 +444,9 @@ export default function SettingsPage() {
                 <li>Configurar a variável de ambiente `DATABASE_URL` com sua string de conexão PostgreSQL.</li>
                 <li>Definir a variável de ambiente `DATABASE_MODE="postgres"`.</li>
                 <li>Reiniciar o servidor da aplicação.</li>
-                <li>Certificar-se de que as tabelas do banco de dados foram criadas no seu servidor PostgreSQL (veja os esquemas conceituais em `src/lib/databaseService.ts`).</li>
+                <li>Certificar-se de que as tabelas do banco de dados foram criadas no seu servidor PostgreSQL. Você pode encontrar um script de inicialização de exemplo em `sql/init.sql` no seu projeto.</li>
               </ol>
-              Atualmente, apenas as operações de Transações (criar, ler, excluir) foram adaptadas para PostgreSQL como exemplo. Outras funcionalidades (Empréstimos, Cartões) ainda utilizam o `db.json`.
+              A maioria das funcionalidades de dados (Transações, Empréstimos, Cartões, Categorias, Perfil) foram adaptadas para funcionar com PostgreSQL quando configurado. Se `DATABASE_MODE` não for "postgres", o sistema usará o arquivo `db.json` local.
             </AlertDescription>
           </Alert>
         </CardContent>
