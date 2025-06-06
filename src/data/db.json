@@ -18,9 +18,10 @@
           "category": "Salário",
           "date": "2025-06-04",
           "description": "Salário Mensal",
-          "isRecurring": true,
           "createdAt": 1749089165221,
-          "receiptImageUri": null
+          "receiptImageUri": null,
+          "recurrenceFrequency": "monthly",
+          "updatedAt": 1749089165221
         },
         {
           "id": "1689acb5-5c29-4a5c-ace1-292cd6e1bb5d",
@@ -30,9 +31,10 @@
           "category": "Moradia",
           "date": "2025-06-04",
           "description": "Aluguel Apto",
-          "isRecurring": true,
           "createdAt": 1749090843659,
-          "receiptImageUri": null
+          "receiptImageUri": null,
+          "recurrenceFrequency": "monthly",
+          "updatedAt": 1749090843659
         },
         {
           "id": "b190c75e-fa9d-4202-84bc-581cae23a081",
@@ -42,9 +44,10 @@
           "category": "Alimentação",
           "date": "2025-06-05",
           "description": "Supermercado Pão de Açúcar",
-          "isRecurring": false,
           "receiptImageUri": "data:image/jpeg;base64,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",
-          "createdAt": 1749163037155
+          "createdAt": 1749163037155,
+          "recurrenceFrequency": "none",
+          "updatedAt": 1749163037155
         },
         {
           "id": "77a4b3c2-1234-4e56-b789-abcdef123456",
@@ -54,9 +57,10 @@
           "category": "Lazer",
           "date": "2025-05-28",
           "description": "Cinema + Pipoca",
-          "isRecurring": false,
           "createdAt": 1749163100000,
-          "receiptImageUri": null
+          "receiptImageUri": null,
+          "recurrenceFrequency": "none",
+          "updatedAt": 1749163100000
         },
         {
           "id": "88b5c4d3-5678-4f67-c890-bcdefg234567",
@@ -66,9 +70,10 @@
           "category": "Outras Receitas",
           "date": "2025-06-10",
           "description": "Reembolso IR",
-          "isRecurring": false,
           "createdAt": 1749163200000,
-          "receiptImageUri": null
+          "receiptImageUri": null,
+          "recurrenceFrequency": "none",
+          "updatedAt": 1749163200000
         },
         {
           "id": "99c6d5e4-9012-4a78-d901-cdefgh345678",
@@ -78,9 +83,10 @@
           "category": "Serviços (Assinaturas)",
           "date": "2025-06-15",
           "description": "Mensalidade Streaming Max",
-          "isRecurring": true,
           "createdAt": 1749163300000,
-          "receiptImageUri": null
+          "receiptImageUri": null,
+          "recurrenceFrequency": "monthly",
+          "updatedAt": 1749163300000
         },
         {
           "id": "aac7e6f5-3456-4b89-e012-defghi456789",
@@ -90,9 +96,10 @@
           "category": "Transporte",
           "date": "2025-06-20",
           "description": "Gasolina Viagem",
-          "isRecurring": false,
           "createdAt": 1749163400000,
-          "receiptImageUri": null
+          "receiptImageUri": null,
+          "recurrenceFrequency": "none",
+          "updatedAt": 1749163400000
         },
         {
           "id": "bbd8f706-7890-4c90-f123-efghij567890",
@@ -102,9 +109,10 @@
           "category": "Academia",
           "date": "2025-07-01",
           "description": "Mensalidade Academia",
-          "isRecurring": true,
           "createdAt": 1749163500000,
-          "receiptImageUri": null
+          "receiptImageUri": null,
+          "recurrenceFrequency": "monthly",
+          "updatedAt": 1749163500000
         }
       ],
       "loans": [
@@ -117,7 +125,8 @@
           "installmentsCount": 24,
           "startDate": "2025-06-04",
           "endDate": "2027-05-04",
-          "createdAt": 1749091558478
+          "createdAt": 1749091558478,
+          "updatedAt": 1749091558478
         },
         {
           "id": "ce7f72ff-5c27-4bfc-a010-56ed09f05301",
@@ -128,7 +137,8 @@
           "installmentsCount": 36,
           "startDate": "2025-08-10",
           "endDate": "2028-07-10",
-          "createdAt": 1749163600000
+          "createdAt": 1749163600000,
+          "updatedAt": 1749163600000
         }
       ],
       "creditCards": [
@@ -139,7 +149,8 @@
           "limit": 9000,
           "dueDateDay": 3,
           "closingDateDay": 26,
-          "createdAt": 1749089373252
+          "createdAt": 1749089373252,
+          "updatedAt": 1749089373252
         },
         {
           "id": "74cb5e59-60c8-4243-a88e-b5d39647036a",
@@ -148,7 +159,8 @@
           "limit": 12000,
           "dueDateDay": 10,
           "closingDateDay": 1,
-          "createdAt": 1749163700000
+          "createdAt": 1749163700000,
+          "updatedAt": 1749163700000
         }
       ],
       "creditCardPurchases": [
@@ -161,7 +173,8 @@
           "category": "Pets",
           "totalAmount": 340,
           "installments": 4,
-          "createdAt": 1749090099953
+          "createdAt": 1749090099953,
+          "updatedAt": 1749090099953
         },
         {
           "id": "11a2b3c4-6789-4d5e-f678-fedcba098765",
@@ -172,7 +185,8 @@
           "category": "Alimentação",
           "totalAmount": 450,
           "installments": 1,
-          "createdAt": 1749163800000
+          "createdAt": 1749163800000,
+          "updatedAt": 1749163800000
         },
         {
           "id": "22b3c4d5-0123-4e6f-g789-gfedcb109876",
@@ -183,7 +197,8 @@
           "category": "Compras Online",
           "totalAmount": 3500,
           "installments": 10,
-          "createdAt": 1749163900000
+          "createdAt": 1749163900000,
+          "updatedAt": 1749163900000
         },
         {
           "id": "33c4d5e6-4567-4f70-h890-hgfedc210987",
@@ -194,7 +209,8 @@
           "category": "Educação",
           "totalAmount": 1200,
           "installments": 6,
-          "createdAt": 1749164000000
+          "createdAt": 1749164000000,
+          "updatedAt": 1749164000000
         },
         {
           "id": "44d5e6f7-8901-4a81-i901-ihgfed321098",
@@ -205,7 +221,8 @@
           "category": "Viagens",
           "totalAmount": 2200,
           "installments": 5,
-          "createdAt": 1749164100000
+          "createdAt": 1749164100000,
+          "updatedAt": 1749164100000
         }
       ],
       "categories": [
@@ -365,7 +382,7 @@
         "email": "solange.gamboa@gmail.com",
         "displayName": "Solange Gamboa",
         "createdAt": 1749158998992,
-        "lastLoginAt": 1749172449624
+        "lastLoginAt": 1749173070994
       },
       "hashedPassword": "$2a$10$GoGdmUtF2CJ1CveO7PRqDuy6mYmapH1PhHkCwyU8SPQIUCwiUbyrW",
       "transactions": [
@@ -377,9 +394,10 @@
           "category": "Salário",
           "date": "2025-06-01",
           "description": "Salário Solange",
-          "isRecurring": true,
           "createdAt": 1749165000000,
-          "receiptImageUri": null
+          "receiptImageUri": null,
+          "recurrenceFrequency": "monthly",
+          "updatedAt": 1749165000000
         },
         {
           "id": "tx-solange-2",
@@ -389,9 +407,10 @@
           "category": "Moradia",
           "date": "2025-06-05",
           "description": "Condomínio",
-          "isRecurring": true,
           "createdAt": 1749165100000,
-          "receiptImageUri": null
+          "receiptImageUri": null,
+          "recurrenceFrequency": "monthly",
+          "updatedAt": 1749165100000
         },
         {
           "id": "tx-solange-3",
@@ -401,9 +420,10 @@
           "category": "Alimentação",
           "date": "2025-06-10",
           "description": "Mercado Semanal",
-          "isRecurring": false,
           "createdAt": 1749165200000,
-          "receiptImageUri": null
+          "receiptImageUri": null,
+          "recurrenceFrequency": "none",
+          "updatedAt": 1749165200000
         },
         {
           "id": "tx-solange-4",
@@ -413,9 +433,36 @@
           "category": "Lazer",
           "date": "2025-06-15",
           "description": "Jantar com Amigos",
-          "isRecurring": false,
           "createdAt": 1749165300000,
-          "receiptImageUri": null
+          "receiptImageUri": null,
+          "recurrenceFrequency": "none",
+          "updatedAt": 1749165300000
+        },
+        {
+          "id": "905c1223-2dd5-41a2-a084-72a06ee5850a",
+          "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
+          "type": "income",
+          "amount": 1500,
+          "category": "Contas Fixas",
+          "date": "2025-06-01",
+          "description": "Salário",
+          "recurrenceFrequency": "monthly",
+          "receiptImageUri": null,
+          "createdAt": 1749172893939,
+          "updatedAt": 1749172893939
+        },
+        {
+          "id": "9b17fcfa-f2d1-4d23-a504-96c3f1256da0",
+          "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
+          "type": "expense",
+          "amount": 500,
+          "category": "Contas Fixas",
+          "date": "2025-06-05",
+          "description": "Aluguel",
+          "recurrenceFrequency": "monthly",
+          "receiptImageUri": null,
+          "createdAt": 1749173122586,
+          "updatedAt": 1749173122586
         }
       ],
       "loans": [
@@ -428,7 +475,8 @@
           "installmentsCount": 12,
           "startDate": "2025-03-15",
           "endDate": "2026-02-15",
-          "createdAt": 1749165400000
+          "createdAt": 1749165400000,
+          "updatedAt": 1749165400000
         }
       ],
       "creditCards": [
@@ -439,7 +487,8 @@
           "limit": 5000,
           "dueDateDay": 12,
           "closingDateDay": 3,
-          "createdAt": 1749165500000
+          "createdAt": 1749165500000,
+          "updatedAt": 1749165500000
         }
       ],
       "creditCardPurchases": [
@@ -452,7 +501,8 @@
           "category": "Vestuário",
           "totalAmount": 300,
           "installments": 3,
-          "createdAt": 1749165600000
+          "createdAt": 1749165600000,
+          "updatedAt": 1749165600000
         }
       ],
       "categories": [
