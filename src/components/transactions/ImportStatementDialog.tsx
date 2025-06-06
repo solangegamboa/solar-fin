@@ -41,7 +41,7 @@ interface EditableExtractedTransaction extends ExtractedTransaction {
   userSelectedDate: Date | null;
   userSelectedCategory: string;
   userDescription: string;
-  userAmount: number | null;
+  userAmount: number | null; // Should now always store the absolute value
 }
 
 interface ImportStatementDialogProps {
@@ -131,15 +131,28 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
                     if (!isValidDate(parsedDate)) parsedDate = null;
                 } catch (e) { parsedDate = null; }
             }
+            
+            let typeSuggestionBasedOnAmount: TransactionType | 'unknown' = 'unknown';
+            let finalUserAmount: number | null = null;
+
+            if (tx.amount !== null && tx.amount !== undefined) {
+                finalUserAmount = Math.abs(tx.amount);
+                if (tx.amount < 0) {
+                    typeSuggestionBasedOnAmount = 'expense';
+                } else if (tx.amount > 0) {
+                    typeSuggestionBasedOnAmount = 'income';
+                }
+            }
+
             return {
               ...tx,
               id: `extracted-${index}-${Date.now()}`,
-              isSelected: true, // Default to selected
-              userSelectedType: tx.typeSuggestion || 'unknown',
+              isSelected: true, 
+              userSelectedType: tx.typeSuggestion && tx.typeSuggestion !== 'unknown' ? tx.typeSuggestion : typeSuggestionBasedOnAmount,
               userSelectedDate: parsedDate || defaultDate || new Date(),
-              userSelectedCategory: '', // User needs to select
+              userSelectedCategory: '', 
               userDescription: tx.description || tx.rawText || '',
-              userAmount: tx.amount,
+              userAmount: finalUserAmount,
             };
           })
         );
@@ -166,7 +179,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
       toast({ variant: "destructive", title: "Erro", description: "Usuário não identificado." });
       return null;
     }
-    setIsSaving(true); // use isSaving to disable combobox during category creation
+    setIsSaving(true); 
     const result = await addCategoryForUser(userId, categoryName);
     setIsSaving(false);
     if (result.success && result.category) {
@@ -187,16 +200,10 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
 
     let allValid = true;
     for (const tx of transactionsToSave) {
-      if (!tx.userAmount || tx.userAmount === 0) { // Allow negative for income, positive for expense
-        toast({ variant: 'destructive', title: 'Valor Inválido', description: `Transação "${tx.userDescription}" tem valor inválido. Deve ser diferente de zero.` });
+      if (!tx.userAmount || tx.userAmount <= 0) { 
+        toast({ variant: 'destructive', title: 'Valor Inválido', description: `Transação "${tx.userDescription}" tem valor inválido. Deve ser positivo.` });
         allValid = false; break;
       }
-      if (tx.userSelectedType === 'expense' && tx.userAmount > 0) {
-        tx.userAmount = -Math.abs(tx.userAmount); // Ensure expense is negative
-      } else if (tx.userSelectedType === 'income' && tx.userAmount < 0) {
-         tx.userAmount = Math.abs(tx.userAmount); // Ensure income is positive
-      }
-
       if (!tx.userSelectedDate) {
         toast({ variant: 'destructive', title: 'Data Inválida', description: `Transação "${tx.userDescription}" não tem data.` });
         allValid = false; break;
@@ -219,7 +226,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
 
     for (const tx of transactionsToSave) {
       const newTxData: NewTransactionData = {
-        amount: Math.abs(tx.userAmount!), // API expects positive amount, type dictates sign
+        amount: tx.userAmount!, 
         date: format(tx.userSelectedDate!, 'yyyy-MM-dd'),
         type: tx.userSelectedType as TransactionType, 
         category: tx.userSelectedCategory,
@@ -262,7 +269,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
 
   return (
     <>
-      <div className="space-y-4 p-1 max-h-[calc(85vh-180px)] overflow-hidden flex flex-col">
+      <div className="space-y-4 p-1 max-h-[calc(85vh-180px)] flex flex-col"> {/* Removed overflow-hidden */}
         <div className="space-y-2">
           <Label htmlFor="statement-image">Imagem do Extrato</Label>
           <div className="flex items-center gap-2">
@@ -296,7 +303,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
         )}
 
         {extractionResult && editableTransactions.length > 0 && (
-          <div className="space-y-4 flex-grow min-h-0 flex flex-col"> {/* Removed overflow-hidden here */}
+          <div className="space-y-4 flex-grow min-h-0 flex flex-col"> {/* Added min-h-0 */}
             <div className="p-2 border rounded-md bg-muted/20 text-sm">
               {extractionResult.accountName && <p><strong>Conta/Banco:</strong> {extractionResult.accountName}</p>}
               {extractionResult.statementPeriod && <p><strong>Período do Extrato:</strong> {extractionResult.statementPeriod}</p>}
@@ -410,7 +417,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
         )}
 
       </div>
-      <DialogFooter className="pt-4 border-t mt-auto p-6">
+      <DialogFooter className="pt-4 border-t mt-auto p-6 bg-background sticky bottom-0">
         <DialogClose asChild>
           <Button variant="outline" disabled={isProcessingImage || isSaving}>Cancelar</Button>
         </DialogClose>
