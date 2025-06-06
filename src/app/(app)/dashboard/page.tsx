@@ -36,6 +36,7 @@ import {
   isSameDay,
   startOfDay,
   lastDayOfMonth,
+  addDays, // Adicionado
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,6 +47,7 @@ import { TransactionForm } from "@/components/transactions/TransactionForm";
 import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/hooks/use-toast'; // Adicionado
 
 interface DashboardSummary {
   balance: number;
@@ -84,6 +86,7 @@ export default function DashboardPage() {
 
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [isCreditCardPurchaseModalOpen, setIsCreditCardPurchaseModalOpen] = useState(false);
+  const { toast } = useToast(); // Adicionado
 
 
   const dailyTransactionSummaries = useMemo(() => {
@@ -427,6 +430,72 @@ export default function DashboardPage() {
       setError("Usuário não autenticado.");
     }
   }, [fetchDashboardData, user, authLoading]);
+
+  // Effect for upcoming transaction notifications
+  useEffect(() => {
+    if (!user || !projectedTransactionsForMonth.length || isLoadingProjections) {
+      return;
+    }
+    
+    const checkNotifications = () => {
+      const today = startOfDay(new Date());
+      const tomorrow = addDays(today, 1);
+
+      const upcomingForTomorrow = projectedTransactionsForMonth.filter(tx =>
+        !tx.isPast && isSameDay(startOfDay(tx.projectedDate), tomorrow)
+      );
+
+      if (upcomingForTomorrow.length > 0) {
+        const notificationDateKey = formatDateFns(today, 'yyyy-MM-dd');
+        const storageKey = `notifiedUpcomingTxDay_${user.id}_${notificationDateKey}`;
+        
+        try {
+            const alreadyNotifiedToday = localStorage.getItem(storageKey);
+
+            if (!alreadyNotifiedToday) {
+            upcomingForTomorrow.forEach(tx => {
+                toast({
+                title: 'Lembrete: Transação Agendada',
+                description: (
+                    <div className="flex items-start gap-2">
+                    <CalendarClock className="h-5 w-5 text-primary mt-0.5" />
+                    <span>
+                        {tx.description || tx.category} ({formatCurrency(tx.amount)}) está agendada para amanhã, {formatDateFns(tx.projectedDate, 'dd/MM/yyyy', { locale: ptBR })}.
+                    </span>
+                    </div>
+                ),
+                duration: 10000, // 10 segundos
+                });
+            });
+            localStorage.setItem(storageKey, 'true');
+            }
+        } catch (e) {
+            console.warn("LocalStorage not available for notifications:", e);
+        }
+      }
+
+      // Clean up old notification flags from localStorage
+      try {
+        const todayFormatted = formatDateFns(today, 'yyyy-MM-dd');
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(`notifiedUpcomingTxDay_${user.id}_`)) {
+            if (!key.endsWith(todayFormatted)) {
+              localStorage.removeItem(key);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Could not clean up localStorage for notifications:", e);
+      }
+    };
+
+    // Run check after a short delay to ensure UI is stable
+    const timerId = setTimeout(checkNotifications, 500);
+    return () => clearTimeout(timerId);
+
+  }, [projectedTransactionsForMonth, user, isLoadingProjections, toast]);
+
 
   const handlePreviousMonth = () => {
     setSelectedDate(prev => subMonths(prev, 1));
