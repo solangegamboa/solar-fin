@@ -3,7 +3,7 @@ import Logo from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 import { UserNav } from './UserNav';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { NotificationBell } from './NotificationBell'; // Importa o NotificationBell
+import { NotificationBell } from './NotificationBell.tsx'; // Importa o NotificationBell
 
 export function AppHeader() {
   return (
