@@ -3,6 +3,7 @@ import Logo from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 import { UserNav } from './UserNav';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { NotificationBell } from './NotificationBell'; // Importa o NotificationBell
 
 export function AppHeader() {
   return (
@@ -23,6 +24,7 @@ export function AppHeader() {
         <div className="flex flex-1 items-center justify-end space-x-4">
           <nav className="flex items-center space-x-1">
             <ThemeToggle />
+            <NotificationBell /> {/* Adiciona o NotificationBell aqui */}
             <UserNav />
           </nav>
         </div>
