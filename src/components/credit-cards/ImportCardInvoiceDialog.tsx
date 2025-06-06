@@ -359,7 +359,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
                 </AlertDescription>
             </Alert>
 
-            <ScrollArea className="flex-grow border rounded-md">
+            <ScrollArea className="flex-grow min-h-0 border rounded-md">
               <div className="space-y-3 p-3">
                 {editableItems.map((item) => (
                   <Card key={item.id} className="p-3 space-y-2 text-xs shadow-sm">
@@ -460,4 +460,3 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
   );
 }
 
-    
