@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Sun, PiggyBank, Target, TrendingUp, Flag, XCircle } from 'lucide-react'; // Example icons
+import { Sun, PiggyBank, Target, TrendingUp, Flag, XCircle } from 'lucide-react'; 
 import { useState } from 'react';
 import type { FinancialGoal, NewFinancialGoalData, UpdateFinancialGoalData, FinancialGoalStatus } from '@/types';
 import { format, parseISO } from 'date-fns';
@@ -58,12 +58,12 @@ const iconOptions = [
   { value: 'Target', label: 'Alvo', icon: Target },
   { value: 'TrendingUp', label: 'Progresso', icon: TrendingUp },
   { value: 'Flag', label: 'Bandeira', icon: Flag },
-  { value: 'Award', label: 'Prêmio', icon: Flag }, // Using Flag for Award for now
-  { value: 'Briefcase', label: 'Maleta', icon: Flag }, // Using Flag
-  { value: 'Car', label: 'Carro', icon: Flag }, // Using Flag
-  { value: 'Home', label: 'Casa', icon: Flag }, // Using Flag
-  { value: 'Gift', label: 'Presente', icon: Flag }, // Using Flag
-  { value: 'GraduationCap', label: 'Formatura', icon: Flag }, // Using Flag
+  { value: 'Award', label: 'Prêmio', icon: Flag }, 
+  { value: 'Briefcase', label: 'Maleta', icon: Flag }, 
+  { value: 'Car', label: 'Carro', icon: Flag }, 
+  { value: 'Home', label: 'Casa', icon: Flag }, 
+  { value: 'Gift', label: 'Presente', icon: Flag }, 
+  { value: 'GraduationCap', label: 'Formatura', icon: Flag }, 
 ];
 
 
@@ -83,7 +83,7 @@ export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: 
         currentAmount: 0,
         targetDate: null,
         description: '',
-        icon: 'PiggyBank', // Default icon
+        icon: 'PiggyBank', 
         status: 'active',
       };
 
@@ -107,12 +107,14 @@ export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: 
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(goalData),
+          credentials: 'include',
         });
       } else {
         response = await fetch('/api/goals', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(goalData),
+          credentials: 'include',
         });
       }
 
@@ -123,16 +125,14 @@ export function FinancialGoalForm({ userId, existingGoal, onSuccess, setOpen }: 
           title: 'Sucesso!',
           description: `Meta ${existingGoal ? 'atualizada' : 'criada'} com sucesso.`,
         });
-        // For simplicity, we'll just refetch on the parent page.
-        // A more optimized approach might return the full goal object from the API.
-        // For now, construct a partial goal object to update the UI optimistically or trigger refetch.
+        
         const mockId = existingGoal ? existingGoal.id : result.goalId || 'temp-id';
         const now = Date.now();
         onSuccess({
           id: mockId,
           userId,
           ...values,
-          targetAmount: values.targetAmount!, // it's validated by zod
+          targetAmount: values.targetAmount!, 
           currentAmount: values.currentAmount || 0,
           targetDate: values.targetDate ? format(values.targetDate, 'yyyy-MM-dd') : null,
           status: values.status || 'active',

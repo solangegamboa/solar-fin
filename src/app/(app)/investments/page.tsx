@@ -67,7 +67,7 @@ export default function InvestmentsPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/investments');
+      const response = await fetch('/api/investments', { credentials: 'include' });
       const data = await response.json();
       if (response.ok && data.success) {
         setInvestments(data.investments);
@@ -90,7 +90,6 @@ export default function InvestmentsPage() {
   }, [user, authLoading, fetchInvestments]);
 
   const handleInvestmentUpserted = (upsertedInvestment: Investment) => {
-    // Refetch for simplicity, or could update local state more granularly
     fetchInvestments();
     setIsModalOpen(false);
     setInvestmentToEdit(null);
@@ -117,7 +116,10 @@ export default function InvestmentsPage() {
     setShowDeleteConfirmDialog(false);
 
     try {
-      const response = await fetch(`/api/investments/${investmentToDelete.id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/investments/${investmentToDelete.id}`, { 
+        method: 'DELETE',
+        credentials: 'include'
+      });
       const result = await response.json();
 
       if (response.ok && result.success) {

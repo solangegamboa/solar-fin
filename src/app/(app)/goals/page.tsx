@@ -66,7 +66,7 @@ export default function FinancialGoalsPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/goals');
+      const response = await fetch('/api/goals', { credentials: 'include' });
       const data = await response.json();
       if (response.ok && data.success) {
         setGoals(data.goals);
@@ -89,9 +89,6 @@ export default function FinancialGoalsPage() {
   }, [user, authLoading, fetchGoals]);
 
   const handleGoalUpserted = (updatedGoal: FinancialGoal) => {
-    // This function is called by FinancialGoalForm on success.
-    // It will either add a new goal or update an existing one in the local state.
-    // For simplicity, we refetch all goals. A more optimized solution could update local state.
     fetchGoals();
     setIsModalOpen(false);
     setGoalToEdit(null);
@@ -118,7 +115,10 @@ export default function FinancialGoalsPage() {
     setShowDeleteConfirmDialog(false);
 
     try {
-      const response = await fetch(`/api/goals/${goalToDelete.id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/goals/${goalToDelete.id}`, { 
+        method: 'DELETE',
+        credentials: 'include' 
+      });
       const result = await response.json();
 
       if (response.ok && result.success) {
@@ -140,7 +140,7 @@ export default function FinancialGoalsPage() {
     const targetDate = parseISO(targetDateStr);
     if (!isValid(targetDate)) return null;
     const today = new Date();
-    today.setHours(0,0,0,0); // Normalize today to start of day for fair comparison
+    today.setHours(0,0,0,0); 
     if (targetDate < today) return "Prazo Expirado";
     const days = differenceInDays(targetDate, today);
     if (days === 0) return "Hoje!";
@@ -169,7 +169,7 @@ export default function FinancialGoalsPage() {
       let statusIcon = <TargetIcon className="mr-1.5 h-3 w-3" />;
 
       if (goal.status === 'achieved') {
-        statusBadgeVariant = "default"; // Typically green for success
+        statusBadgeVariant = "default"; 
         statusText = "Alcançada";
         statusIcon = <CheckCircle2 className="mr-1.5 h-3 w-3" />;
       } else if (goal.status === 'abandoned') {

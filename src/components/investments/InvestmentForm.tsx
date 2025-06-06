@@ -41,7 +41,7 @@ const investmentFormSchema = z.object({
   type: z.enum(['stock', 'savings', 'crypto', 'other'], { required_error: 'O tipo é obrigatório.' }),
   currentValue: z.coerce
     .number({ invalid_type_error: 'Valor atual deve ser um número.' , required_error: 'O valor atual é obrigatório.'})
-    .min(0, 'O valor atual não pode ser negativo.'), // Can be 0 if it lost all value
+    .min(0, 'O valor atual não pode ser negativo.'), 
   initialAmount: z.coerce
     .number({ invalid_type_error: 'Valor inicial deve ser um número.' })
     .min(0, 'O valor inicial não pode ser negativo.')
@@ -74,7 +74,7 @@ export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen 
         ...existingInvestment,
         acquisitionDate: existingInvestment.acquisitionDate ? parseISO(existingInvestment.acquisitionDate) : null,
         currentValue: existingInvestment.currentValue || 0,
-        initialAmount: existingInvestment.initialAmount || undefined, // Ensure it's undefined if null for coerce
+        initialAmount: existingInvestment.initialAmount || undefined, 
         quantity: existingInvestment.quantity || undefined,
       }
     : {
@@ -99,7 +99,7 @@ export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen 
     const apiData: NewInvestmentData | UpdateInvestmentData = {
       ...values,
       acquisitionDate: values.acquisitionDate ? format(values.acquisitionDate, 'yyyy-MM-dd') : null,
-      currentValue: values.currentValue, // Already number
+      currentValue: values.currentValue, 
       initialAmount: values.initialAmount != null ? values.initialAmount : null,
       quantity: values.quantity != null ? values.quantity : null,
     };
@@ -113,10 +113,10 @@ export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen 
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(apiData),
+          credentials: 'include',
         });
         result = await response.json();
         if (response.ok && result.success) {
-            // For PUT, result might not return the full object. We merge for onSuccess.
             onSuccess({ ...existingInvestment, ...values, acquisitionDate: apiData.acquisitionDate, updatedAt: Date.now() });
         }
       } else {
@@ -124,6 +124,7 @@ export function InvestmentForm({ userId, existingInvestment, onSuccess, setOpen 
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(apiData),
+          credentials: 'include',
         });
         result = await response.json();
          if (response.ok && result.success && result.investmentId) {
