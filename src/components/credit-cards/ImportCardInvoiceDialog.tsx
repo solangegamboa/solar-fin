@@ -344,7 +344,7 @@ export function ImportCardInvoiceDialog({ userId, userCreditCards, setOpen, onSu
         )}
 
         {extractionResult && editableItems.length > 0 && (
-          <div className="space-y-4 flex-grow overflow-hidden flex flex-col">
+          <div className="space-y-4 flex-grow min-h-0 overflow-hidden flex flex-col">
             <div className="p-2 border rounded-md bg-muted/20 text-sm">
               {extractionResult.cardNameHint && <p><strong>Cartão (Extrato):</strong> {extractionResult.cardNameHint}</p>}
               {extractionResult.cardLastDigits && <p><strong>Final:</strong> {extractionResult.cardLastDigits}</p>}
