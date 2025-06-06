@@ -14,7 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Sun, Upload, AlertTriangle, FileImage, Trash2, ScanLine } from 'lucide-react';
 import { extractStatementTransactionsFromImage } from '@/ai/flows/extract-statement-transactions-flow';
-import type { ExtractStatementTransactionsOutput, ExtractedTransaction, UserCategory, NewTransactionData, TransactionType } from '@/types';
+import type { ExtractStatementTransactionsOutput, UserCategory, NewTransactionData, TransactionType } from '@/types';
 import { addTransaction, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
 import { format, parseISO, isValid as isValidDate } from 'date-fns';
 
@@ -29,11 +29,13 @@ interface ImportStatementDialogProps {
 export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStatementDialogProps) {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false); // Combined state for extraction and saving
+  const [isProcessing, setIsProcessing] = useState(false); 
   const [defaultDate, setDefaultDate] = useState<Date | undefined>(new Date());
-  const [userCategories, setUserCategories] = useState<UserCategory[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [userCategories, setUserCategories] = useState<UserCategory[]>([]); // Kept for potential future use or consistency with other dialog
   const [importedCategoryId, setImportedCategoryId] = useState<string | null>(null);
   const [isLoadingPrerequisites, setIsLoadingPrerequisites] = useState(true);
+  const [extractionAttemptId, setExtractionAttemptId] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -47,7 +49,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
 
       let importedCat = categories.find(c => c.name === IMPORTED_CATEGORY_NAME);
       if (!importedCat) {
-        const result = await addCategoryForUser(userId, IMPORTED_CATEGORY_NAME, false);
+        const result = await addCategoryForUser(userId, IMPORTED_CATEGORY_NAME, false); // isSystemDefined = false for user-driven action
         if (result.success && result.category) {
           importedCat = result.category;
           setUserCategories(prev => [...prev, result.category!].sort((a,b) => a.name.localeCompare(b.name)));
@@ -99,7 +101,7 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
       toast({ variant: 'destructive', title: 'Preparando...', description: 'Aguarde a configuração da categoria de importação ou verifique erros anteriores.' });
       return;
     }
-
+    setExtractionAttemptId(prev => prev + 1);
     setIsProcessing(true);
 
     let extractionResult: ExtractStatementTransactionsOutput | null = null;
@@ -141,12 +143,13 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
       }
 
       let type: TransactionType | 'unknown' = 'unknown';
-      if (tx.typeSuggestion && (tx.typeSuggestion === 'income' || tx.typeSuggestion === 'expense')) {
-        type = tx.typeSuggestion;
-      } else if (tx.amount !== null && tx.amount !== undefined) {
+      if (tx.amount !== null && tx.amount !== undefined) { // Prioritize amount signal for type
         if (tx.amount < 0) type = 'expense';
         else if (tx.amount > 0) type = 'income';
+      } else if (tx.typeSuggestion && (tx.typeSuggestion === 'income' || tx.typeSuggestion === 'expense')) {
+        type = tx.typeSuggestion;
       }
+
 
       if (type === 'unknown') {
          console.warn("Skipping transaction with unknown type:", tx);
@@ -158,9 +161,10 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
         amount: amount,
         date: format(transactionDate, 'yyyy-MM-dd'),
         type: type as TransactionType,
-        category: importedCategoryId, // Use the ID of "Importado" category
+        category: IMPORTED_CATEGORY_NAME, // Use the name of the category
         description: tx.description || tx.rawText || 'Transação Importada Automaticamente',
         recurrenceFrequency: 'none',
+        // receiptImageUri is not handled by this specific AI flow.
       };
 
       try {
@@ -189,17 +193,12 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
     
     if (successCount > 0 && errorCount === 0) {
       setOpen(false);
-    } else if (successCount === 0 && errorCount > 0) {
-      // All failed or skipped, keep dialog open
-    } else if (successCount > 0 && errorCount > 0) {
-      // Partially successful, keep dialog open to show error toast
     }
   };
 
   return (
-    <div className="flex flex-col h-full w-full">
-      {/* Main content area */}
-      <div className="flex-grow p-1 space-y-4 overflow-y-auto min-h-0">
+    <div key={extractionAttemptId} className="flex flex-col h-full w-full">
+      <div className="flex-grow space-y-4 overflow-y-auto p-1 min-h-0"> {/* Removed p-1 for DialogContent to handle */}
         <div className="space-y-2">
           <Label htmlFor="statement-image">Imagem do Extrato</Label>
           <div className="flex items-center gap-2">
@@ -254,11 +253,11 @@ export function ImportStatementDialog({ userId, setOpen, onSuccess }: ImportStat
         </Alert>
       </div>
 
-      <DialogFooter className="pt-4 mt-auto border-t p-6 bg-background">
+      <DialogFooter className="pt-4 border-t mt-auto bg-background p-6">
         <DialogClose asChild>
           <Button variant="outline" disabled={isProcessing}>Cancelar</Button>
         </DialogClose>
-        {/* The main action button is now "Extrair e Importar" */}
+        {/* The main action button is "Extrair e Importar" */}
       </DialogFooter>
     </div>
   );
