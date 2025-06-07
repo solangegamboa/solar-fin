@@ -665,12 +665,12 @@
           "userId": "06f570fe-5f3b-42de-929c-ff426be76d93",
           "bankName": "Itaú",
           "description": "Empréstimo Pessoal",
-          "installmentAmount": 450,
+          "installmentAmount": 491,
           "installmentsCount": 12,
           "startDate": "2025-03-15",
           "endDate": "2026-02-15",
           "createdAt": 1749165400000,
-          "updatedAt": 1749165400000
+          "updatedAt": 1749261677167
         }
       ],
       "creditCards": [

@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import Link from 'next/link'; // Import Link
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -27,7 +28,7 @@ import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, Alert
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
 import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
 import { ImportCardInvoiceDialog } from "@/components/credit-cards/ImportCardInvoiceDialog";
-import { getCreditCardsForUser, getCreditCardPurchasesForUser, deleteCreditCardPurchase, deleteCreditCard } from "@/lib/databaseService";
+import { getCreditCardsForUser, getCreditCardPurchasesForUser, deleteCreditCardPurchase } from "@/lib/databaseService"; // deleteCreditCard might be removed if handled in detail page
 import type { CreditCard, CreditCardPurchase } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -74,8 +75,9 @@ const ptBRMonthNames = [
 export default function CreditCardsPage() {
   const { user, loading: authLoading, getToken } = useAuth();
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
-  const [isEditCardModalOpen, setIsEditCardModalOpen] = useState(false);
-  const [cardToEdit, setCardToEdit] = useState<CreditCard | null>(null);
+  // Edit card modal state is removed, as it will be on the detail page
+  // const [isEditCardModalOpen, setIsEditCardModalOpen] = useState(false);
+  // const [cardToEdit, setCardToEdit] = useState<CreditCard | null>(null);
 
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false); 
   const [isEditPurchaseModalOpen, setIsEditPurchaseModalOpen] = useState(false); 
@@ -95,10 +97,10 @@ export default function CreditCardsPage() {
   const [purchaseToDelete, setPurchaseToDelete] = useState<CreditCardPurchase | null>(null);
   const [purchaseToEdit, setPurchaseToEdit] = useState<CreditCardPurchase | null>(null);
 
-  // States for deleting a credit card
-  const [cardToDelete, setCardToDelete] = useState<CreditCard | null>(null);
-  const [showDeleteCardConfirmDialog, setShowDeleteCardConfirmDialog] = useState(false);
-  const [isDeletingCardId, setIsDeletingCardId] = useState<string | null>(null);
+  // Delete card states are removed, as they will be on the detail page
+  // const [cardToDelete, setCardToDelete] = useState<CreditCard | null>(null);
+  // const [showDeleteCardConfirmDialog, setShowDeleteCardConfirmDialog] = useState(false);
+  // const [isDeletingCardId, setIsDeletingCardId] = useState<string | null>(null);
 
 
   const fetchUserCreditCards = useCallback(async () => {
@@ -106,7 +108,6 @@ export default function CreditCardsPage() {
     setIsLoadingCards(true);
     setError(null);
     try {
-      // Changed from direct DB call to API call
       const token = getToken();
       if (!token) throw new Error("Not authenticated");
       const response = await fetch('/api/credit-cards', {
@@ -132,7 +133,6 @@ export default function CreditCardsPage() {
     if (!user) return;
     setIsLoadingPurchases(true);
     try {
-      // Changed from direct DB call to API call
       const token = getToken();
       if (!token) throw new Error("Not authenticated");
       const response = await fetch('/api/credit-card-purchases', {
@@ -163,8 +163,8 @@ export default function CreditCardsPage() {
 
   const handleCreditCardUpserted = () => {
     setIsCardModalOpen(false);
-    setIsEditCardModalOpen(false);
-    setCardToEdit(null);
+    // setIsEditCardModalOpen(false); // No longer managed here
+    // setCardToEdit(null); // No longer managed here
     fetchUserCreditCards(); 
   };
 
@@ -180,10 +180,7 @@ export default function CreditCardsPage() {
     fetchUserPurchases(); 
   };
 
-  const handleOpenEditCardModal = (card: CreditCard) => {
-    setCardToEdit(card);
-    setIsEditCardModalOpen(true);
-  };
+  // handleOpenEditCardModal is removed, will be on detail page
 
   const handleOpenEditPurchaseModal = (purchase: CreditCardPurchase) => {
     setPurchaseToEdit(purchase);
@@ -361,57 +358,7 @@ export default function CreditCardsPage() {
     }
   };
   
-  // Delete Card Handlers
-  const handleDeleteCard = (card: CreditCard) => {
-    setCardToDelete(card);
-    setShowDeleteCardConfirmDialog(true);
-  };
-
-  const confirmDeleteCard = async () => {
-    if (!cardToDelete || !user) return;
-    setIsDeletingCardId(cardToDelete.id);
-    setShowDeleteCardConfirmDialog(false);
-    const token = getToken();
-    if (!token) {
-        toast({ variant: "destructive", title: "Erro de Autenticação", description: "Sessão inválida." });
-        setIsDeletingCardId(null);
-        setCardToDelete(null);
-        return;
-    }
-    try {
-      const response = await fetch(`/api/credit-cards/${cardToDelete.id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        toast({
-          title: 'Cartão Excluído!',
-          description: `O cartão "${cardToDelete.name}" e todas as suas compras associadas foram excluídos.`,
-        });
-        fetchUserCreditCards(); // Refreshes cards
-        fetchUserPurchases(); // Refreshes purchases (as they might have been deleted)
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Erro ao Excluir Cartão',
-          description: result.message || 'Não foi possível excluir o cartão.',
-        });
-      }
-    } catch (e: any) {
-      const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Ocorreu um erro desconhecido.';
-      console.error('Error deleting credit card:', errorMessage);
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao Excluir Cartão',
-        description: 'Ocorreu um erro ao tentar excluir o cartão.',
-      });
-    } finally {
-      setIsDeletingCardId(null);
-      setCardToDelete(null);
-    }
-  };
+  // Delete Card Handlers are removed, will be on detail page
 
   const categorySpendingSummary = useMemo(() => {
     if (isLoadingPurchases || purchases.length === 0) {
@@ -464,64 +411,38 @@ export default function CreditCardsPage() {
       const currentClosingDate = setDate(currentDate, card.closingDateDay);
       let nextClosingDate = addMonths(currentDate, 1);
       nextClosingDate = setDate(nextClosingDate, card.closingDateDay);
-      const actionButtonsDisabled = !!isDeletingCardId || !user;
 
       return (
-        <Card key={card.id} className="shadow-md hover:shadow-lg transition-shadow">
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <CardTitle className="flex items-center text-xl"><CreditCardLucideIcon className="mr-2 h-6 w-6 text-primary" />{card.name}</CardTitle>
-              <div className="flex space-x-1">
-                 <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleOpenEditCardModal(card)}
-                    disabled={actionButtonsDisabled}
-                    aria-label="Editar cartão"
-                    className="h-7 w-7 text-primary hover:text-primary/80"
-                    title="Editar cartão"
-                  >
-                    <Edit3 className="h-4 w-4" />
-                 </Button>
-                 <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteCard(card)}
-                    disabled={isDeletingCardId === card.id || actionButtonsDisabled}
-                    aria-label="Excluir cartão"
-                    className="h-7 w-7 text-destructive hover:text-destructive/80"
-                    title="Excluir cartão"
-                  >
-                    {isDeletingCardId === card.id ? (
-                      <Sun className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
-                  </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Limite:</span><span className="font-semibold">{formatCurrency(card.limit)}</span></div>
-            <div className="flex items-center"><CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Vencimento: Dia</span><span className="font-medium ml-auto">{String(card.dueDateDay).padStart(2, '0')}</span></div>
-            <div className="flex items-center"><CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Fechamento: Dia</span><span className="font-medium ml-auto">{String(card.closingDateDay).padStart(2, '0')}</span></div>
-            <Separator className="my-2"/>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center text-sm text-muted-foreground">
-                <FileText className="mr-2 h-4 w-4 text-blue-500" />
-                <span>Fatura Atual (Fecha {format(currentClosingDate, 'dd/MM', { locale: ptBR })}):</span>
-              </div>
-              <span className="font-semibold text-blue-600">{formatCurrency(currentInvoiceTotal)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center text-sm text-muted-foreground">
-                <TrendingUp className="mr-2 h-4 w-4 text-green-500" />
-                <span>Próxima Fatura (Fecha {format(nextClosingDate, 'dd/MM', { locale: ptBR })}):</span>
-              </div>
-              <span className="font-semibold text-green-600">{formatCurrency(nextInvoiceTotal)}</span>
-            </div>
-          </CardContent>
-        </Card>
+        <Link href={`/credit-cards/${card.id}`} key={card.id} className="flex">
+            <Card className="shadow-md hover:shadow-lg transition-shadow w-full">
+            <CardHeader>
+                <div className="flex items-start justify-between">
+                <CardTitle className="flex items-center text-xl"><CreditCardLucideIcon className="mr-2 h-6 w-6 text-primary" />{card.name}</CardTitle>
+                {/* Edit and Delete buttons removed from here, will be on detail page */}
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Limite:</span><span className="font-semibold">{formatCurrency(card.limit)}</span></div>
+                <div className="flex items-center"><CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Vencimento: Dia</span><span className="font-medium ml-auto">{String(card.dueDateDay).padStart(2, '0')}</span></div>
+                <div className="flex items-center"><CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Fechamento: Dia</span><span className="font-medium ml-auto">{String(card.closingDateDay).padStart(2, '0')}</span></div>
+                <Separator className="my-2"/>
+                <div className="flex items-center justify-between">
+                <div className="flex items-center text-sm text-muted-foreground">
+                    <FileText className="mr-2 h-4 w-4 text-blue-500" />
+                    <span>Fatura Atual (Fecha {format(currentClosingDate, 'dd/MM', { locale: ptBR })}):</span>
+                </div>
+                <span className="font-semibold text-blue-600">{formatCurrency(currentInvoiceTotal)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                <div className="flex items-center text-sm text-muted-foreground">
+                    <TrendingUp className="mr-2 h-4 w-4 text-green-500" />
+                    <span>Próxima Fatura (Fecha {format(nextClosingDate, 'dd/MM', { locale: ptBR })}):</span>
+                </div>
+                <span className="font-semibold text-green-600">{formatCurrency(nextInvoiceTotal)}</span>
+                </div>
+            </CardContent>
+            </Card>
+        </Link>
       );
     });
   };
@@ -707,23 +628,7 @@ export default function CreditCardsPage() {
         </div>
       </div>
       
-      {/* Dialog for Editing Credit Card */}
-      <Dialog open={isEditCardModalOpen} onOpenChange={(isOpen) => { setIsEditCardModalOpen(isOpen); if (!isOpen) setCardToEdit(null); }}>
-        <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar Cartão de Crédito</DialogTitle>
-            <DialogDescription>Atualize os detalhes do seu cartão.</DialogDescription>
-          </DialogHeader>
-          {user && cardToEdit && (
-            <CreditCardForm
-              onSuccess={handleCreditCardUpserted}
-              setOpen={setIsEditCardModalOpen}
-              userId={user.id}
-              existingCard={cardToEdit}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Edit Card Dialog is removed from here */}
 
       {/* Dialog for Editing Purchase */}
       <Dialog open={isEditPurchaseModalOpen} onOpenChange={(isOpen) => { setIsEditPurchaseModalOpen(isOpen); if (!isOpen) setPurchaseToEdit(null); }}>
@@ -801,27 +706,7 @@ export default function CreditCardsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showDeleteCardConfirmDialog} onOpenChange={setShowDeleteCardConfirmDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Exclusão de Cartão</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir o cartão "{cardToDelete?.name || 'selecionado'}"? Todas as compras parceladas associadas a este cartão também serão excluídas. Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setCardToDelete(null)} disabled={!!isDeletingCardId}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeleteCard}
-              disabled={!!isDeletingCardId || !user}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isDeletingCardId ? <Sun className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Excluir Cartão
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Delete Card AlertDialog is removed from here */}
 
     </div>
   );
