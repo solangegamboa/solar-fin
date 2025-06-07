@@ -40,6 +40,7 @@ import {
   lastDayOfMonth,
   addDays,
   setDate,
+  endOfDay, // Added for precision in some interval checks
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
@@ -199,26 +200,22 @@ export default function DashboardPage() {
     (
       card: CreditCard,
       allPurchases: CreditCardPurchase[],
-      targetInvoiceClosingMonth: number, // Mês de *fechamento* da fatura (0-11)
-      targetInvoiceClosingYear: number   // Ano de *fechamento* da fatura
+      targetInvoiceClosingMonth: number, 
+      targetInvoiceClosingYear: number   
     ): number => {
       let invoiceTotal = 0;
       const purchasesOnThisCard = allPurchases.filter(p => p.cardId === card.id);
 
       purchasesOnThisCard.forEach(purchase => {
-        const purchaseDate = parseISO(purchase.date); // Data da compra
+        const purchaseDate = parseISO(purchase.date); 
         const installmentAmount = purchase.totalAmount / purchase.installments;
 
         for (let i = 0; i < purchase.installments; i++) {
-          // Determina em qual ciclo de fatura esta parcela (i) entra
           let billingCycleDateForInstallment = purchaseDate; 
           
-          // Se a compra foi feita APÓS o dia de fechamento do cartão no mês da compra,
-          // a primeira parcela (e as subsequentes baseadas nela) cai na fatura do *próximo* ciclo.
           if (getDate(purchaseDate) > card.closingDateDay) {
             billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, 1);
           }
-          // Adiciona os meses das parcelas subsequentes
           billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, i); 
           
           const installmentInvoiceClosingMonth = getMonth(billingCycleDateForInstallment);
@@ -242,7 +239,7 @@ export default function DashboardPage() {
     const originalDate = parseISO(transaction.date);
 
     if (!transaction.recurrenceFrequency || transaction.recurrenceFrequency === 'none') {
-      if (isWithinInterval(originalDate, { start: periodStart, end: periodEnd })) {
+      if (isWithinInterval(originalDate, { start: periodStart, end: endOfDay(periodEnd) })) { // Use endOfDay for periodEnd
         occurrences.push(originalDate);
       }
       return occurrences;
@@ -251,9 +248,7 @@ export default function DashboardPage() {
     let currentDate = originalDate;
 
     if (transaction.recurrenceFrequency !== 'none') {
-        // Advance currentDate to be at or after periodStart, but not before originalDate.
-        // This loop finds the first occurrence that is relevant for the period or later.
-        while (isBefore(currentDate, periodStart) && isBefore(currentDate, addYears(periodEnd,1))) { // Add safety for long look-backs
+        while (isBefore(currentDate, periodStart) && isBefore(currentDate, addYears(periodEnd,1))) { 
             const nextDate = new Date(currentDate);
             let advanced = false;
             switch (transaction.recurrenceFrequency) {
@@ -276,16 +271,16 @@ export default function DashboardPage() {
                     advanced = true;
                     break;
             }
-             if (!advanced || (currentDate <= nextDate && transaction.recurrenceFrequency !== 'none')) { // Stuck or went back
+             if (!advanced || (currentDate <= nextDate && transaction.recurrenceFrequency !== 'none')) { 
                 break;
             }
         }
     }
 
 
-    while (isBefore(currentDate, periodEnd) || isSameDay(currentDate, periodEnd)) {
-      if (isWithinInterval(currentDate, { start: periodStart, end: periodEnd })) {
-        occurrences.push(new Date(currentDate)); // Push a copy
+    while (isBefore(currentDate, endOfDay(periodEnd)) || isSameDay(currentDate, periodEnd)) { // Use endOfDay
+      if (isWithinInterval(currentDate, { start: periodStart, end: endOfDay(periodEnd) })) {
+        occurrences.push(new Date(currentDate)); 
       }
 
       const prevIterDate = new Date(currentDate);
@@ -308,8 +303,8 @@ export default function DashboardPage() {
         default: 
           return occurrences; 
       }
-       if (currentDate <= prevIterDate) break; // Safety break if date doesn't advance
-       if (occurrences.length > 200) break; // Overall safety break
+       if (currentDate <= prevIterDate) break; 
+       if (occurrences.length > 200) break; 
     }
     return occurrences;
   }, []);
@@ -381,9 +376,8 @@ export default function DashboardPage() {
         }
       });
       
-      // Adicionar faturas de cartão individuais aos agendamentos
       fetchedCreditCards.forEach(card => {
-        const prevMonthForClosing = subMonths(selectedDate, 1);
+        const prevMonthForClosing = subMonths(selectedDate, 1); 
         const targetClosingMonth = getMonth(prevMonthForClosing);
         const targetClosingYear = getYear(prevMonthForClosing);
 
@@ -395,11 +389,7 @@ export default function DashboardPage() {
         );
 
         if (cardInvoiceTotalForSelectedMonth > 0) {
-          const dueDateInSelectedMonth = new Date(
-            getYear(selectedDate),
-            getMonth(selectedDate),
-            Math.min(card.dueDateDay, getDate(lastDayOfMonth(selectedDate)))
-          );
+          const dueDateInSelectedMonth = setDate(selectedDate, Math.min(card.dueDateDay, getDate(lastDayOfMonth(selectedDate))));
           
           if (isSameMonth(dueDateInSelectedMonth, selectedDate) && isSameYear(dueDateInSelectedMonth, selectedDate)) {
             currentProjectedTransactions.push({
@@ -411,52 +401,55 @@ export default function DashboardPage() {
               date: formatDateFns(dueDateInSelectedMonth, 'yyyy-MM-dd'),
               description: `Pagamento Fatura ${card.name}`,
               recurrenceFrequency: 'none',
-              projectedDate: dueDateInSelectedMonth,
-              isPast: isBefore(dueDateInSelectedMonth, today) && !isSameDay(dueDateInSelectedMonth, today),
-              createdAt: selectedMonthStart.getTime(), // Use a consistent reference for createdAt for these types of items
-              receiptImageUri: null, // Faturas não têm comprovante único no sentido de transação
+              projectedDate: startOfDay(dueDateInSelectedMonth),
+              isPast: isBefore(startOfDay(dueDateInSelectedMonth), today) && !isSameDay(startOfDay(dueDateInSelectedMonth), today),
+              createdAt: selectedMonthStart.getTime(), 
+              receiptImageUri: null, 
             });
           }
         }
       });
 
-      // Adicionar parcelas de empréstimos individuais aos agendamentos
       loans.forEach(loan => {
         const loanStartDate = parseISO(loan.startDate);
         const loanEndDate = parseISO(loan.endDate);
 
-        if (loanStartDate <= selectedMonthEnd && loanEndDate >= selectedMonthStart) {
-            // Iterate through potential payment dates for this loan
+        if (isWithinInterval(selectedMonthStart, { start: loanStartDate, end: loanEndDate }) || 
+            isWithinInterval(selectedMonthEnd, { start: loanStartDate, end: loanEndDate }) ||
+            (isBefore(loanStartDate, selectedMonthStart) && isAfter(loanEndDate, selectedMonthEnd))) {
+            
             for (let i = 0; i < loan.installmentsCount; i++) {
-                const installmentBaseDate = addMonths(loanStartDate, i);
+                let installmentBaseDate = addMonths(loanStartDate, i);
                 const dayOfOriginalStart = getDate(loanStartDate);
                 const lastDayOfInstallmentMonth = getDate(lastDayOfMonth(installmentBaseDate));
                 const actualPaymentDayInInstallmentMonth = Math.min(dayOfOriginalStart, lastDayOfInstallmentMonth);
                 
-                const paymentDateForThisInstallment = new Date(
+                let paymentDateForThisInstallment = new Date(
                     getYear(installmentBaseDate), 
                     getMonth(installmentBaseDate), 
                     actualPaymentDayInInstallmentMonth
                 );
+                paymentDateForThisInstallment = startOfDay(paymentDateForThisInstallment);
 
-                if (isWithinInterval(paymentDateForThisInstallment, { start: selectedMonthStart, end: selectedMonthEnd })) {
+
+                if (isSameMonth(paymentDateForThisInstallment, selectedDate) && isSameYear(paymentDateForThisInstallment, selectedDate)) {
                     currentProjectedTransactions.push({
                         id: `loan-pmt-${loan.id}-${formatDateFns(paymentDateForThisInstallment, 'yyyy-MM-dd')}`,
                         userId: user.id,
                         type: 'expense',
                         amount: loan.installmentAmount,
                         category: 'Empréstimo',
-                        date: formatDateFns(paymentDateForThisInstallment, 'yyyy-MM-dd'),
+                        date: formatDateFns(paymentDateForThisInstallment, 'yyyy-MM-dd'), // Use the actual payment date as base for display if needed
                         description: `Parcela Empréstimo ${loan.bankName} (${loan.description})`,
-                        recurrenceFrequency: 'none', // Represented as a single occurrence for the month
+                        recurrenceFrequency: 'none', 
                         projectedDate: paymentDateForThisInstallment,
                         isPast: isBefore(paymentDateForThisInstallment, today) && !isSameDay(paymentDateForThisInstallment, today),
                         createdAt: selectedMonthStart.getTime(),
                         receiptImageUri: null,
                     });
-                    break; // Found the payment for this month, move to next loan
+                    break; 
                 }
-                 if (isAfter(paymentDateForThisInstallment, selectedMonthEnd)) break; // Optimization
+                 if (isAfter(paymentDateForThisInstallment, selectedMonthEnd) && getMonth(paymentDateForThisInstallment) > getMonth(selectedDate) ) break;
             }
         }
       });
@@ -497,7 +490,9 @@ export default function DashboardPage() {
       loans.forEach(loan => {
         const loanStartDate = parseISO(loan.startDate);
         const loanEndDate = parseISO(loan.endDate);
-        if (loanStartDate <= selectedMonthEnd && loanEndDate >= selectedMonthStart) {
+        if (isWithinInterval(selectedMonthStart, { start: loanStartDate, end: loanEndDate }) || 
+            isWithinInterval(selectedMonthEnd, { start: loanStartDate, end: loanEndDate }) ||
+            (isBefore(loanStartDate, selectedMonthStart) && isAfter(loanEndDate, selectedMonthEnd))) {
             for (let i = 0; i < loan.installmentsCount; i++) {
                 const installmentBaseDate = addMonths(loanStartDate, i);
                 const dayOfOriginalStart = getDate(loanStartDate);
@@ -505,11 +500,11 @@ export default function DashboardPage() {
                 const actualPaymentDayInInstallmentMonth = Math.min(dayOfOriginalStart, lastDayOfInstallmentMonth);
                 const paymentDateForThisInstallment = new Date(getYear(installmentBaseDate), getMonth(installmentBaseDate), actualPaymentDayInInstallmentMonth);
 
-                if (isWithinInterval(paymentDateForThisInstallment, { start: selectedMonthStart, end: selectedMonthEnd })) {
+                if (isSameMonth(paymentDateForThisInstallment, selectedDate) && isSameYear(paymentDateForThisInstallment, selectedDate)) {
                     loanPaymentsForSelectedMonth += loan.installmentAmount;
                     break; 
                 }
-                if (isAfter(paymentDateForThisInstallment, selectedMonthEnd)) break;
+                if (isAfter(paymentDateForThisInstallment, selectedMonthEnd) && getMonth(paymentDateForThisInstallment) > getMonth(selectedDate)) break;
             }
         }
       });
@@ -517,7 +512,7 @@ export default function DashboardPage() {
       const totalSelectedMonthExpensesWithLoansAndOldCC = projectedMonthExpenses + ccBillsClosedLastMonthForSelected + loanPaymentsForSelectedMonth;
 
 
-      let cardSpendingForSelectedMonthBills = 0; // Faturas que fecham no mês selecionado (para o card "Fatura Cartões")
+      let cardSpendingForSelectedMonthBills = 0; 
       const targetSelectedMonthClosingMonth = getMonth(selectedDate);
       const targetSelectedMonthClosingYear = getYear(selectedDate);
       fetchedCreditCards.forEach(card => {
@@ -529,15 +524,18 @@ export default function DashboardPage() {
         );
       });
 
-      // Calculate loan payments due in the *actual current real-world month* for Saldo Atual
+      // Calculate for "Saldo Atual (Real)" card - based on actual current month
       const actualCurrentDate = new Date();
       const actualCurrentMonthStart = startOfMonth(actualCurrentDate);
       const actualCurrentMonthEnd = endOfMonth(actualCurrentDate);
+      
       let loanPaymentsDueInActualCurrentMonth = 0;
       loans.forEach(loan => {
         const loanStartDate = parseISO(loan.startDate);
         const loanEndDate = parseISO(loan.endDate);
-        if (loanStartDate <= actualCurrentMonthEnd && loanEndDate >= actualCurrentMonthStart) {
+         if (isWithinInterval(actualCurrentMonthStart, { start: loanStartDate, end: loanEndDate }) || 
+            isWithinInterval(actualCurrentMonthEnd, { start: loanStartDate, end: loanEndDate }) ||
+            (isBefore(loanStartDate, actualCurrentMonthStart) && isAfter(loanEndDate, actualCurrentMonthEnd))) {
             for (let i = 0; i < loan.installmentsCount; i++) {
                 const installmentBaseDate = addMonths(loanStartDate, i);
                 const dayOfOriginalStart = getDate(loanStartDate);
@@ -545,16 +543,15 @@ export default function DashboardPage() {
                 const actualPaymentDayInInstallmentMonth = Math.min(dayOfOriginalStart, lastDayOfInstallmentMonth);
                 const paymentDateForThisInstallment = new Date(getYear(installmentBaseDate), getMonth(installmentBaseDate), actualPaymentDayInInstallmentMonth);
 
-                if (isWithinInterval(paymentDateForThisInstallment, { start: actualCurrentMonthStart, end: actualCurrentMonthEnd })) {
+                if (isSameMonth(paymentDateForThisInstallment, actualCurrentDate) && isSameYear(paymentDateForThisInstallment, actualCurrentDate)) {
                     loanPaymentsDueInActualCurrentMonth += loan.installmentAmount;
                     break; 
                 }
-                if (isAfter(paymentDateForThisInstallment, actualCurrentMonthEnd)) break;
+                if (isAfter(paymentDateForThisInstallment, actualCurrentMonthEnd) && getMonth(paymentDateForThisInstallment) > getMonth(actualCurrentDate)) break;
             }
         }
       });
       
-      // Calculate CC bills closed in the *previous actual month* for Saldo Atual
       const actualPreviousMonth = subMonths(actualCurrentDate, 1);
       const actualPreviousMonthClosingMonth = getMonth(actualPreviousMonth);
       const actualPreviousMonthClosingYear = getYear(actualPreviousMonth);
@@ -568,9 +565,18 @@ export default function DashboardPage() {
         );
       });
 
+      let directRecurringExpensesForActualCurrentMonth = 0;
+      fetchedTransactions.forEach(tx => {
+        if (tx.type === 'expense' && tx.recurrenceFrequency && tx.recurrenceFrequency !== 'none') {
+          const occurrences = getProjectedOccurrences(tx, actualCurrentMonthStart, actualCurrentMonthEnd);
+          occurrences.forEach(() => {
+            directRecurringExpensesForActualCurrentMonth += tx.amount;
+          });
+        }
+      });
 
       setSummary({
-        balance: baseLifetimeBalance - loanPaymentsDueInActualCurrentMonth - ccBillsClosedPreviousActualMonth,
+        balance: baseLifetimeBalance - loanPaymentsDueInActualCurrentMonth - ccBillsClosedPreviousActualMonth - directRecurringExpensesForActualCurrentMonth,
         selectedMonthIncome: projectedMonthIncome,
         selectedMonthExpenses: totalSelectedMonthExpensesWithLoansAndOldCC,
         selectedMonthCardSpending: cardSpendingForSelectedMonthBills,
@@ -593,13 +599,11 @@ export default function DashboardPage() {
             currentMonthPaceExpenses += tx.amount;
           }
         });
-        // Consider credit card spending for pace alert more directly
         let ccSpendingCurrentPace = 0;
         fetchedCreditCards.forEach(card => {
           creditCardPurchases.filter(p => p.cardId === card.id).forEach(purchase => {
             const purchaseDate = parseISO(purchase.date);
             const installmentAmount = purchase.totalAmount / purchase.installments;
-            // Determine which bill cycle this purchase belongs to
             let firstBillCycleDate = purchaseDate;
             if (getDate(purchaseDate) > card.closingDateDay) {
                 firstBillCycleDate = addMonths(purchaseDate, 1);
@@ -607,10 +611,7 @@ export default function DashboardPage() {
             
             for (let i = 0; i < purchase.installments; i++) {
                 const installmentBillCycleDate = addMonths(firstBillCycleDate, i);
-                // Check if this installment's bill cycle date is within the current pace period *and* its closing month is the current month
                 if (getMonth(installmentBillCycleDate) === getMonth(currentPeriodStart) && getYear(installmentBillCycleDate) === getYear(currentPeriodStart)) {
-                    // This means the purchase (or its installment) will be on the bill that closes *this* month (currentPeriodStart's month)
-                    // We need to ensure this purchase was made *within the pace period* for fair comparison
                     if(isWithinInterval(purchaseDate, {start: currentPeriodStart, end: currentPeriodEnd})) {
                          ccSpendingCurrentPace += installmentAmount;
                     }
