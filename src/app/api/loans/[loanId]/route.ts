@@ -1,7 +1,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
-import { updateLoan } from '@/lib/databaseService';
-import type { UpdateLoanData } from '@/types';
+import { updateLoan, deleteLoan as deleteLoanFromDb } from '@/lib/databaseService'; // Renomeado deleteLoan para evitar conflito de nome
+import type { UpdateLoanData, UpdateResult } from '@/types';
 import { getUserIdFromAuthHeader } from '@/lib/authUtils';
 
 interface RouteParams {
@@ -56,6 +56,25 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   }
 }
 
-// DELETE already exists and should be fine
-export { DELETE } from '@/app/api/loans/[loanId]/route'; // Assuming DELETE logic is in a separate file or can be co-located
+export async function DELETE(req: NextRequest, { params }: RouteParams) {
+  const userId = await getUserIdFromAuthHeader(req);
+  if (!userId) {
+    return NextResponse.json({ success: false, message: 'Not authenticated.' }, { status: 401 });
+  }
+  const { loanId } = params;
+  if (!loanId) {
+    return NextResponse.json({ success: false, message: 'Loan ID is required.' }, { status: 400 });
+  }
 
+  try {
+    const result: UpdateResult = await deleteLoanFromDb(userId, loanId);
+    if (result.success) {
+      return NextResponse.json({ success: true, message: 'Loan deleted successfully.' }, { status: 200 });
+    } else {
+      return NextResponse.json({ success: false, message: result.error || 'Failed to delete loan.' }, { status: result.error?.includes("not found") ? 404 : 500 });
+    }
+  } catch (error: any) {
+    console.error('Delete loan error:', error);
+    return NextResponse.json({ success: false, message: 'An internal server error occurred.' }, { status: 500 });
+  }
+}
