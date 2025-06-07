@@ -18,10 +18,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useToast } from '@/hooks/use-toast';
 import { Sun } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react'; // Added useCallback, useMemo
 import { addLoan, type NewLoanData, type UpdateLoanData } from '@/lib/databaseService';
 import type { Loan } from '@/types';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid as isValidDate } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 
 const loanFormSchema = z.object({
@@ -53,7 +53,9 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
   const { getToken } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const defaultFormValues: LoanFormValues = existingLoan ? {
+  const form = useForm<LoanFormValues>({
+    resolver: zodResolver(loanFormSchema),
+    defaultValues: useMemo(() => (existingLoan ? {
         bankName: existingLoan.bankName,
         description: existingLoan.description,
         installmentAmount: existingLoan.installmentAmount,
@@ -65,16 +67,31 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
       installmentAmount: undefined,
       startDate: new Date(),
       installmentsCount: undefined,
-    };
-  
-  const form = useForm<LoanFormValues>({
-    resolver: zodResolver(loanFormSchema),
-    defaultValues: defaultFormValues,
+    }), [existingLoan]),
   });
 
   useEffect(() => {
-    form.reset(defaultFormValues);
-  }, [existingLoan, form, defaultFormValues]);
+    const startDateValue = existingLoan?.startDate ? parseISO(existingLoan.startDate) : new Date();
+    const validStartDate = isValidDate(startDateValue) ? startDateValue : new Date();
+
+    if (existingLoan) {
+      form.reset({
+        bankName: existingLoan.bankName,
+        description: existingLoan.description,
+        installmentAmount: existingLoan.installmentAmount,
+        startDate: validStartDate,
+        installmentsCount: existingLoan.installmentsCount,
+      });
+    } else {
+      form.reset({
+        bankName: '',
+        description: '',
+        installmentAmount: undefined,
+        startDate: new Date(),
+        installmentsCount: undefined,
+      });
+    }
+  }, [existingLoan, form.reset]);
 
 
   const onSubmit = async (values: LoanFormValues) => {
@@ -124,7 +141,7 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
           title: 'Sucesso!',
           description: `Empréstimo ${existingLoan ? 'atualizado' : 'adicionado'} com sucesso.`,
         });
-        form.reset({ // Reset to initial default (empty for new, or existing if was editing but now re-adding)
+        form.reset({ 
           bankName: '',
           description: '',
           installmentAmount: undefined,
@@ -211,13 +228,34 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
           <FormField
             control={form.control}
             name="startDate"
-            render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>Data de Início da Primeira Parcela</FormLabel>
-                <DatePicker value={field.value} onChange={field.onChange} disabled={isSubmitting}/>
-                <FormMessage />
-              </FormItem>
-            )}
+            render={({ field }) => {
+              // Memoize the onChange handler for the DatePicker
+              const handleDateChange = useCallback((date: Date | undefined) => {
+                const currentValue = field.value; // field.value is a Date object here
+                if (
+                  (date === undefined && currentValue !== undefined) ||
+                  (date !== undefined && currentValue === undefined) ||
+                  (date && currentValue && date.getTime() !== currentValue.getTime())
+                ) {
+                  // Use form.setValue for more control if direct field.onChange causes issues,
+                  // but field.onChange is usually the correct RHF way.
+                  // For this specific error, ensuring stability and minimal updates is key.
+                  form.setValue('startDate', date as Date, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+                }
+              }, [field.value, form.setValue]); // form.setValue is stable
+
+              return (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Data de Início da Primeira Parcela</FormLabel>
+                  <DatePicker 
+                    value={field.value} 
+                    onChange={handleDateChange} 
+                    disabled={isSubmitting}
+                  />
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
           />
            <FormField
             control={form.control}
@@ -253,3 +291,4 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
     </Form>
   );
 }
+
