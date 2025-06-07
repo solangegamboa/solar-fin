@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, Landmark, CalendarDays, Trash2, Sun, AlertTriangleIcon, SearchX, Info, TrendingUp, TrendingDown, CircleDollarSign, ReceiptText, Sigma, CalendarClock, Banknote, LayoutGrid } from "lucide-react";
+import { PlusCircle, Landmark, CalendarDays, Trash2, Sun, AlertTriangleIcon, SearchX, Info, TrendingUp, TrendingDown, CircleDollarSign, ReceiptText, Sigma, CalendarClock, Banknote, LayoutGrid, Edit3 } from "lucide-react";
 import { LoanForm } from "@/components/loans/LoanForm";
 import type { Loan } from "@/types";
 import { getLoansForUser, deleteLoan } from "@/lib/databaseService";
@@ -57,7 +57,7 @@ interface DebtByBank {
 }
 
 export default function LoansPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, getToken } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,9 +73,23 @@ export default function LoansPage() {
     if (!user) return;
     setIsLoading(true);
     setError(null);
+    const token = getToken(); // Get token for API call
+    if (!token) {
+      setError("Sessão inválida. Faça login novamente.");
+      setIsLoading(false);
+      toast({ variant: "destructive", title: "Erro de Autenticação", description: "Sessão inválida." });
+      return;
+    }
     try {
-      const userLoans = await getLoansForUser(user.id);
-      setLoans(userLoans);
+      const response = await fetch('/api/loans', { // Fetch from API
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setLoans(data.loans);
+      } else {
+        throw new Error(data.message || "Falha ao carregar empréstimos.");
+      }
     } catch (e: any) {
       const errorMessage = (e && typeof e.message === 'string') ? e.message : 'Falha ao carregar empréstimos.';
       console.error("Failed to fetch loans:", errorMessage);
@@ -84,7 +98,7 @@ export default function LoansPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast, user]);
+  }, [toast, user, getToken]);
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -103,6 +117,11 @@ export default function LoansPage() {
     setIsModalOpen(true);
   };
 
+  const openEditModal = (loan: Loan) => {
+    setLoanToEdit(loan);
+    setIsModalOpen(true);
+  };
+
   const handleDeleteLoan = (loan: Loan) => {
     setLoanToDelete(loan);
     setShowDeleteConfirmDialog(true);
@@ -112,9 +131,22 @@ export default function LoansPage() {
     if (!loanToDelete || !user) return;
     setIsDeletingId(loanToDelete.id);
     setShowDeleteConfirmDialog(false);
+    const token = getToken();
+    if (!token) {
+        toast({ variant: "destructive", title: "Erro de Autenticação", description: "Sessão inválida." });
+        setIsDeletingId(null);
+        setLoanToDelete(null);
+        return;
+    }
 
     try {
-      const result = await deleteLoan(user.id, loanToDelete.id);
+      // Call API to delete loan
+      const response = await fetch(`/api/loans/${loanToDelete.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const result = await response.json();
+
       if (result.success) {
         toast({
           title: 'Empréstimo Excluído!',
@@ -125,7 +157,7 @@ export default function LoansPage() {
         toast({
           variant: 'destructive',
           title: 'Erro ao Excluir',
-          description: result.error || 'Não foi possível excluir o empréstimo.',
+          description: result.message || 'Não foi possível excluir o empréstimo.',
         });
       }
     } catch (e: any) {
@@ -216,12 +248,9 @@ export default function LoansPage() {
         const loanStartDate = parseISO(loan.startDate);
         const loanEndDate = parseISO(loan.endDate);
         
-        // Check if any installment falls in the next calendar month
         const firstInstallmentDateForNextMonth = startOfMonth(nextMonthDate);
         const lastInstallmentDateForNextMonth = endOfMonth(nextMonthDate);
 
-        // Simplified check: if the loan is active and its period overlaps with next month.
-        // This assumes a payment is made every month the loan is active.
         if (loanStartDate <= lastInstallmentDateForNextMonth && loanEndDate >= firstInstallmentDateForNextMonth) {
             totalNextMonthPayments += loan.installmentAmount;
         }
@@ -279,6 +308,9 @@ export default function LoansPage() {
                 <CardDescription className="text-sm">{loan.description}</CardDescription>
               </div>
               <div className="flex gap-1">
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:text-primary/90" onClick={() => openEditModal(loan)} disabled={isDeletingId === loan.id || !user}>
+                  <Edit3 className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive/90" onClick={() => handleDeleteLoan(loan)} disabled={isDeletingId === loan.id || !user}>
                   {isDeletingId === loan.id ? <Sun className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 </Button>
@@ -357,7 +389,7 @@ export default function LoansPage() {
             Acompanhe seus empréstimos e pagamentos.
           </p>
         </div>
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <Dialog open={isModalOpen} onOpenChange={(isOpen) => { setIsModalOpen(isOpen); if (!isOpen) setLoanToEdit(null); }}>
           <DialogTrigger asChild>
             <Button onClick={openAddModal} className="w-full sm:w-auto" disabled={!user}>
               <PlusCircle className="mr-2 h-4 w-4" />
@@ -368,7 +400,7 @@ export default function LoansPage() {
             <DialogHeader>
               <DialogTitle>{loanToEdit ? "Editar Empréstimo" : "Adicionar Novo Empréstimo"}</DialogTitle>
               <DialogDescription>
-                Preencha os detalhes do seu empréstimo. A data final será calculada automaticamente.
+                {loanToEdit ? "Atualize os detalhes do seu empréstimo." : "Preencha os detalhes do seu empréstimo. A data final será calculada automaticamente."}
               </DialogDescription>
             </DialogHeader>
             {user && <LoanForm 
@@ -486,5 +518,3 @@ export default function LoansPage() {
     </TooltipProvider>
   );
 }
-
-    

@@ -18,11 +18,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useToast } from '@/hooks/use-toast';
 import { Sun } from 'lucide-react';
-import { useState } from 'react';
-import { addLoan, type NewLoanData } from '@/lib/databaseService';
+import { useState, useEffect } from 'react';
+import { addLoan, type NewLoanData, type UpdateLoanData } from '@/lib/databaseService';
 import type { Loan } from '@/types';
 import { format, parseISO } from 'date-fns';
-// CurrencyInput is no longer used
+import { useAuth } from '@/contexts/AuthContext';
 
 const loanFormSchema = z.object({
   bankName: z.string().min(1, { message: 'O nome do banco é obrigatório.' }).max(50, { message: 'Máximo de 50 caracteres.'}),
@@ -50,28 +50,43 @@ interface LoanFormProps {
 
 export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormProps) {
   const { toast } = useToast();
+  const { getToken } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const form = useForm<LoanFormValues>({
-    resolver: zodResolver(loanFormSchema),
-    defaultValues: existingLoan ? {
-        ...existingLoan,
+  const defaultFormValues: LoanFormValues = existingLoan ? {
+        bankName: existingLoan.bankName,
+        description: existingLoan.description,
+        installmentAmount: existingLoan.installmentAmount,
         startDate: parseISO(existingLoan.startDate),
-        installmentAmount: existingLoan.installmentAmount || undefined,
-        installmentsCount: existingLoan.installmentsCount || undefined,
+        installmentsCount: existingLoan.installmentsCount,
       } : {
       bankName: '',
       description: '',
       installmentAmount: undefined,
       startDate: new Date(),
       installmentsCount: undefined,
-    },
+    };
+  
+  const form = useForm<LoanFormValues>({
+    resolver: zodResolver(loanFormSchema),
+    defaultValues: defaultFormValues,
   });
+
+  useEffect(() => {
+    form.reset(defaultFormValues);
+  }, [existingLoan, form, defaultFormValues]);
+
 
   const onSubmit = async (values: LoanFormValues) => {
     setIsSubmitting(true);
+    const token = getToken();
+    if (!token) {
+      toast({ variant: 'destructive', title: 'Erro de Autenticação', description: 'Sessão inválida.' });
+      setIsSubmitting(false);
+      return;
+    }
     
-    const loanData: NewLoanData = {
+    const apiData: NewLoanData | UpdateLoanData = {
       bankName: values.bankName,
       description: values.description,
       installmentAmount: Number(values.installmentAmount),
@@ -79,26 +94,55 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
       installmentsCount: Number(values.installmentsCount),
     };
 
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+
+    let response;
+    let result;
+
     try {
-      const result = await addLoan(userId, loanData);
-      if (result.success && result.loanId) {
+      if (existingLoan) {
+        response = await fetch(`/api/loans/${existingLoan.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(apiData),
+        });
+      } else {
+        response = await fetch('/api/loans', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(apiData),
+        });
+      }
+      
+      result = await response.json();
+
+      if (response.ok && result.success) {
         toast({
           title: 'Sucesso!',
-          description: existingLoan ? 'Empréstimo atualizado com sucesso.' : 'Empréstimo adicionado com sucesso.',
+          description: `Empréstimo ${existingLoan ? 'atualizado' : 'adicionado'} com sucesso.`,
         });
-        form.reset();
+        form.reset({ // Reset to initial default (empty for new, or existing if was editing but now re-adding)
+          bankName: '',
+          description: '',
+          installmentAmount: undefined,
+          startDate: new Date(),
+          installmentsCount: undefined,
+        });
         if (onSuccess) onSuccess();
         setOpen(false);
       } else {
         toast({
           variant: 'destructive',
-          title: existingLoan ? 'Erro ao Atualizar Empréstimo' : 'Erro ao Adicionar Empréstimo',
-          description: result.error || 'Ocorreu um erro desconhecido.',
+          title: `Erro ao ${existingLoan ? 'Atualizar' : 'Adicionar'} Empréstimo`,
+          description: result.message || 'Ocorreu um erro desconhecido.',
         });
       }
     } catch (error: any) {
       const errorMessage = (error && typeof error.message === 'string') ? error.message : 'Ocorreu um erro ao salvar o empréstimo.';
-      console.error('Client-side error calling addLoan/updateLoan:', errorMessage);
+      console.error('Client-side error processing loan:', errorMessage);
       toast({
         variant: 'destructive',
         title: 'Erro de Comunicação',
@@ -119,7 +163,7 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
             <FormItem>
               <FormLabel>Nome do Banco/Instituição</FormLabel>
               <FormControl>
-                <Input placeholder="Ex: Banco do Brasil" {...field} />
+                <Input placeholder="Ex: Banco do Brasil" {...field} disabled={isSubmitting}/>
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -133,7 +177,7 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
             <FormItem>
               <FormLabel>Descrição do Empréstimo</FormLabel>
               <FormControl>
-                <Textarea placeholder="Ex: Financiamento Imobiliário Apto 123" {...field} />
+                <Textarea placeholder="Ex: Financiamento Imobiliário Apto 123" {...field} disabled={isSubmitting}/>
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -170,7 +214,7 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
             render={({ field }) => (
               <FormItem className="flex flex-col">
                 <FormLabel>Data de Início da Primeira Parcela</FormLabel>
-                <DatePicker value={field.value} onChange={field.onChange} />
+                <DatePicker value={field.value} onChange={field.onChange} disabled={isSubmitting}/>
                 <FormMessage />
               </FormItem>
             )}
@@ -182,7 +226,7 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
               <FormItem>
                 <FormLabel>Quantidade de Parcelas</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="Ex: 12" {...field} min="1" />
+                  <Input type="number" placeholder="Ex: 12" {...field} min="1" disabled={isSubmitting}/>
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -194,18 +238,17 @@ export function LoanForm({ onSuccess, setOpen, existingLoan, userId }: LoanFormP
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isSubmitting || !!existingLoan}>
+          <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? (
               <>
                 <Sun className="mr-2 h-4 w-4 animate-spin" />
                 Salvando...
               </>
             ) : (
-              existingLoan ? 'Salvar Alterações (Desabilitado)' : 'Salvar Empréstimo'
+              existingLoan ? 'Salvar Alterações' : 'Salvar Empréstimo'
             )}
           </Button>
         </div>
-         {existingLoan && <p className="text-sm text-muted-foreground text-center">A edição de empréstimos ainda não está implementada.</p>}
       </form>
     </Form>
   );

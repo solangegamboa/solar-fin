@@ -179,8 +179,13 @@ export interface NewLoanData {
   startDate: string;
 }
 
-// UpdateLoanData could be added if editing loans is implemented
-// export interface UpdateLoanData { ... }
+export interface UpdateLoanData {
+  bankName?: string;
+  description?: string;
+  installmentAmount?: number;
+  installmentsCount?: number;
+  startDate?: string; // ISO string
+}
 
 
 export interface NewUserCategoryData {

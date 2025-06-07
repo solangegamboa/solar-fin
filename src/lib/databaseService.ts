@@ -3,7 +3,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData, UserCategory, NewUserCategoryData, UserBackupData, FinancialGoal, NewFinancialGoalData, UpdateFinancialGoalData, RecurrenceFrequency, Investment, NewInvestmentData, UpdateInvestmentData, InvestmentType, UpdateTransactionData, UpdateResult, UpdateCreditCardPurchaseData, UpdateCreditCardData } from '@/types';
+import type { UserProfile, Transaction, NewTransactionData, FinancialDataInput, CreditCard, NewCreditCardData, CreditCardPurchase, NewCreditCardPurchaseData, Loan, NewLoanData, UpdateLoanData, UserCategory, NewUserCategoryData, UserBackupData, FinancialGoal, NewFinancialGoalData, UpdateFinancialGoalData, RecurrenceFrequency, Investment, NewInvestmentData, UpdateInvestmentData, InvestmentType, UpdateTransactionData, UpdateResult, UpdateCreditCardPurchaseData, UpdateCreditCardData } from '@/types';
 import { randomUUID } from 'crypto';
 import { parseISO, addMonths, format as formatDateFns } from 'date-fns';
 import { Pool, type QueryResult } from 'pg';
@@ -601,18 +601,18 @@ export interface AddLoanResult { success: boolean; loanId?: string; error?: stri
 export const addLoan = async (userId: string, loanData: NewLoanData): Promise<AddLoanResult> => {
    if (!userId) return { success: false, error: "User ID is required." };
     const startDateObj = parseISO(loanData.startDate);
-    const endDateObj = addMonths(startDateObj, loanData.installmentsCount -1);
+    const endDateObj = addMonths(startDateObj, loanData.installmentsCount -1); // Corrected: -1 for count vs index
     const calculatedEndDate = formatDateFns(endDateObj, 'yyyy-MM-dd');
 
     const newLoanId = randomUUID();
     const now = new Date();
     if (DATABASE_MODE === 'postgres' && pool) {
         try {
-            await pool.query(
-                'INSERT INTO loans (id, user_id, bank_name, description, installment_amount, installments_count, start_date, end_date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)', 
+            const res = await pool.query(
+                'INSERT INTO loans (id, user_id, bank_name, description, installment_amount, installments_count, start_date, end_date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9) RETURNING id', 
                 [newLoanId, userId, loanData.bankName, loanData.description, loanData.installmentAmount, loanData.installmentsCount, loanData.startDate, calculatedEndDate, now]
             );
-            return { success: true, loanId: newLoanId };
+            return { success: true, loanId: res.rows[0].id };
         } catch (error: any) {
             console.error("Error adding loan to PostgreSQL:", error.message);
             return { success: false, error: "Database error adding loan." };
@@ -661,6 +661,94 @@ export async function getLoansForUser(userId: string): Promise<Loan[]> {
         return userData.loans.map(l => ({...l, updatedAt: l.updatedAt || l.createdAt})).sort((a,b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime());
     }
 }
+
+export const updateLoan = async (userId: string, loanId: string, data: UpdateLoanData): Promise<UpdateResult> => {
+  if (!userId || !loanId) return { success: false, error: "User ID and Loan ID are required." };
+
+  let newEndDate: string | undefined = undefined;
+  if (data.startDate || data.installmentsCount) {
+    // If either startDate or installmentsCount is changing, we need the other value (new or existing) to recalculate endDate.
+    let currentLoan: Loan | undefined;
+    if (DATABASE_MODE === 'postgres' && pool) {
+        const res = await pool.query('SELECT start_date, installments_count FROM loans WHERE id = $1 AND user_id = $2', [loanId, userId]);
+        if (res.rows.length > 0) {
+            currentLoan = { startDate: res.rows[0].start_date, installmentsCount: parseInt(res.rows[0].installments_count) } as Loan;
+        }
+    } else {
+        const db = await readDB();
+        currentLoan = db.users[userId]?.loans.find(l => l.id === loanId);
+    }
+
+    if (!currentLoan) return { success: false, error: "Loan not found to recalculate end date." };
+    
+    const newStartDate = data.startDate ? parseISO(data.startDate) : parseISO(currentLoan.startDate);
+    const newInstallmentsCount = data.installmentsCount !== undefined ? data.installmentsCount : currentLoan.installmentsCount;
+    
+    if (newInstallmentsCount < 1) return { success: false, error: "Installments count must be positive." };
+    
+    newEndDate = formatDateFns(addMonths(newStartDate, newInstallmentsCount - 1), 'yyyy-MM-dd');
+  }
+
+  if (DATABASE_MODE === 'postgres' && pool) {
+    try {
+      const fields: string[] = [];
+      const values: any[] = [];
+      let queryIndex = 1;
+
+      (Object.keys(data) as Array<keyof UpdateLoanData>).forEach(key => {
+        if (data[key] !== undefined) {
+          const dbKeyMap: Record<keyof UpdateLoanData, string> = {
+            bankName: 'bank_name', description: 'description', installmentAmount: 'installment_amount',
+            installmentsCount: 'installments_count', startDate: 'start_date'
+          };
+          const dbKey = dbKeyMap[key] || key;
+          fields.push(`${dbKey} = $${queryIndex++}`);
+          values.push(data[key]);
+        }
+      });
+
+      if (newEndDate) {
+        fields.push(`end_date = $${queryIndex++}`);
+        values.push(newEndDate);
+      }
+      
+      if (fields.length === 0) return { success: true }; // No actual fields to update besides potentially endDate if only calculated
+
+      fields.push(`updated_at = $${queryIndex++}`);
+      values.push(new Date());
+      values.push(loanId); 
+      values.push(userId); 
+
+      const query = `UPDATE loans SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
+      const res = await pool.query(query, values);
+
+      if (res.rowCount === 0) return { success: false, error: "Loan not found or not owned by user." };
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error updating loan in PostgreSQL:", error.message);
+      return { success: false, error: "Database error updating loan." };
+    }
+  } else {
+    const db = await readDB();
+    if (!db.users[userId]?.loans) return { success: false, error: "User or loans not found." };
+    const loanIndex = db.users[userId].loans.findIndex(l => l.id === loanId);
+    if (loanIndex === -1) return { success: false, error: "Loan not found." };
+
+    const updatedLoan: Loan = {
+      ...db.users[userId].loans[loanIndex],
+      ...data,
+      updatedAt: Date.now(),
+    };
+    if (newEndDate) {
+      updatedLoan.endDate = newEndDate;
+    }
+    
+    db.users[userId].loans[loanIndex] = updatedLoan;
+    await writeDB(db);
+    return { success: true };
+  }
+};
+
 
 export const deleteLoan = async (userId: string, loanId: string): Promise<UpdateResult> => {
     if (!userId) return { success: false, error: "User ID required." };
