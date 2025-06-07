@@ -199,24 +199,28 @@ export default function DashboardPage() {
     (
       card: CreditCard,
       allPurchases: CreditCardPurchase[],
-      targetInvoiceClosingMonth: number,
-      targetInvoiceClosingYear: number
+      targetInvoiceClosingMonth: number, // Mês de *fechamento* da fatura (0-11)
+      targetInvoiceClosingYear: number   // Ano de *fechamento* da fatura
     ): number => {
       let invoiceTotal = 0;
       const purchasesOnThisCard = allPurchases.filter(p => p.cardId === card.id);
 
       purchasesOnThisCard.forEach(purchase => {
-        const purchaseDate = parseISO(purchase.date);
+        const purchaseDate = parseISO(purchase.date); // Data da compra
         const installmentAmount = purchase.totalAmount / purchase.installments;
 
         for (let i = 0; i < purchase.installments; i++) {
-          let billingCycleDateForInstallment = purchaseDate;
-
+          // Determina em qual ciclo de fatura esta parcela (i) entra
+          let billingCycleDateForInstallment = purchaseDate; 
+          
+          // Se a compra foi feita APÓS o dia de fechamento do cartão no mês da compra,
+          // a primeira parcela (e as subsequentes baseadas nela) cai na fatura do *próximo* ciclo.
           if (getDate(purchaseDate) > card.closingDateDay) {
             billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, 1);
           }
-          billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, i);
-
+          // Adiciona os meses das parcelas subsequentes
+          billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, i); 
+          
           const installmentInvoiceClosingMonth = getMonth(billingCycleDateForInstallment);
           const installmentInvoiceClosingYear = getYear(billingCycleDateForInstallment);
 
@@ -247,20 +251,33 @@ export default function DashboardPage() {
     let currentDate = originalDate;
 
     if (transaction.recurrenceFrequency !== 'none') {
-        while (isBefore(currentDate, periodStart)) {
+        // Advance currentDate to be at or after periodStart, but not before originalDate.
+        // This loop finds the first occurrence that is relevant for the period or later.
+        while (isBefore(currentDate, periodStart) && isBefore(currentDate, addYears(periodEnd,1))) { // Add safety for long look-backs
+            const nextDate = new Date(currentDate);
+            let advanced = false;
             switch (transaction.recurrenceFrequency) {
                 case 'monthly':
-                    currentDate = addMonths(currentDate, 1);
+                    currentDate = addMonths(nextDate, 1);
                     const dayOfMonth = getDate(originalDate);
                     const lastDay = getDate(lastDayOfMonth(currentDate));
                     currentDate = new Date(getYear(currentDate), getMonth(currentDate), Math.min(dayOfMonth, lastDay));
+                    advanced = true;
                     break;
                 case 'weekly':
-                    currentDate = addWeeks(currentDate, 1);
+                    currentDate = addWeeks(nextDate, 1);
+                    advanced = true;
                     break;
                 case 'annually':
-                    currentDate = addYears(currentDate, 1);
+                    currentDate = addYears(nextDate, 1);
+                    const annualDay = getDate(originalDate);
+                    const annualMonth = getMonth(originalDate);
+                    currentDate = new Date(getYear(currentDate), annualMonth, Math.min(annualDay, getDate(lastDayOfMonth(currentDate))));
+                    advanced = true;
                     break;
+            }
+             if (!advanced || (currentDate <= nextDate && transaction.recurrenceFrequency !== 'none')) { // Stuck or went back
+                break;
             }
         }
     }
@@ -268,9 +285,10 @@ export default function DashboardPage() {
 
     while (isBefore(currentDate, periodEnd) || isSameDay(currentDate, periodEnd)) {
       if (isWithinInterval(currentDate, { start: periodStart, end: periodEnd })) {
-        occurrences.push(currentDate);
+        occurrences.push(new Date(currentDate)); // Push a copy
       }
 
+      const prevIterDate = new Date(currentDate);
       switch (transaction.recurrenceFrequency) {
         case 'monthly':
           currentDate = addMonths(currentDate, 1);
@@ -283,11 +301,15 @@ export default function DashboardPage() {
           break;
         case 'annually':
           currentDate = addYears(currentDate, 1);
+          const annualDay = getDate(originalDate);
+          const annualMonth = getMonth(originalDate);
+          currentDate = new Date(getYear(currentDate), annualMonth, Math.min(annualDay, getDate(lastDayOfMonth(currentDate))));
           break;
         default: 
           return occurrences; 
       }
-       if (occurrences.length > 200) break;
+       if (currentDate <= prevIterDate) break; // Safety break if date doesn't advance
+       if (occurrences.length > 200) break; // Overall safety break
     }
     return occurrences;
   }, []);
@@ -359,6 +381,87 @@ export default function DashboardPage() {
         }
       });
       
+      // Adicionar faturas de cartão individuais aos agendamentos
+      fetchedCreditCards.forEach(card => {
+        const prevMonthForClosing = subMonths(selectedDate, 1);
+        const targetClosingMonth = getMonth(prevMonthForClosing);
+        const targetClosingYear = getYear(prevMonthForClosing);
+
+        const cardInvoiceTotalForSelectedMonth = calculateInvoiceTotalForCardAndMonth(
+          card,
+          creditCardPurchases,
+          targetClosingMonth, 
+          targetClosingYear  
+        );
+
+        if (cardInvoiceTotalForSelectedMonth > 0) {
+          const dueDateInSelectedMonth = new Date(
+            getYear(selectedDate),
+            getMonth(selectedDate),
+            Math.min(card.dueDateDay, getDate(lastDayOfMonth(selectedDate)))
+          );
+          
+          if (isSameMonth(dueDateInSelectedMonth, selectedDate) && isSameYear(dueDateInSelectedMonth, selectedDate)) {
+            currentProjectedTransactions.push({
+              id: `cc-bill-${card.id}-${formatDateFns(selectedDate, 'yyyy-MM')}`,
+              userId: user.id,
+              type: 'expense',
+              amount: cardInvoiceTotalForSelectedMonth,
+              category: 'Fatura Cartão',
+              date: formatDateFns(dueDateInSelectedMonth, 'yyyy-MM-dd'),
+              description: `Pagamento Fatura ${card.name}`,
+              recurrenceFrequency: 'none',
+              projectedDate: dueDateInSelectedMonth,
+              isPast: isBefore(dueDateInSelectedMonth, today) && !isSameDay(dueDateInSelectedMonth, today),
+              createdAt: selectedMonthStart.getTime(), // Use a consistent reference for createdAt for these types of items
+              receiptImageUri: null, // Faturas não têm comprovante único no sentido de transação
+            });
+          }
+        }
+      });
+
+      // Adicionar parcelas de empréstimos individuais aos agendamentos
+      loans.forEach(loan => {
+        const loanStartDate = parseISO(loan.startDate);
+        const loanEndDate = parseISO(loan.endDate);
+
+        if (loanStartDate <= selectedMonthEnd && loanEndDate >= selectedMonthStart) {
+            // Iterate through potential payment dates for this loan
+            for (let i = 0; i < loan.installmentsCount; i++) {
+                const installmentBaseDate = addMonths(loanStartDate, i);
+                const dayOfOriginalStart = getDate(loanStartDate);
+                const lastDayOfInstallmentMonth = getDate(lastDayOfMonth(installmentBaseDate));
+                const actualPaymentDayInInstallmentMonth = Math.min(dayOfOriginalStart, lastDayOfInstallmentMonth);
+                
+                const paymentDateForThisInstallment = new Date(
+                    getYear(installmentBaseDate), 
+                    getMonth(installmentBaseDate), 
+                    actualPaymentDayInInstallmentMonth
+                );
+
+                if (isWithinInterval(paymentDateForThisInstallment, { start: selectedMonthStart, end: selectedMonthEnd })) {
+                    currentProjectedTransactions.push({
+                        id: `loan-pmt-${loan.id}-${formatDateFns(paymentDateForThisInstallment, 'yyyy-MM-dd')}`,
+                        userId: user.id,
+                        type: 'expense',
+                        amount: loan.installmentAmount,
+                        category: 'Empréstimo',
+                        date: formatDateFns(paymentDateForThisInstallment, 'yyyy-MM-dd'),
+                        description: `Parcela Empréstimo ${loan.bankName} (${loan.description})`,
+                        recurrenceFrequency: 'none', // Represented as a single occurrence for the month
+                        projectedDate: paymentDateForThisInstallment,
+                        isPast: isBefore(paymentDateForThisInstallment, today) && !isSameDay(paymentDateForThisInstallment, today),
+                        createdAt: selectedMonthStart.getTime(),
+                        receiptImageUri: null,
+                    });
+                    break; // Found the payment for this month, move to next loan
+                }
+                 if (isAfter(paymentDateForThisInstallment, selectedMonthEnd)) break; // Optimization
+            }
+        }
+      });
+
+
       currentProjectedTransactions.sort((a, b) => a.projectedDate.getTime() - b.projectedDate.getTime());
       setProjectedTransactionsForMonth(currentProjectedTransactions);
       setIsLoadingProjections(false);
@@ -414,7 +517,7 @@ export default function DashboardPage() {
       const totalSelectedMonthExpensesWithLoansAndOldCC = projectedMonthExpenses + ccBillsClosedLastMonthForSelected + loanPaymentsForSelectedMonth;
 
 
-      let cardSpendingForSelectedMonthBills = 0;
+      let cardSpendingForSelectedMonthBills = 0; // Faturas que fecham no mês selecionado (para o card "Fatura Cartões")
       const targetSelectedMonthClosingMonth = getMonth(selectedDate);
       const targetSelectedMonthClosingYear = getYear(selectedDate);
       fetchedCreditCards.forEach(card => {
@@ -490,22 +593,32 @@ export default function DashboardPage() {
             currentMonthPaceExpenses += tx.amount;
           }
         });
+        // Consider credit card spending for pace alert more directly
+        let ccSpendingCurrentPace = 0;
         fetchedCreditCards.forEach(card => {
-            creditCardPurchases.filter(p => p.cardId === card.id).forEach(purchase => {
-                const purchaseDate = parseISO(purchase.date);
-                const installmentAmount = purchase.totalAmount / purchase.installments;
-                for (let i = 0; i < purchase.installments; i++) {
-                    let billingCycleDateForInstallment = purchaseDate;
-                    if (getDate(purchaseDate) > card.closingDateDay) {
-                        billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, 1);
-                    }
-                    billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, i);
-                    if (isWithinInterval(billingCycleDateForInstallment, { start: currentPeriodStart, end: currentPeriodEnd }) && getMonth(billingCycleDateForInstallment) === getMonth(currentPeriodStart)) {
-                         currentMonthPaceExpenses += installmentAmount;
+          creditCardPurchases.filter(p => p.cardId === card.id).forEach(purchase => {
+            const purchaseDate = parseISO(purchase.date);
+            const installmentAmount = purchase.totalAmount / purchase.installments;
+            // Determine which bill cycle this purchase belongs to
+            let firstBillCycleDate = purchaseDate;
+            if (getDate(purchaseDate) > card.closingDateDay) {
+                firstBillCycleDate = addMonths(purchaseDate, 1);
+            }
+            
+            for (let i = 0; i < purchase.installments; i++) {
+                const installmentBillCycleDate = addMonths(firstBillCycleDate, i);
+                // Check if this installment's bill cycle date is within the current pace period *and* its closing month is the current month
+                if (getMonth(installmentBillCycleDate) === getMonth(currentPeriodStart) && getYear(installmentBillCycleDate) === getYear(currentPeriodStart)) {
+                    // This means the purchase (or its installment) will be on the bill that closes *this* month (currentPeriodStart's month)
+                    // We need to ensure this purchase was made *within the pace period* for fair comparison
+                    if(isWithinInterval(purchaseDate, {start: currentPeriodStart, end: currentPeriodEnd})) {
+                         ccSpendingCurrentPace += installmentAmount;
                     }
                 }
-            });
+            }
+          });
         });
+        currentMonthPaceExpenses += ccSpendingCurrentPace;
 
 
         let prevMonthPaceExpenses = 0;
@@ -515,22 +628,26 @@ export default function DashboardPage() {
             prevMonthPaceExpenses += tx.amount;
           }
         });
-        fetchedCreditCards.forEach(card => {
-            creditCardPurchases.filter(p => p.cardId === card.id).forEach(purchase => {
-                const purchaseDate = parseISO(purchase.date);
-                const installmentAmount = purchase.totalAmount / purchase.installments;
-                for (let i = 0; i < purchase.installments; i++) {
-                    let billingCycleDateForInstallment = purchaseDate;
-                     if (getDate(purchaseDate) > card.closingDateDay) {
-                        billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, 1);
-                    }
-                    billingCycleDateForInstallment = addMonths(billingCycleDateForInstallment, i);
-                     if (isWithinInterval(billingCycleDateForInstallment, { start: prevMonthPeriodStart, end: prevMonthPeriodEnd }) && getMonth(billingCycleDateForInstallment) === getMonth(prevMonthPeriodStart)) {
-                         prevMonthPaceExpenses += installmentAmount;
-                    }
+        let ccSpendingPrevPace = 0;
+         fetchedCreditCards.forEach(card => {
+          creditCardPurchases.filter(p => p.cardId === card.id).forEach(purchase => {
+            const purchaseDate = parseISO(purchase.date);
+            const installmentAmount = purchase.totalAmount / purchase.installments;
+            let firstBillCycleDate = purchaseDate;
+            if (getDate(purchaseDate) > card.closingDateDay) {
+                firstBillCycleDate = addMonths(purchaseDate, 1);
+            }
+            for (let i = 0; i < purchase.installments; i++) {
+                const installmentBillCycleDate = addMonths(firstBillCycleDate, i);
+                 if (getMonth(installmentBillCycleDate) === getMonth(prevMonthPeriodStart) && getYear(installmentBillCycleDate) === getYear(prevMonthPeriodStart)) {
+                     if(isWithinInterval(purchaseDate, {start: prevMonthPeriodStart, end: prevMonthPeriodEnd})) {
+                        ccSpendingPrevPace += installmentAmount;
+                     }
                 }
-            });
+            }
+          });
         });
+        prevMonthPaceExpenses += ccSpendingPrevPace;
 
 
         if (prevMonthPaceExpenses > 0 && currentMonthPaceExpenses > (prevMonthPaceExpenses * 1.3)) {
@@ -845,7 +962,7 @@ export default function DashboardPage() {
         <Card className="shadow-lg md:col-span-2">
            <CardHeader>
             <CardTitle className="font-headline flex items-center"><ListChecks className="mr-2 h-6 w-6 text-primary"/>Agendamentos para {selectedMonthName.replace(/^\w/, (c) => c.toUpperCase())}</CardTitle>
-            <CardDescription>Transações recorrentes previstas para este mês.</CardDescription>
+            <CardDescription>Transações recorrentes, faturas e parcelas previstas para este mês.</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingProjections ? (
@@ -884,7 +1001,7 @@ export default function DashboardPage() {
                 <div className="h-[150px] flex flex-col items-center justify-center bg-muted/50 rounded-md p-4">
                     <SearchX className="h-10 w-10 text-muted-foreground mb-2" />
                     <p className="text-muted-foreground text-center">
-                    Nenhuma transação recorrente agendada para {selectedMonthName.toLowerCase()}.
+                    Nenhum agendamento para {selectedMonthName.toLowerCase()}.
                     </p>
                 </div>
             )}
