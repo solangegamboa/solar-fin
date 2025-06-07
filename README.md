@@ -5,18 +5,22 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
 
 ## Funcionalidades Principais
 
-*   **Painel Financeiro:** Uma visão geral da sua saúde financeira, incluindo saldo atual, receitas e despesas do mês selecionado (com navegação entre meses), um calendário financeiro interativo com resumo diário das movimentações, e lembretes de transações recorrentes agendadas.
+*   **Painel Financeiro:** Uma visão geral da sua saúde financeira, incluindo saldo atual (ajustado por despesas recorrentes e faturas de cartão do mês), receitas e despesas do mês selecionado (com navegação entre meses), um calendário financeiro interativo com resumo diário das movimentações, e lembretes de transações recorrentes agendadas.
 *   **Gerenciamento de Transações:**
     *   Registre suas receitas e despesas, categorizando-as para melhor organização e permitindo a criação de novas categorias.
     *   Edite transações existentes para corrigir ou atualizar informações.
     *   Opção de anexar imagem de comprovante com extração automática de valor por IA.
     *   Marque transações como recorrentes e duplique-as facilmente para o mês atual.
     *   Importe múltiplas transações a partir de uma imagem de extrato bancário com auxílio de IA (Beta).
+*   **Acompanhamento de Assinaturas e Despesas Recorrentes:**
+    *   Visualize todas as suas despesas marcadas como recorrentes (mensais, semanais, anuais) em uma página dedicada.
+    *   Edite os detalhes (valor, categoria, frequência, etc.) de suas despesas recorrentes.
+    *   Identifique visualmente quais assinaturas já tiveram seu ciclo de pagamento no mês corrente.
 *   **Controle de Empréstimos:**
-    *   Cadastre seus empréstimos e acompanhe o progresso de pagamento, visualizando o valor total, parcelas pagas, restantes e o status atual.
+    *   Cadastre seus empréstimos, edite-os e acompanhe o progresso de pagamento, visualizando o valor total, parcelas pagas, restantes e o status atual.
 *   **Gerenciamento de Cartões de Crédito:**
-    *   Cadastre seus cartões de crédito, com auxílio de IA para extrair informações como emissor e bandeira a partir de uma imagem do cartão.
-    *   Registre compras parceladas, visualize um resumo consolidado das suas futuras faturas (mês a mês) e acompanhe estimativas das faturas atuais e próximas para cada cartão.
+    *   Cadastre seus cartões de crédito, com auxílio de IA para extrair informações como emissor e bandeira a partir de uma imagem do cartão. Edite cartões existentes.
+    *   Registre compras parceladas (informando o valor da parcela), visualize um resumo consolidado das suas futuras faturas (mês a mês) e acompanhe estimativas das faturas atuais e próximas para cada cartão.
     *   Edite compras parceladas existentes.
     *   Importe múltiplas transações de uma fatura de cartão de crédito a partir de uma imagem com auxílio de IA (Beta).
 *   **Gerenciamento de Metas Financeiras:**
@@ -255,12 +259,16 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
 ## Estrutura do Projeto (Simplificada)
 
 *   `src/app/`: Contém as rotas da aplicação (App Router).
-    *   `(app)/`: Rotas protegidas da aplicação principal (Dashboard, Transações, Empréstimos, Cartões, Metas, Investimentos, Calculadoras, etc.).
+    *   `(app)/`: Rotas protegidas da aplicação principal (Dashboard, Transações, Assinaturas, Empréstimos, Cartões, Metas, Investimentos, Calculadoras, etc.).
     *   `(auth)/`: Rotas de autenticação (Login, Signup).
     *   `api/`: Rotas de API (backend).
         *   `auth/`: Endpoints para login, signup, logout, e verificação de sessão (`me`).
         *   `transactions/`: Endpoint para adicionar transações.
         *   `transactions/[transactionId]/`: Endpoint para atualizar e excluir transações específicas.
+        *   `loans/`: Endpoints para criar e listar empréstimos.
+        *   `loans/[loanId]/`: Endpoints para atualizar e excluir empréstimos específicos.
+        *   `credit-cards/`: Endpoints para criar e listar cartões de crédito.
+        *   `credit-cards/[cardId]/`: Endpoints para atualizar e excluir cartões específicos.
         *   `goals/`: Endpoints para criar e listar metas financeiras.
         *   `goals/[goalId]/`: Endpoints para atualizar e excluir metas específicas.
         *   `investments/`: Endpoints para criar e listar investimentos.
@@ -277,6 +285,7 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
 *   `src/hooks/`: Hooks customizados (ex: `useNotifications.ts`, `useIsMobile.ts`).
 *   `src/lib/`: Utilitários e lógica de negócios.
     *   `databaseService.ts`: Lógica de acesso ao banco de dados (JSON ou PostgreSQL).
+    *   `authUtils.ts`: Utilitários de autenticação para API routes.
 *   `src/ai/`: Lógica relacionada à Inteligência Artificial com Genkit.
     *   `flows/`: Definições dos fluxos de IA.
 *   `src/data/`: (Para modo local) Arquivo `db.json` que armazena os dados.
