@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText, Edit3, ArrowLeft, BarChart3, ListTree } from "lucide-react";
+import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText, Edit3, ArrowLeft, BarChart3, ListTree, Filter } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
 import { CreditCardTransactionForm } from "@/components/credit-cards/CreditCardTransactionForm";
 import type { CreditCard, CreditCardPurchase } from "@/types";
@@ -45,7 +45,8 @@ import {
   isSameMonth,  
   isSameYear,   
   isAfter,      
-  isSameDay     
+  isSameDay,
+  isBefore  
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from "@/components/ui/badge";
@@ -53,12 +54,16 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface MonthlySummary {
   monthYear: string; 
   totalAmount: number;
   purchases: Array<CreditCardPurchase & { installmentAmount: number; currentInstallment: number; totalInstallments: number }>;
 }
+
+type CategoryFilterMode = 'allTime' | 'currentInvoice';
 
 const ptBRMonthNames = [
   'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
@@ -89,6 +94,8 @@ export default function CreditCardDetailPage() {
 
   const [showDeleteCardConfirmDialog, setShowDeleteCardConfirmDialog] = useState(false);
   const [isDeletingCardId, setIsDeletingCardId] = useState<string | null>(null);
+
+  const [categoryFilterMode, setCategoryFilterMode] = useState<CategoryFilterMode>('allTime');
 
   const fetchCardData = useCallback(async () => {
     if (!user || !cardId) return;
@@ -150,7 +157,7 @@ export default function CreditCardDetailPage() {
     setIsPurchaseModalOpen(false);
     setIsEditPurchaseModalOpen(false);
     setPurchaseToEdit(null);
-    fetchCardData(); // Refetch all data as purchases affect summaries
+    fetchCardData(); 
   };
   
   const handleOpenEditPurchaseModal = (purchase: CreditCardPurchase) => {
@@ -167,7 +174,7 @@ export default function CreditCardDetailPage() {
     ): number => {
       if (!card) return 0;
       let invoiceTotal = 0;
-      // Purchases are already filtered for this card in cardPurchases state
+      
       allPurchases.forEach(purchase => {
         const purchaseDate = parseISO(purchase.date);
         const installmentAmount = purchase.totalAmount / purchase.installments;
@@ -327,10 +334,55 @@ export default function CreditCardDetailPage() {
   };
 
   const categorySpendingSummaryForThisCard = useMemo(() => {
-    if (isLoading || cardPurchases.length === 0 || !cardDetails) {
-      return [];
+    if (isLoading || !cardDetails) return [];
+
+    let purchasesToConsider = cardPurchases;
+
+    if (categoryFilterMode === 'currentInvoice') {
+      const today = new Date();
+      const currentClosingDate = setDate(today, cardDetails.closingDateDay);
+      let previousClosingDate = setDate(subMonths(today, 1), cardDetails.closingDateDay);
+
+      // Adjust if currentClosingDate has already passed this month
+      if (isBefore(currentClosingDate, today)) {
+         // previousClosingDate becomes this month's closing date
+         // currentClosingDate becomes next month's closing date (for purchases made after this month's close)
+         // This logic seems complex for "fatura aberta". Simpler: use current month's expected closing date
+         // For "fatura aberta", we care about purchases made AFTER the PREVIOUS closing and BEFORE or ON the CURRENT closing.
+      }
+      // If today is after this month's closing day, the "current open invoice" is for next month.
+      // purchases after cardDetails.closingDateDay of *current* month until closingDateDay of *next* month.
+      // If today is before this month's closing day, "current open invoice" is for this month.
+      // purchases after cardDetails.closingDateDay of *previous* month until closingDateDay of *current* month.
+
+      let invoicePeriodStart: Date;
+      let invoicePeriodEnd: Date;
+
+      if (getDate(today) > cardDetails.closingDateDay) {
+        // We are past this month's closing day. The "open invoice" collects for next month's payment.
+        invoicePeriodStart = setDate(today, cardDetails.closingDateDay); // Closing day of current month
+        invoicePeriodEnd = setDate(addMonths(today, 1), cardDetails.closingDateDay); // Closing day of next month
+      } else {
+        // We are before this month's closing day. The "open invoice" collects for this month's payment.
+        invoicePeriodStart = setDate(subMonths(today, 1), cardDetails.closingDateDay); // Closing day of previous month
+        invoicePeriodEnd = setDate(today, cardDetails.closingDateDay); // Closing day of current month
+      }
+      
+      purchasesToConsider = cardPurchases.filter(p => {
+        const purchaseDate = parseISO(p.date);
+        return isAfter(purchaseDate, invoicePeriodStart) && (isBefore(purchaseDate, invoicePeriodEnd) || isSameDay(purchaseDate, invoicePeriodEnd));
+      });
     }
-    const summary: Record<string, number> = cardPurchases.reduce((acc, purchase) => {
+
+    if (purchasesToConsider.length === 0 && categoryFilterMode === 'currentInvoice') {
+        return []; // No purchases in the current invoice period
+    }
+    if (purchasesToConsider.length === 0 && categoryFilterMode === 'allTime' && cardPurchases.length === 0) {
+        return []; // No purchases at all
+    }
+
+
+    const summary: Record<string, number> = purchasesToConsider.reduce((acc, purchase) => {
       acc[purchase.category] = (acc[purchase.category] || 0) + purchase.totalAmount;
       return acc;
     }, {} as Record<string, number>);
@@ -344,7 +396,8 @@ export default function CreditCardDetailPage() {
         percentage: totalSpending > 0 ? (totalAmount / totalSpending) * 100 : 0,
       }))
       .sort((a, b) => b.totalAmount - a.totalAmount);
-  }, [cardPurchases, isLoading, cardDetails]);
+  }, [cardPurchases, isLoading, cardDetails, categoryFilterMode]);
+
 
   if (authLoading || isLoading) {
     return <div className="flex items-center justify-center h-64"><Sun className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Carregando detalhes do cartão...</p></div>;
@@ -431,11 +484,35 @@ export default function CreditCardDetailPage() {
 
       <Separator />
       
-      <h2 className="text-2xl font-semibold tracking-tight font-headline border-b pb-2">Gastos por Categoria (Este Cartão)</h2>
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-1">
+        <h2 className="text-2xl font-semibold tracking-tight font-headline">Gastos por Categoria (Este Cartão)</h2>
+        <div className="flex items-center space-x-2 mt-2 sm:mt-0">
+            <Label htmlFor="category-filter-mode" className="text-sm text-muted-foreground">
+                Fatura Aberta
+            </Label>
+            <Switch
+                id="category-filter-mode"
+                checked={categoryFilterMode === 'currentInvoice'}
+                onCheckedChange={(checked) => setCategoryFilterMode(checked ? 'currentInvoice' : 'allTime')}
+            />
+            <Label htmlFor="category-filter-mode" className="text-sm text-muted-foreground">
+                Todo o Período
+            </Label>
+        </div>
+      </div>
       <Card className="shadow-lg">
         <CardContent className="pt-6">
-            {cardPurchases.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">Nenhuma compra registrada para este cartão.</p>
+            {(categoryFilterMode === 'allTime' && cardPurchases.length === 0) || (categoryFilterMode === 'currentInvoice' && categorySpendingSummaryForThisCard.length === 0) ? (
+                <p className="text-muted-foreground text-center py-4">
+                    {categoryFilterMode === 'currentInvoice' 
+                        ? "Nenhuma compra na fatura aberta para exibir o resumo por categoria."
+                        : "Nenhuma compra registrada para este cartão."
+                    }
+                </p>
+            ) : categorySpendingSummaryForThisCard.length === 0 ? (
+                 <p className="text-muted-foreground text-center py-4">
+                    Nenhum gasto na categoria selecionada.
+                 </p>
             ) : (
                 <ScrollArea className="h-[250px] pr-3">
                     <ul className="space-y-3">
@@ -553,3 +630,4 @@ export default function CreditCardDetailPage() {
     </div>
   );
 }
+
