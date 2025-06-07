@@ -58,6 +58,8 @@ if (DATABASE_MODE === 'postgres' && DATABASE_URL) {
   pool = new Pool({ connectionString: DATABASE_URL });
   pool.on('connect', () => console.log('Connected to PostgreSQL'));
   pool.on('error', (err) => console.error('PostgreSQL client error', err));
+} else if (DATABASE_MODE === 'postgres' && !DATABASE_URL) {
+  console.warn("DATABASE_MODE is 'postgres' but DATABASE_URL is not set. PostgreSQL will not be available.");
 } else {
   console.log('Using local db.json for data storage.');
 }
@@ -108,7 +110,11 @@ export async function createUser(email: string, password_plain: string, displayN
     notifyByEmail: notifyByEmailDefault,
   };
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) {
+      console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot create user.");
+      throw new Error("Database service (PostgreSQL) not configured correctly.");
+    }
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -144,7 +150,7 @@ export async function createUser(email: string, password_plain: string, displayN
     } finally {
       client.release();
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (Object.values(db.users).find(u => u.profile.email === email)) {
       throw new Error('User with this email already exists.');
@@ -161,13 +167,17 @@ export async function createUser(email: string, password_plain: string, displayN
       investments: [],
     };
     await writeDB(db);
-    await addDefaultCategoriesForUser(userId);
+    await addDefaultCategoriesForUser(userId); // Add default categories for local DB user
     return newUserProfile;
   }
 }
 
 export async function findUserByEmail(email: string): Promise<(UserProfile & { hashedPassword?: string }) | null> {
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) {
+      console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot find user by email.");
+      throw new Error("Database service (PostgreSQL) not configured correctly.");
+    }
     try {
       const res = await pool.query('SELECT id, email, display_name as "displayName", hashed_password as "hashedPassword", created_at as "createdAt", last_login_at as "lastLoginAt", notify_by_email as "notifyByEmail" FROM app_users WHERE email = $1', [email]);
       if (res.rows.length === 0) return null;
@@ -181,7 +191,7 @@ export async function findUserByEmail(email: string): Promise<(UserProfile & { h
       console.error('Error finding user by email in PostgreSQL:', error.message);
       throw error;
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     const foundUserEntry = Object.values(db.users).find(u => u.profile.email === email);
     if (!foundUserEntry) return null;
@@ -190,7 +200,11 @@ export async function findUserByEmail(email: string): Promise<(UserProfile & { h
 }
 
 export async function findUserById(userId: string): Promise<UserProfile | null> {
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) {
+      console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot find user by ID.");
+      throw new Error("Database service (PostgreSQL) not configured correctly.");
+    }
     try {
       const res = await pool.query('SELECT id, email, display_name as "displayName", created_at as "createdAt", last_login_at as "lastLoginAt", notify_by_email as "notifyByEmail" FROM app_users WHERE id = $1', [userId]);
       if (res.rows.length === 0) return null;
@@ -204,7 +218,7 @@ export async function findUserById(userId: string): Promise<UserProfile | null> 
       console.error('Error finding user by ID in PostgreSQL:', error.message);
       throw error;
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     const userData = db.users[userId];
     if (!userData) return null;
@@ -214,17 +228,20 @@ export async function findUserById(userId: string): Promise<UserProfile | null> 
 
 export async function updateUserLastLogin(userId: string): Promise<void> {
     const now = new Date();
-    if (DATABASE_MODE === 'postgres' && pool) {
-        try {
-            await pool.query('UPDATE app_users SET last_login_at = $1, updated_at = $1 WHERE id = $2', [now, userId]);
-        } catch (error: any) {
-            console.error('Error updating last login in PostgreSQL:', error.message);
-        }
-    } else {
+    if (DATABASE_MODE === 'postgres') {
+      if (!pool) {
+        console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot update last login.");
+        return; // Or throw, depending on desired strictness
+      }
+      try {
+          await pool.query('UPDATE app_users SET last_login_at = $1, updated_at = $1 WHERE id = $2', [now, userId]);
+      } catch (error: any) {
+          console.error('Error updating last login in PostgreSQL:', error.message);
+      }
+    } else { // Local JSON mode
         const db = await readDB();
         if (db.users[userId] && db.users[userId].profile) {
             db.users[userId].profile.lastLoginAt = now.getTime();
-            
             await writeDB(db);
         }
     }
@@ -235,7 +252,8 @@ export async function updateUserDisplayName(userId: string, newDisplayName: stri
   if (!userId) return { success: false, error: "User ID is required." };
   if (!newDisplayName.trim()) return { success: false, error: "Display name cannot be empty." };
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const res = await pool.query(
         'UPDATE app_users SET display_name = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, display_name, created_at, last_login_at, notify_by_email',
@@ -258,7 +276,7 @@ export async function updateUserDisplayName(userId: string, newDisplayName: stri
       console.error("Error updating display name in PostgreSQL:", error.message);
       return { success: false, error: "Database error updating display name." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId] || !db.users[userId].profile) {
       return { success: false, error: "User not found." };
@@ -273,7 +291,8 @@ export interface UpdateUserPasswordResult { success: boolean; error?: string; }
 export async function updateUserPassword(userId: string, currentPasswordPlain: string, newPasswordPlain: string): Promise<UpdateUserPasswordResult> {
   if (!userId) return { success: false, error: "User ID is required." };
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const userRes = await pool.query('SELECT hashed_password FROM app_users WHERE id = $1', [userId]);
       if (userRes.rowCount === 0) return { success: false, error: "User not found." };
@@ -289,7 +308,7 @@ export async function updateUserPassword(userId: string, currentPasswordPlain: s
       console.error("Error updating password in PostgreSQL:", error.message);
       return { success: false, error: "Database error updating password." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     const userRecord = db.users[userId];
     if (!userRecord || !userRecord.profile || !userRecord.hashedPassword) {
@@ -309,7 +328,8 @@ export interface UpdateEmailNotificationPrefsResult { success: boolean; user?: U
 export async function updateUserEmailNotificationPreference(userId: string, notifyByEmail: boolean): Promise<UpdateEmailNotificationPrefsResult> {
   if (!userId) return { success: false, error: "User ID is required." };
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const res = await pool.query(
         'UPDATE app_users SET notify_by_email = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, display_name, created_at, last_login_at, notify_by_email',
@@ -332,7 +352,7 @@ export async function updateUserEmailNotificationPreference(userId: string, noti
       console.error("Error updating email notification preference in PostgreSQL:", error.message);
       return { success: false, error: "Database error updating email notification preference." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId] || !db.users[userId].profile) {
       return { success: false, error: "User not found." };
@@ -356,7 +376,8 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
   const now = new Date();
   const recurrenceFrequency = transactionData.recurrenceFrequency || 'none';
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const res = await pool.query(
         'INSERT INTO transactions (id, user_id, type, amount, category, date, description, recurrence_frequency, receipt_image_uri, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10) RETURNING id', 
@@ -371,7 +392,7 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
       console.error("Error adding transaction to PostgreSQL:", error.message);
       return { success: false, error: "Database error adding transaction." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]) {
         console.error(`User ${userId} not found in local DB for addTransaction.`);
@@ -401,7 +422,11 @@ export const addTransaction = async (userId: string, transactionData: NewTransac
 export async function getTransactionsForUser(userId: string): Promise<Transaction[]> {
   if (!userId) return [];
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) { 
+      console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get transactions.");
+      return []; // Or throw
+    }
     try {
       const res = await pool.query<Transaction>(
         'SELECT id, user_id as "userId", type, amount, category, date, description, recurrence_frequency as "recurrenceFrequency", created_at as "createdAt", updated_at, receipt_image_uri as "receiptImageUri" FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC',
@@ -419,7 +444,7 @@ export async function getTransactionsForUser(userId: string): Promise<Transactio
       console.error(`Error fetching transactions for user ${userId} from PostgreSQL:`, error.message);
       return [];
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     const userData = db.users[userId];
     if (!userData || !userData.transactions) return [];
@@ -446,7 +471,8 @@ export async function getTransactionsForUser(userId: string): Promise<Transactio
 export const deleteTransaction = async (userId: string, transactionId: string): Promise<UpdateResult> => {
   if (!userId) return { success: false, error: "User ID is required." };
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const res = await pool.query('DELETE FROM transactions WHERE id = $1 AND user_id = $2', [transactionId, userId]);
       if (res.rowCount === 0) return { success: false, error: "Transaction not found or not owned by user." };
@@ -455,7 +481,7 @@ export const deleteTransaction = async (userId: string, transactionId: string): 
       console.error("Error deleting transaction from PostgreSQL:", error.message);
       return { success: false, error: "Database error deleting transaction." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId] || !db.users[userId].transactions) return { success: false, error: "User or transactions not found." };
 
@@ -471,7 +497,8 @@ export const deleteTransaction = async (userId: string, transactionId: string): 
 export const updateTransaction = async (userId: string, transactionId: string, data: UpdateTransactionData): Promise<UpdateResult> => {
   if (!userId || !transactionId) return { success: false, error: "User ID and Transaction ID are required." };
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const fields: string[] = [];
       const values: any[] = [];
@@ -485,19 +512,19 @@ export const updateTransaction = async (userId: string, transactionId: string, d
           };
           const dbKey = dbKeyMap[key] || key;
           fields.push(`${dbKey} = $${queryIndex++}`);
-          values.push(data[key]);
+          values.push(data[key] === null ? null : data[key]); // Handle explicit nulls
         }
       });
       
-
-      if (fields.length === 0) return { success: true }; // No fields to update
+      if (fields.length === 0) return { success: true, error: 'No fields to update.' };
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
+      
       values.push(transactionId); 
       values.push(userId); 
 
-      const query = `UPDATE transactions SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
+      const query = `UPDATE transactions SET ${fields.join(', ')} WHERE id = $${queryIndex} AND user_id = $${queryIndex + 1}`;
       
       const res = await pool.query(query, values);
 
@@ -507,29 +534,27 @@ export const updateTransaction = async (userId: string, transactionId: string, d
       console.error("Error updating transaction in PostgreSQL:", error.message);
       return { success: false, error: "Database error updating transaction." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]?.transactions) return { success: false, error: "User or transactions not found." };
 
     const txIndex = db.users[userId].transactions.findIndex(tx => tx.id === transactionId);
     if (txIndex === -1) return { success: false, error: "Transaction not found." };
 
-    
+    const existingTx = db.users[userId].transactions[txIndex];
     const updatedTx: Transaction = {
-      ...db.users[userId].transactions[txIndex],
-      ...data,
-      date: data.date ? data.date : db.users[userId].transactions[txIndex].date, 
-      amount: data.amount !== undefined ? data.amount : db.users[userId].transactions[txIndex].amount,
-      type: data.type !== undefined ? data.type : db.users[userId].transactions[txIndex].type,
-      category: data.category !== undefined ? data.category : db.users[userId].transactions[txIndex].category,
-      recurrenceFrequency: data.recurrenceFrequency !== undefined ? data.recurrenceFrequency : db.users[userId].transactions[txIndex].recurrenceFrequency,
+      ...existingTx,
+      ...data, // Apply updates
+      date: data.date ? data.date : existingTx.date, 
+      amount: data.amount !== undefined ? data.amount : existingTx.amount,
+      type: data.type !== undefined ? data.type : existingTx.type,
+      category: data.category !== undefined ? data.category : existingTx.category,
+      recurrenceFrequency: data.recurrenceFrequency !== undefined ? data.recurrenceFrequency : (existingTx.recurrenceFrequency || 'none'),
+      description: data.description !== undefined ? (data.description === null ? undefined : data.description) : existingTx.description,
+      receiptImageUri: data.receiptImageUri !== undefined ? data.receiptImageUri : existingTx.receiptImageUri,
       updatedAt: Date.now(),
     };
     
-    if (data.description !== undefined) updatedTx.description = data.description === null ? undefined : data.description;
-    if (data.receiptImageUri !== undefined) updatedTx.receiptImageUri = data.receiptImageUri;
-
-
     db.users[userId].transactions[txIndex] = updatedTx;
     await writeDB(db);
     return { success: true };
@@ -562,18 +587,18 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
       amount,
     }));
 
-    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000;
+    const incomeForAI = totalIncomeThisMonth > 0 ? totalIncomeThisMonth : 5000; // Default if no income
 
     const loansForAI = userLoans.map(loan => ({
       description: `${loan.bankName} - ${loan.description}`,
-      amount: loan.installmentAmount * loan.installmentsCount,
-      interestRate: 0,
+      amount: loan.installmentAmount * loan.installmentsCount, // Total loan amount
+      interestRate: 0, // Assuming not tracked, provide 0 or a default
       monthlyPayment: loan.installmentAmount,
     }));
 
     const investmentsForAI = userInvestments.map(inv => ({
         name: inv.name,
-        type: inv.type as string, 
+        type: inv.type as string, // Cast as string if AI expects generic string
         currentValue: inv.currentValue,
         initialAmount: inv.initialAmount,
         symbol: inv.symbol,
@@ -586,7 +611,7 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
       creditCards: userCreditCards.map(cc => ({
         name: cc.name,
         limit: cc.limit,
-        balance: 0,
+        balance: 0, // Balance not tracked, provide 0 or estimate
         dueDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(cc.dueDateDay).padStart(2, '0')}`
       })),
       investments: investmentsForAI,
@@ -601,12 +626,13 @@ export interface AddLoanResult { success: boolean; loanId?: string; error?: stri
 export const addLoan = async (userId: string, loanData: NewLoanData): Promise<AddLoanResult> => {
    if (!userId) return { success: false, error: "User ID is required." };
     const startDateObj = parseISO(loanData.startDate);
-    const endDateObj = addMonths(startDateObj, loanData.installmentsCount -1); // Corrected: -1 for count vs index
+    const endDateObj = addMonths(startDateObj, loanData.installmentsCount -1);
     const calculatedEndDate = formatDateFns(endDateObj, 'yyyy-MM-dd');
 
     const newLoanId = randomUUID();
     const now = new Date();
-    if (DATABASE_MODE === 'postgres' && pool) {
+    if (DATABASE_MODE === 'postgres') {
+        if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
         try {
             const res = await pool.query(
                 'INSERT INTO loans (id, user_id, bank_name, description, installment_amount, installments_count, start_date, end_date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9) RETURNING id', 
@@ -617,7 +643,7 @@ export const addLoan = async (userId: string, loanData: NewLoanData): Promise<Ad
             console.error("Error adding loan to PostgreSQL:", error.message);
             return { success: false, error: "Database error adding loan." };
         }
-    } else {
+    } else { // Local JSON mode
         const db = await readDB();
         if (!db.users[userId]) {
              console.error(`User ${userId} not found in local DB for addLoan.`);
@@ -636,7 +662,11 @@ export const addLoan = async (userId: string, loanData: NewLoanData): Promise<Ad
 
 export async function getLoansForUser(userId: string): Promise<Loan[]> {
     if (!userId) return [];
-    if (DATABASE_MODE === 'postgres' && pool) {
+    if (DATABASE_MODE === 'postgres') {
+        if (!pool) {
+            console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get loans.");
+            return []; // Or throw
+        }
         try {
             const res = await pool.query<Loan>(
                 'SELECT id, user_id as "userId", bank_name as "bankName", description, installment_amount as "installmentAmount", installments_count as "installmentsCount", start_date as "startDate", end_date as "endDate", created_at as "createdAt", updated_at FROM loans WHERE user_id = $1 ORDER BY start_date ASC, created_at DESC',
@@ -654,7 +684,7 @@ export async function getLoansForUser(userId: string): Promise<Loan[]> {
         } catch (error:any) {
             console.error(`Error fetching loans for user ${userId} from PG:`, error.message); return [];
         }
-    } else {
+    } else { // Local JSON mode
         const db = await readDB();
         const userData = db.users[userId];
         if (!userData || !userData.loans) return [];
@@ -666,31 +696,37 @@ export const updateLoan = async (userId: string, loanId: string, data: UpdateLoa
   if (!userId || !loanId) return { success: false, error: "User ID and Loan ID are required." };
 
   let newEndDate: string | undefined = undefined;
-  if (data.startDate || data.installmentsCount) {
-    // If either startDate or installmentsCount is changing, we need the other value (new or existing) to recalculate endDate.
-    let currentLoan: Loan | undefined;
-    if (DATABASE_MODE === 'postgres' && pool) {
+  
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
+    try {
+      // Start a transaction if complex logic (like fetching current values for recalculation) is needed
+      // For now, assume direct update or pre-calculated newEndDate if needed
+
+      let currentLoanFromDb: Pick<Loan, 'startDate' | 'installmentsCount'> | undefined;
+      if (data.startDate || data.installmentsCount !== undefined) {
         const res = await pool.query('SELECT start_date, installments_count FROM loans WHERE id = $1 AND user_id = $2', [loanId, userId]);
         if (res.rows.length > 0) {
-            currentLoan = { startDate: res.rows[0].start_date, installmentsCount: parseInt(res.rows[0].installments_count) } as Loan;
+          currentLoanFromDb = { 
+            startDate: formatDateFns(new Date(res.rows[0].start_date), 'yyyy-MM-dd'), 
+            installmentsCount: parseInt(res.rows[0].installments_count) 
+          };
+        } else {
+          return { success: false, error: "Loan not found to recalculate end date or not owned by user." };
         }
-    } else {
-        const db = await readDB();
-        currentLoan = db.users[userId]?.loans.find(l => l.id === loanId);
-    }
+      }
+      
+      if (data.startDate || data.installmentsCount !== undefined) {
+        if (!currentLoanFromDb) { /* Should have been fetched or errored out */
+           return { success: false, error: "Internal error: Loan data for end date recalculation not available."};
+        }
+        const newStartDateForCalc = data.startDate ? data.startDate : currentLoanFromDb.startDate;
+        const newInstallmentsCountForCalc = data.installmentsCount !== undefined ? data.installmentsCount : currentLoanFromDb.installmentsCount;
 
-    if (!currentLoan) return { success: false, error: "Loan not found to recalculate end date." };
-    
-    const newStartDate = data.startDate ? parseISO(data.startDate) : parseISO(currentLoan.startDate);
-    const newInstallmentsCount = data.installmentsCount !== undefined ? data.installmentsCount : currentLoan.installmentsCount;
-    
-    if (newInstallmentsCount < 1) return { success: false, error: "Installments count must be positive." };
-    
-    newEndDate = formatDateFns(addMonths(newStartDate, newInstallmentsCount - 1), 'yyyy-MM-dd');
-  }
+        if (newInstallmentsCountForCalc < 1) return { success: false, error: "Installments count must be positive." };
+        newEndDate = formatDateFns(addMonths(parseISO(newStartDateForCalc), newInstallmentsCountForCalc - 1), 'yyyy-MM-dd');
+      }
 
-  if (DATABASE_MODE === 'postgres' && pool) {
-    try {
       const fields: string[] = [];
       const values: any[] = [];
       let queryIndex = 1;
@@ -712,14 +748,15 @@ export const updateLoan = async (userId: string, loanId: string, data: UpdateLoa
         values.push(newEndDate);
       }
       
-      if (fields.length === 0) return { success: true }; // No actual fields to update besides potentially endDate if only calculated
+      if (fields.length === 0) return { success: true, error: 'No fields to update (excluding auto-calculated end_date if any).' };
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
+      
       values.push(loanId); 
       values.push(userId); 
 
-      const query = `UPDATE loans SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
+      const query = `UPDATE loans SET ${fields.join(', ')} WHERE id = $${queryIndex} AND user_id = $${queryIndex + 1}`;
       const res = await pool.query(query, values);
 
       if (res.rowCount === 0) return { success: false, error: "Loan not found or not owned by user." };
@@ -728,14 +765,22 @@ export const updateLoan = async (userId: string, loanId: string, data: UpdateLoa
       console.error("Error updating loan in PostgreSQL:", error.message);
       return { success: false, error: "Database error updating loan." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]?.loans) return { success: false, error: "User or loans not found." };
     const loanIndex = db.users[userId].loans.findIndex(l => l.id === loanId);
     if (loanIndex === -1) return { success: false, error: "Loan not found." };
 
+    const currentLoan = db.users[userId].loans[loanIndex];
+    if (data.startDate || data.installmentsCount !== undefined) {
+        const newStartDateForCalc = data.startDate ? data.startDate : currentLoan.startDate;
+        const newInstallmentsCountForCalc = data.installmentsCount !== undefined ? data.installmentsCount : currentLoan.installmentsCount;
+        if (newInstallmentsCountForCalc < 1) return { success: false, error: "Installments count must be positive." };
+        newEndDate = formatDateFns(addMonths(parseISO(newStartDateForCalc), newInstallmentsCountForCalc - 1), 'yyyy-MM-dd');
+    }
+
     const updatedLoan: Loan = {
-      ...db.users[userId].loans[loanIndex],
+      ...currentLoan,
       ...data,
       updatedAt: Date.now(),
     };
@@ -752,7 +797,8 @@ export const updateLoan = async (userId: string, loanId: string, data: UpdateLoa
 
 export const deleteLoan = async (userId: string, loanId: string): Promise<UpdateResult> => {
     if (!userId) return { success: false, error: "User ID required." };
-    if (DATABASE_MODE === 'postgres' && pool) {
+    if (DATABASE_MODE === 'postgres') {
+       if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
        try {
             const res = await pool.query('DELETE FROM loans WHERE id = $1 AND user_id = $2', [loanId, userId]);
             if (res.rowCount === 0) return { success: false, error: "Loan not found or not owned by user." };
@@ -761,7 +807,7 @@ export const deleteLoan = async (userId: string, loanId: string): Promise<Update
             console.error("Error deleting loan from PostgreSQL:", error.message);
             return { success: false, error: "Database error deleting loan." };
         }
-    } else {
+    } else { // Local JSON mode
         const db = await readDB();
         if (!db.users[userId] || !db.users[userId].loans) return { success: false, error: "User loans not found."};
         const initialLength = db.users[userId].loans.length;
@@ -777,7 +823,8 @@ export const addCreditCard = async (userId: string, cardData: NewCreditCardData)
     if (!userId) return { success: false, error: "User ID required." };
     const newCardId = randomUUID();
     const now = new Date();
-    if (DATABASE_MODE === 'postgres' && pool) {
+    if (DATABASE_MODE === 'postgres') {
+       if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
        try {
             const res = await pool.query(
                 'INSERT INTO credit_cards (id, user_id, name, limit_amount, due_date_day, closing_date_day, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7) RETURNING id', 
@@ -788,7 +835,7 @@ export const addCreditCard = async (userId: string, cardData: NewCreditCardData)
             console.error("Error adding credit card to PostgreSQL:", error.message);
             return { success: false, error: "Database error adding credit card." };
         }
-    } else {
+    } else { // Local JSON mode
         const db = await readDB();
         if (!db.users[userId]) {
             console.error(`User ${userId} not found in local DB for addCreditCard.`);
@@ -805,14 +852,18 @@ export const addCreditCard = async (userId: string, cardData: NewCreditCardData)
 
 export async function getCreditCardsForUser(userId: string): Promise<CreditCard[]> {
      if (!userId) return [];
-    if (DATABASE_MODE === 'postgres' && pool) {
+    if (DATABASE_MODE === 'postgres') {
+        if (!pool) {
+            console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get credit cards.");
+            return []; // Or throw
+        }
         try {
             const res = await pool.query<CreditCard>('SELECT id, user_id as "userId", name, limit_amount as "limit", due_date_day as "dueDateDay", closing_date_day as "closingDateDay", created_at as "createdAt", updated_at FROM credit_cards WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
             return res.rows.map(cc => ({ ...cc, limit: Number(cc.limit), createdAt: new Date(cc.createdAt).getTime(), updatedAt: cc.updatedAt ? new Date(cc.updatedAt).getTime() : new Date(cc.createdAt).getTime() }));
         } catch (error: any) {
             console.error(`Error fetching credit cards for user ${userId} from PG:`, error.message); return [];
         }
-    } else {
+    } else { // Local JSON mode
         const db = await readDB();
         const userData = db.users[userId];
         if (!userData || !userData.creditCards) return [];
@@ -823,7 +874,8 @@ export async function getCreditCardsForUser(userId: string): Promise<CreditCard[
 export const updateCreditCard = async (userId: string, cardId: string, data: UpdateCreditCardData): Promise<UpdateResult> => {
   if (!userId || !cardId) return { success: false, error: "User ID and Card ID are required." };
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const fields: string[] = [];
       const values: any[] = [];
@@ -840,14 +892,15 @@ export const updateCreditCard = async (userId: string, cardId: string, data: Upd
         }
       });
 
-      if (fields.length === 0) return { success: true };
+      if (fields.length === 0) return { success: true, error: 'No fields to update.' };
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
+      
       values.push(cardId); 
       values.push(userId); 
 
-      const query = `UPDATE credit_cards SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
+      const query = `UPDATE credit_cards SET ${fields.join(', ')} WHERE id = $${queryIndex} AND user_id = $${queryIndex + 1}`;
       const res = await pool.query(query, values);
 
       if (res.rowCount === 0) return { success: false, error: "Credit card not found or not owned by user." };
@@ -856,7 +909,7 @@ export const updateCreditCard = async (userId: string, cardId: string, data: Upd
       console.error("Error updating credit card in PostgreSQL:", error.message);
       return { success: false, error: "Database error updating credit card." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]?.creditCards) return { success: false, error: "User or credit cards not found." };
     const cardIndex = db.users[userId].creditCards.findIndex(cc => cc.id === cardId);
@@ -875,7 +928,8 @@ export const updateCreditCard = async (userId: string, cardId: string, data: Upd
 export const deleteCreditCard = async (userId: string, cardId: string): Promise<UpdateResult> => {
   if (!userId || !cardId) return { success: false, error: "User ID and Card ID are required." };
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -893,7 +947,7 @@ export const deleteCreditCard = async (userId: string, cardId: string): Promise<
     } finally {
       client.release();
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]?.creditCards) return { success: false, error: "User or credit cards not found." };
     const initialLength = db.users[userId].creditCards.length;
@@ -916,7 +970,8 @@ export const addCreditCardPurchase = async (userId: string, purchaseData: NewCre
     if (!userId) return { success: false, error: "User ID required." };
     const newPurchaseId = randomUUID();
     const now = new Date();
-    if (DATABASE_MODE === 'postgres' && pool) {
+    if (DATABASE_MODE === 'postgres') {
+        if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
         try {
             const res = await pool.query(
                 'INSERT INTO credit_card_purchases (id, user_id, card_id, purchase_date, description, category, total_amount, installments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9) RETURNING id', 
@@ -927,7 +982,7 @@ export const addCreditCardPurchase = async (userId: string, purchaseData: NewCre
             console.error("Error adding credit card purchase to PostgreSQL:", error.message);
             return { success: false, error: "Database error adding credit card purchase." };
         }
-    } else {
+    } else { // Local JSON mode
         const db = await readDB();
         if (!db.users[userId]) {
             console.error(`User ${userId} not found in local DB for addCreditCardPurchase.`);
@@ -944,14 +999,18 @@ export const addCreditCardPurchase = async (userId: string, purchaseData: NewCre
 
 export async function getCreditCardPurchasesForUser(userId: string): Promise<CreditCardPurchase[]> {
     if (!userId) return [];
-    if (DATABASE_MODE === 'postgres' && pool) {
+    if (DATABASE_MODE === 'postgres') {
+        if (!pool) {
+            console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get credit card purchases.");
+            return []; // Or throw
+        }
         try {
             const res = await pool.query<CreditCardPurchase>('SELECT id, user_id as "userId", card_id as "cardId", purchase_date as "date", description, category, total_amount as "totalAmount", installments, created_at as "createdAt", updated_at FROM credit_card_purchases WHERE user_id = $1 ORDER BY purchase_date DESC, created_at DESC', [userId]);
             return res.rows.map(p => ({...p, date: formatDateFns(new Date(p.date), 'yyyy-MM-dd'), totalAmount: Number(p.totalAmount), createdAt: new Date(p.createdAt).getTime(), updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : new Date(p.createdAt).getTime()}));
         } catch (error: any) {
             console.error(`Error fetching credit card purchases for user ${userId} from PG:`, error.message); return [];
         }
-    } else {
+    } else { // Local JSON mode
         const db = await readDB();
         const userData = db.users[userId];
         if (!userData || !userData.creditCardPurchases) return [];
@@ -962,7 +1021,8 @@ export async function getCreditCardPurchasesForUser(userId: string): Promise<Cre
 export const updateCreditCardPurchase = async (userId: string, purchaseId: string, data: UpdateCreditCardPurchaseData): Promise<UpdateResult> => {
   if (!userId || !purchaseId) return { success: false, error: "User ID and Purchase ID are required." };
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const fields: string[] = [];
       const values: any[] = [];
@@ -980,14 +1040,15 @@ export const updateCreditCardPurchase = async (userId: string, purchaseId: strin
         }
       });
 
-      if (fields.length === 0) return { success: true };
+      if (fields.length === 0) return { success: true, error: 'No fields to update.' };
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
+      
       values.push(purchaseId); 
       values.push(userId); 
 
-      const query = `UPDATE credit_card_purchases SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
+      const query = `UPDATE credit_card_purchases SET ${fields.join(', ')} WHERE id = $${queryIndex} AND user_id = $${queryIndex + 1}`;
       const res = await pool.query(query, values);
 
       if (res.rowCount === 0) return { success: false, error: "Credit card purchase not found or not owned by user." };
@@ -996,7 +1057,7 @@ export const updateCreditCardPurchase = async (userId: string, purchaseId: strin
       console.error("Error updating credit card purchase in PostgreSQL:", error.message);
       return { success: false, error: "Database error updating credit card purchase." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]?.creditCardPurchases) return { success: false, error: "User or credit card purchases not found." };
     const purchaseIndex = db.users[userId].creditCardPurchases.findIndex(p => p.id === purchaseId);
@@ -1015,7 +1076,8 @@ export const updateCreditCardPurchase = async (userId: string, purchaseId: strin
 
 export const deleteCreditCardPurchase = async (userId: string, purchaseId: string): Promise<UpdateResult> => {
     if (!userId) return { success: false, error: "User ID required." };
-    if (DATABASE_MODE === 'postgres' && pool) {
+    if (DATABASE_MODE === 'postgres') {
+        if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
         try {
             const res = await pool.query('DELETE FROM credit_card_purchases WHERE id = $1 AND user_id = $2', [purchaseId, userId]);
             if (res.rowCount === 0) return { success: false, error: "Purchase not found or not owned by user." };
@@ -1024,7 +1086,7 @@ export const deleteCreditCardPurchase = async (userId: string, purchaseId: strin
             console.error("Error deleting credit card purchase from PostgreSQL:", error.message);
             return { success: false, error: "Database error deleting credit card purchase." };
         }
-    } else {
+    } else { // Local JSON mode
         const db = await readDB();
         if (!db.users[userId] || !db.users[userId].creditCardPurchases) return { success: false, error: "User purchases not found."};
         const initialLength = db.users[userId].creditCardPurchases.length;
@@ -1038,7 +1100,11 @@ export const deleteCreditCardPurchase = async (userId: string, purchaseId: strin
 
 export async function getCategoriesForUser(userId: string): Promise<UserCategory[]> {
     if (!userId) return [];
-    if (DATABASE_MODE === 'postgres' && pool) {
+    if (DATABASE_MODE === 'postgres') {
+        if (!pool) {
+            console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get categories.");
+            return []; // Or throw
+        }
         try {
             const res = await pool.query<UserCategory>(
                 'SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at FROM user_categories WHERE user_id = $1 ORDER BY name ASC',
@@ -1049,7 +1115,7 @@ export async function getCategoriesForUser(userId: string): Promise<UserCategory
             console.error(`Error fetching categories for user ${userId} from PostgreSQL:`, error.message);
             return [];
         }
-    } else {
+    } else { // Local JSON mode
         const db = await readDB();
         const userData = db.users[userId];
         if (!userData || !userData.categories) return [];
@@ -1065,7 +1131,8 @@ export const addCategoryForUser = async (userId: string, categoryName: string, i
     const newCategoryId = randomUUID();
     const now = new Date();
 
-    if (DATABASE_MODE === 'postgres' && pool) {
+    if (DATABASE_MODE === 'postgres') {
+        if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
         try {
             const res = await pool.query(
                 'INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5) ON CONFLICT (user_id, name) DO NOTHING RETURNING id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at', 
@@ -1074,22 +1141,30 @@ export const addCategoryForUser = async (userId: string, categoryName: string, i
             if (res.rows.length > 0) {
                  const cat = res.rows[0];
                  return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()} };
-            } else { 
+            } else { // Category might already exist, try to fetch it
                 const existingRes = await pool.query('SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at FROM user_categories WHERE user_id = $1 AND name = $2', [userId, categoryName.trim()]);
                 if (existingRes.rows.length > 0) {
                     const cat = existingRes.rows[0];
-                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()}, error: "Category already exists." };
+                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()}, error: "Category already exists." }; // Indicate it existed
                 }
+                // This case should ideally not be reached if ON CONFLICT works as expected or insert succeeds
                 return { success: false, error: "Category already exists, but failed to retrieve." };
             }
         } catch (error: any) {
             console.error("Error adding category to PostgreSQL:", error.message);
-             if (error.code === '23505') { 
-                return { success: false, error: "Category already exists." };
+             // Check for unique violation specifically if ON CONFLICT didn't catch it (should not happen with DO NOTHING)
+            if (error.code === '23505') { // Unique violation
+                // Attempt to fetch the existing one again, as a fallback
+                const existingRes = await pool.query('SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at FROM user_categories WHERE user_id = $1 AND name = $2', [userId, categoryName.trim()]);
+                 if (existingRes.rows.length > 0) {
+                    const cat = existingRes.rows[0];
+                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()}, error: "Category already exists (unique violation)." };
+                }
+                return { success: false, error: "Category already exists (unique violation, fetch failed)." };
             }
             return { success: false, error: "Database error adding category." };
         }
-    } else {
+    } else { // Local JSON mode
         const db = await readDB();
         if (!db.users[userId]) {
             console.error(`User ${userId} not found in local DB for addCategoryForUser.`);
@@ -1122,7 +1197,8 @@ export const addFinancialGoal = async (userId: string, goalData: NewFinancialGoa
   const newGoalId = randomUUID();
   const now = new Date();
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const res = await pool.query(
         'INSERT INTO financial_goals (id, user_id, name, target_amount, current_amount, target_date, description, icon, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10) RETURNING id', 
@@ -1138,7 +1214,7 @@ export const addFinancialGoal = async (userId: string, goalData: NewFinancialGoa
       console.error("Error adding financial goal to PostgreSQL:", error.message);
       return { success: false, error: "Database error adding financial goal." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]) return { success: false, error: "User not found." };
     if (!db.users[userId].financialGoals) db.users[userId].financialGoals = [];
@@ -1163,7 +1239,11 @@ export const addFinancialGoal = async (userId: string, goalData: NewFinancialGoa
 
 export async function getFinancialGoalsForUser(userId: string): Promise<FinancialGoal[]> {
   if (!userId) return [];
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) {
+        console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get financial goals.");
+        return []; // Or throw
+    }
     try {
       const res = await pool.query<FinancialGoal>(
         'SELECT id, user_id AS "userId", name, target_amount AS "targetAmount", current_amount AS "currentAmount", target_date AS "targetDate", description, icon, status, created_at AS "createdAt", updated_at FROM financial_goals WHERE user_id = $1 ORDER BY created_at DESC',
@@ -1181,7 +1261,7 @@ export async function getFinancialGoalsForUser(userId: string): Promise<Financia
       console.error("Error fetching financial goals from PostgreSQL:", error.message);
       return [];
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     const userData = db.users[userId];
     return userData?.financialGoals?.map(g => ({...g, updatedAt: g.updatedAt || g.createdAt})).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) || [];
@@ -1190,7 +1270,8 @@ export async function getFinancialGoalsForUser(userId: string): Promise<Financia
 
 export const updateFinancialGoal = async (userId: string, goalId: string, updateData: UpdateFinancialGoalData): Promise<UpdateResult> => {
   if (!userId || !goalId) return { success: false, error: "User ID and Goal ID are required." };
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const fields: string[] = [];
       const values: any[] = [];
@@ -1208,7 +1289,7 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
         }
       });
 
-      if (fields.length === 0) return { success: true };
+      if (fields.length === 0) return { success: true, error: 'No fields to update.' };
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
@@ -1216,7 +1297,7 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
       values.push(goalId); 
       values.push(userId); 
 
-      const query = `UPDATE financial_goals SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
+      const query = `UPDATE financial_goals SET ${fields.join(', ')} WHERE id = $${queryIndex} AND user_id = $${queryIndex + 1}`;
       const res = await pool.query(query, values);
 
       if (res.rowCount === 0) return { success: false, error: "Goal not found or not owned by user." };
@@ -1225,7 +1306,7 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
       console.error("Error updating financial goal in PostgreSQL:", error.message);
       return { success: false, error: "Database error updating financial goal." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]?.financialGoals) return { success: false, error: "User or goals not found." };
     const goalIndex = db.users[userId].financialGoals.findIndex(g => g.id === goalId);
@@ -1243,7 +1324,8 @@ export const updateFinancialGoal = async (userId: string, goalId: string, update
 
 export const deleteFinancialGoal = async (userId: string, goalId: string): Promise<UpdateResult> => {
   if (!userId || !goalId) return { success: false, error: "User ID and Goal ID are required." };
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const res = await pool.query('DELETE FROM financial_goals WHERE id = $1 AND user_id = $2', [goalId, userId]);
       if (res.rowCount === 0) return { success: false, error: "Goal not found or not owned by user." };
@@ -1252,7 +1334,7 @@ export const deleteFinancialGoal = async (userId: string, goalId: string): Promi
       console.error("Error deleting financial goal from PostgreSQL:", error.message);
       return { success: false, error: "Database error deleting financial goal." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]?.financialGoals) return { success: false, error: "User or goals not found." };
     const initialLength = db.users[userId].financialGoals.length;
@@ -1269,7 +1351,8 @@ export const addInvestment = async (userId: string, investmentData: NewInvestmen
   const newInvestmentId = randomUUID();
   const now = new Date();
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const res = await pool.query(
         'INSERT INTO investments (id, user_id, name, type, initial_amount, current_value, quantity, symbol, institution, acquisition_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12) RETURNING id', 
@@ -1286,7 +1369,7 @@ export const addInvestment = async (userId: string, investmentData: NewInvestmen
       console.error("Error adding investment to PostgreSQL:", error.message);
       return { success: false, error: "Database error adding investment." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]) return { success: false, error: "User not found." };
     if (!db.users[userId].investments) db.users[userId].investments = [];
@@ -1305,7 +1388,11 @@ export const addInvestment = async (userId: string, investmentData: NewInvestmen
 
 export async function getInvestmentsForUser(userId: string): Promise<Investment[]> {
   if (!userId) return [];
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) {
+        console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get investments.");
+        return []; // Or throw
+    }
     try {
       const res = await pool.query<Investment>(
         'SELECT id, user_id AS "userId", name, type, initial_amount AS "initialAmount", current_value AS "currentValue", quantity, symbol, institution, acquisition_date AS "acquisitionDate", notes, created_at AS "createdAt", updated_at FROM investments WHERE user_id = $1 ORDER BY created_at DESC',
@@ -1324,7 +1411,7 @@ export async function getInvestmentsForUser(userId: string): Promise<Investment[
       console.error("Error fetching investments from PostgreSQL:", error.message);
       return [];
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     const userData = db.users[userId];
     return userData?.investments?.map(inv => ({...inv, updatedAt: inv.updatedAt || inv.createdAt })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) || [];
@@ -1333,7 +1420,8 @@ export async function getInvestmentsForUser(userId: string): Promise<Investment[
 
 export const updateInvestment = async (userId: string, investmentId: string, updateData: UpdateInvestmentData): Promise<UpdateResult> => {
   if (!userId || !investmentId) return { success: false, error: "User ID and Investment ID are required." };
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const fields: string[] = [];
       const values: any[] = [];
@@ -1352,14 +1440,15 @@ export const updateInvestment = async (userId: string, investmentId: string, upd
         }
       });
 
-      if (fields.length === 0) return { success: true };
+      if (fields.length === 0) return { success: true, error: 'No fields to update.' };
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
+      
       values.push(investmentId); 
       values.push(userId); 
 
-      const query = `UPDATE investments SET ${fields.join(', ')} WHERE id = $${queryIndex -1} AND user_id = $${queryIndex}`;
+      const query = `UPDATE investments SET ${fields.join(', ')} WHERE id = $${queryIndex} AND user_id = $${queryIndex + 1}`;
       const res = await pool.query(query, values);
 
       if (res.rowCount === 0) return { success: false, error: "Investment not found or not owned by user." };
@@ -1368,7 +1457,7 @@ export const updateInvestment = async (userId: string, investmentId: string, upd
       console.error("Error updating investment in PostgreSQL:", error.message);
       return { success: false, error: "Database error updating investment." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]?.investments) return { success: false, error: "User or investments not found." };
     const invIndex = db.users[userId].investments.findIndex(inv => inv.id === investmentId);
@@ -1386,7 +1475,8 @@ export const updateInvestment = async (userId: string, investmentId: string, upd
 
 export const deleteInvestment = async (userId: string, investmentId: string): Promise<UpdateResult> => {
   if (!userId || !investmentId) return { success: false, error: "User ID and Investment ID are required." };
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
       const res = await pool.query('DELETE FROM investments WHERE id = $1 AND user_id = $2', [investmentId, userId]);
       if (res.rowCount === 0) return { success: false, error: "Investment not found or not owned by user." };
@@ -1395,7 +1485,7 @@ export const deleteInvestment = async (userId: string, investmentId: string): Pr
       console.error("Error deleting investment from PostgreSQL:", error.message);
       return { success: false, error: "Database error deleting investment." };
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     if (!db.users[userId]?.investments) return { success: false, error: "User or investments not found." };
     const initialLength = db.users[userId].investments.length;
@@ -1470,7 +1560,7 @@ async function migrateOldDbStructure() {
                           modified = true;
                       } else { 
                         userRecord.categories = userRecord.categories.map(c => ({...c, updatedAt: c.updatedAt || c.createdAt}));
-                        modified = true;
+                        // No need to set modified = true here, just ensuring the field exists
                       }
 
 
@@ -1512,12 +1602,14 @@ async function migrateOldDbStructure() {
                           const newArray = items.map(item => {
                             if(!item.updatedAt) {
                                 arrayModified = true;
-                                modified = true;
+                                //modified = true; // This 'modified' was global, might be too broad here.
+                                                        // Better to set it based on arrayModified later.
                                 return {...item, updatedAt: item.createdAt};
                             }
                             return item;
                           });
-                          return arrayModified ? newArray : items;
+                          if(arrayModified) modified = true; // Set global modified if any array item was changed.
+                          return newArray;
                         }
                         return items || [];
                       };
@@ -1557,7 +1649,11 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
     notifyByEmail: userProfile.notifyByEmail || false,
   };
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) {
+        console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get backup data.");
+        return null; // Or throw
+    }
     const transactions = await getTransactionsForUser(userId);
     const loans = await getLoansForUser(userId);
     const creditCards = await getCreditCardsForUser(userId);
@@ -1569,7 +1665,7 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
       profile: profileForBackup,
       transactions, loans, creditCards, creditCardPurchases, categories, financialGoals, investments,
     };
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     const userData = db.users[userId];
     if (!userData) return null;
@@ -1607,10 +1703,12 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
     return { success: false, error: "Invalid backup file structure." };
   }
 
-  if (DATABASE_MODE === 'postgres' && pool) {
+  if (DATABASE_MODE === 'postgres') {
+    if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // Delete existing data for the user
       await client.query('DELETE FROM investments WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM financial_goals WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM transactions WHERE user_id = $1', [userId]);
@@ -1619,18 +1717,22 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
       await client.query('DELETE FROM credit_cards WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM user_categories WHERE user_id = $1', [userId]);
 
-      let updateUserQuery = 'UPDATE app_users SET updated_at = NOW(), ';
+      // Update user profile
+      let updateUserQuery = 'UPDATE app_users SET updated_at = NOW()';
       const updateUserValues = [];
       let valueIndex = 1;
       if (backupData.profile.displayName) {
-        updateUserQuery += `display_name = $${valueIndex++}, `;
+        updateUserQuery += `, display_name = $${valueIndex++}`;
         updateUserValues.push(backupData.profile.displayName);
       }
-      updateUserQuery += `notify_by_email = $${valueIndex++} WHERE id = $${valueIndex++}`;
-      updateUserValues.push(backupData.profile.notifyByEmail || false, userId);
+      updateUserQuery += `, notify_by_email = $${valueIndex++}`;
+      updateUserValues.push(backupData.profile.notifyByEmail || false);
+      updateUserQuery += ` WHERE id = $${valueIndex++}`;
+      updateUserValues.push(userId);
       await client.query(updateUserQuery, updateUserValues);
 
 
+      // Insert restored data
       for (const tx of backupData.transactions) {
         await client.query('INSERT INTO transactions (id, user_id, type, amount, category, date, description, recurrence_frequency, created_at, receipt_image_uri, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
           [tx.id, userId, tx.type, tx.amount, tx.category, tx.date, tx.description, tx.recurrenceFrequency || 'none', new Date(tx.createdAt), tx.receiptImageUri, new Date(tx.updatedAt || tx.createdAt)]);
@@ -1648,7 +1750,7 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
           [purchase.id, userId, purchase.cardId, purchase.date, purchase.description, purchase.category, purchase.totalAmount, purchase.installments, new Date(purchase.createdAt), new Date(purchase.updatedAt || purchase.createdAt)]);
       }
       for (const category of backupData.categories) {
-         await client.query('INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)',
+         await client.query('INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)', // Uses created_at for updated_at on new insert
           [category.id, userId, category.name, category.isSystemDefined, new Date(category.createdAt)]);
       }
       for (const goal of backupData.financialGoals) {
@@ -1668,15 +1770,18 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
     } finally {
       client.release();
     }
-  } else {
+  } else { // Local JSON mode
     const db = await readDB();
     const userRecord = db.users[userId];
     if (!userRecord) return { success: false, error: "User not found." };
 
+    // Update profile fields
     userRecord.profile.displayName = backupData.profile.displayName || userRecord.profile.displayName;
     userRecord.profile.notifyByEmail = backupData.profile.notifyByEmail === undefined ? userRecord.profile.notifyByEmail : backupData.profile.notifyByEmail;
+    userRecord.profile.updatedAt = Date.now();
 
 
+    // Replace data arrays
     userRecord.transactions = backupData.transactions.map(t => ({...t, userId, recurrenceFrequency: t.recurrenceFrequency || 'none'}));
     userRecord.loans = backupData.loans.map(l => ({...l, userId}));
     userRecord.creditCards = backupData.creditCards.map(cc => ({...cc, userId}));
@@ -1690,5 +1795,6 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
   }
 }
 
+// Initial migration check
 migrateOldDbStructure().catch(err => console.error("Migration check failed:", err));
 
