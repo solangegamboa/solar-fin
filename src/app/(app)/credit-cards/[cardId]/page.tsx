@@ -24,6 +24,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Ensured AlertDialogTrigger is imported
 } from "@/components/ui/alert-dialog";
 import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText, Edit3, ArrowLeft, BarChart3, ListTree } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
