@@ -24,7 +24,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Ensured AlertDialogTrigger is imported
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText, Edit3, ArrowLeft, BarChart3, ListTree } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
@@ -387,14 +387,14 @@ export default function CreditCardDetailPage() {
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Dialog open={isPurchaseModalOpen} onOpenChange={setIsPurchaseModalOpen}>
-            <DialogTrigger asChild><Button disabled={!user} className="w-full sm:w-auto"><ShoppingBag className="mr-2 h-4 w-4" />Nova Compra</Button></DialogTrigger>
+            <DialogTrigger asChild><Button size="sm" disabled={!user} className="w-full sm:w-auto"><ShoppingBag className="mr-2 h-4 w-4" />Nova Compra</Button></DialogTrigger>
             <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Adicionar Compra para {cardDetails.name}</DialogTitle><DialogDescription>Registre uma nova compra neste cartão.</DialogDescription></DialogHeader>
               {user && <CreditCardTransactionForm userCreditCards={[cardDetails]} onSuccess={handlePurchaseUpserted} setOpen={setIsPurchaseModalOpen} userId={user.id} existingPurchase={null} />}
             </DialogContent>
           </Dialog>
           <Dialog open={isEditCardModalOpen} onOpenChange={setIsEditCardModalOpen}>
-            <DialogTrigger asChild><Button variant="outline" className="w-full sm:w-auto" disabled={!user}><Edit3 className="mr-2 h-4 w-4" />Editar Cartão</Button></DialogTrigger>
+            <DialogTrigger asChild><Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!user}><Edit3 className="mr-2 h-4 w-4" />Editar Cartão</Button></DialogTrigger>
             <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Editar Cartão</DialogTitle><DialogDescription>Atualize os detalhes deste cartão.</DialogDescription></DialogHeader>
               {user && <CreditCardForm onSuccess={handleCardUpserted} setOpen={setIsEditCardModalOpen} userId={user.id} existingCard={cardDetails}/>}
@@ -402,7 +402,7 @@ export default function CreditCardDetailPage() {
           </Dialog>
            <AlertDialog open={showDeleteCardConfirmDialog} onOpenChange={setShowDeleteCardConfirmDialog}>
             <AlertDialogTrigger asChild>
-                 <Button variant="destructive" className="w-full sm:w-auto" disabled={isDeletingCardId === cardDetails.id || !user}><Trash2 className="mr-2 h-4 w-4" />Excluir Cartão</Button>
+                 <Button size="sm" variant="destructive" className="w-full sm:w-auto" disabled={isDeletingCardId === cardDetails.id || !user}><Trash2 className="mr-2 h-4 w-4" />Excluir Cartão</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
                 <AlertDialogHeader><AlertDialogTitle>Excluir Cartão</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir o cartão "{cardDetails.name}" e todas as suas compras associadas? Esta ação é irreversível.</AlertDialogDescription></AlertDialogHeader>
