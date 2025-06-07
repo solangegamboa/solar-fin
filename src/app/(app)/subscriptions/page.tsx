@@ -3,7 +3,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Repeat, Sun, AlertTriangleIcon, SearchX, CalendarDays, Tag, DollarSign, CheckCircle2, Edit3 } from "lucide-react"; // Added Edit3
+import { Button } from "@/components/ui/button"; // Added missing import
+import { Repeat, Sun, AlertTriangleIcon, SearchX, CalendarDays, Tag, DollarSign, CheckCircle2, Edit3 } from "lucide-react";
 import type { Transaction, RecurrenceFrequency } from '@/types';
 import { getTransactionsForUser } from '@/lib/databaseService';
 import { formatCurrency, cn } from '@/lib/utils';
@@ -293,4 +294,3 @@ export default function SubscriptionsPage() {
     </div>
   );
 }
-
