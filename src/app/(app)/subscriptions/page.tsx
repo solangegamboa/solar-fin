@@ -2,12 +2,27 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"; // Adicionado CardFooter
-import { Repeat, Sun, AlertTriangleIcon, SearchX, CalendarDays, Tag, DollarSign } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Repeat, Sun, AlertTriangleIcon, SearchX, CalendarDays, Tag, DollarSign, CheckCircle2 } from "lucide-react"; // Added CheckCircle2
 import type { Transaction, RecurrenceFrequency } from '@/types';
 import { getTransactionsForUser } from '@/lib/databaseService';
 import { formatCurrency, cn } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { 
+  format, 
+  parseISO,
+  startOfDay,
+  getMonth,
+  getYear,
+  getDate,
+  getDaysInMonth,
+  getDay,
+  startOfMonth,
+  addDays,
+  isSameMonth,
+  addWeeks,
+  isPast,
+  isToday
+} from 'date-fns'; // Added necessary date-fns functions
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -59,7 +74,6 @@ export default function SubscriptionsPage() {
       if (user) {
         fetchRecurringExpenses();
       } else {
-        // Handle case where user is definitively not logged in after auth check
         setIsLoading(false);
         setError("Você precisa estar logado para ver suas assinaturas.");
         setRecurringExpenses([]);
@@ -108,38 +122,108 @@ export default function SubscriptionsPage() {
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {recurringExpenses.map((expense) => (
-          <Card key={expense.id} className="shadow-md hover:shadow-lg transition-shadow flex flex-col">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                 <CardTitle className="text-lg font-semibold flex items-center">
-                    <Repeat className="mr-2 h-5 w-5 text-primary opacity-80" />
-                    {expense.description || "Despesa Recorrente"}
-                 </CardTitle>
-              </div>
-               <CardDescription className="text-xs pt-1">
-                 <Badge variant="secondary">{expense.category}</Badge>
-               </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 flex-grow text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground flex items-center"><DollarSign className="mr-1.5 h-4 w-4 opacity-70"/>Valor:</span>
-                <span className="font-semibold text-destructive">{formatCurrency(expense.amount)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground flex items-center"><Tag className="mr-1.5 h-4 w-4 opacity-70"/>Frequência:</span>
-                <span className="font-medium">{recurrenceFrequencyMap[expense.recurrenceFrequency || 'none']}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground flex items-center"><CalendarDays className="mr-1.5 h-4 w-4 opacity-70"/>Último Registro:</span>
-                <span className="font-medium">{format(parseISO(expense.date), 'dd/MM/yyyy', { locale: ptBR })}</span>
-              </div>
-            </CardContent>
-            <CardFooter className="text-xs text-muted-foreground pt-2 pb-3">
-              Registrada em: {format(new Date(expense.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-            </CardFooter>
-          </Card>
-        ))}
+        {recurringExpenses.map((expense) => {
+          const today = startOfDay(new Date());
+          const currentMonth = getMonth(today);
+          const currentYear = getYear(today);
+          let expectedPaymentDateThisMonth: Date | null = null;
+
+          const lastRecordedDate = parseISO(expense.date);
+
+          if (expense.recurrenceFrequency === 'monthly') {
+            const paymentDayOfMonth = getDate(lastRecordedDate);
+            const dayInCurrentMonth = Math.min(paymentDayOfMonth, getDaysInMonth(new Date(currentYear, currentMonth)));
+            expectedPaymentDateThisMonth = startOfDay(new Date(currentYear, currentMonth, dayInCurrentMonth));
+          } else if (expense.recurrenceFrequency === 'annually') {
+            const paymentDayOfMonth = getDate(lastRecordedDate);
+            const paymentMonth = getMonth(lastRecordedDate);
+            if (paymentMonth === currentMonth) {
+              const dayInCurrentMonth = Math.min(paymentDayOfMonth, getDaysInMonth(new Date(currentYear, currentMonth)));
+              expectedPaymentDateThisMonth = startOfDay(new Date(currentYear, currentMonth, dayInCurrentMonth));
+            }
+          } else if (expense.recurrenceFrequency === 'weekly') {
+            const originalDayOfWeek = getDay(lastRecordedDate);
+            let firstDayOfCurrentMonth = startOfMonth(today);
+            
+            let firstOccurrenceThisMonth = new Date(firstDayOfCurrentMonth);
+            let count = 0; // Safety break for loop
+            while(getDay(firstOccurrenceThisMonth) !== originalDayOfWeek && count < 7) {
+                firstOccurrenceThisMonth = addDays(firstOccurrenceThisMonth, 1);
+                if (getMonth(firstOccurrenceThisMonth) !== currentMonth) {
+                    firstOccurrenceThisMonth = null; 
+                    break;
+                }
+                count++;
+            }
+            if(count >= 7) firstOccurrenceThisMonth = null; // Did not find the day in first week
+
+            if (firstOccurrenceThisMonth && isSameMonth(firstOccurrenceThisMonth, today)) {
+                let latestPastOrTodayOccurrenceInMonth: Date | null = null;
+                let currentWeeklyDate = startOfDay(new Date(firstOccurrenceThisMonth));
+                while(isSameMonth(currentWeeklyDate, today)) {
+                    if (isPast(currentWeeklyDate) || isToday(currentWeeklyDate)) {
+                        latestPastOrTodayOccurrenceInMonth = new Date(currentWeeklyDate);
+                    } else {
+                        break;
+                    }
+                    const nextWeeklyDate = addWeeks(currentWeeklyDate, 1);
+                    if (getMonth(nextWeeklyDate) !== currentMonth && getMonth(currentWeeklyDate) === currentMonth) { // Check if adding a week crosses the month boundary
+                        break; // stop if next iteration is in next month
+                    }
+                    currentWeeklyDate = nextWeeklyDate;
+                }
+                expectedPaymentDateThisMonth = latestPastOrTodayOccurrenceInMonth;
+            }
+          }
+
+          const isPaidThisMonth = !!expectedPaymentDateThisMonth &&
+                                  (isToday(expectedPaymentDateThisMonth) || isPast(expectedPaymentDateThisMonth)) &&
+                                  isSameMonth(expectedPaymentDateThisMonth, today);
+          
+          return (
+            <Card key={expense.id} className="shadow-md hover:shadow-lg transition-shadow flex flex-col">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <CardTitle className="text-lg font-semibold flex items-center">
+                      <Repeat className="mr-2 h-5 w-5 text-primary opacity-80" />
+                      {expense.description || "Despesa Recorrente"}
+                  </CardTitle>
+                  {isPaidThisMonth && (
+                    <Badge variant="default" className="ml-auto text-xs bg-green-100 text-green-700 border-green-300 dark:bg-green-700/30 dark:text-green-300 dark:border-green-600">
+                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                      Pago este Mês
+                    </Badge>
+                  )}
+                </div>
+                <CardDescription className="text-xs pt-1">
+                  <Badge variant="secondary">{expense.category}</Badge>
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 flex-grow text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground flex items-center"><DollarSign className="mr-1.5 h-4 w-4 opacity-70"/>Valor:</span>
+                  <span className="font-semibold text-destructive">{formatCurrency(expense.amount)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground flex items-center"><Tag className="mr-1.5 h-4 w-4 opacity-70"/>Frequência:</span>
+                  <span className="font-medium">{recurrenceFrequencyMap[expense.recurrenceFrequency || 'none']}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground flex items-center"><CalendarDays className="mr-1.5 h-4 w-4 opacity-70"/>Último Registro:</span>
+                  <span className="font-medium">{format(parseISO(expense.date), 'dd/MM/yyyy', { locale: ptBR })}</span>
+                </div>
+                 {expectedPaymentDateThisMonth && !isPaidThisMonth && isSameMonth(expectedPaymentDateThisMonth, today) && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400 pt-1">
+                        Próximo pagamento esperado em: {format(expectedPaymentDateThisMonth, 'dd/MM/yyyy', { locale: ptBR })}
+                    </p>
+                )}
+              </CardContent>
+              <CardFooter className="text-xs text-muted-foreground pt-2 pb-3">
+                Registrada em: {format(new Date(expense.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+              </CardFooter>
+            </Card>
+          );
+        })}
       </div>
     );
   };
@@ -157,9 +241,9 @@ export default function SubscriptionsPage() {
             Revise seus gastos regulares para identificar oportunidades de economia.
           </p>
         </div>
-        {/* Botão de Adicionar pode ser incluído no futuro se necessário, mas por ora é só visualização */}
       </div>
       {renderContent()}
     </div>
   );
 }
+
