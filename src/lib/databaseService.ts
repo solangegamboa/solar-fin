@@ -230,8 +230,8 @@ export async function updateUserLastLogin(userId: string): Promise<void> {
     const now = new Date();
     if (DATABASE_MODE === 'postgres') {
       if (!pool) {
-        console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot update last login.");
-        return; // Or throw, depending on desired strictness
+        console.warn("DATABASE_MODE is postgres but pool is not initialized. Cannot update last login.");
+        return; 
       }
       try {
           await pool.query('UPDATE app_users SET last_login_at = $1, updated_at = $1 WHERE id = $2', [now, userId]);
@@ -424,8 +424,8 @@ export async function getTransactionsForUser(userId: string): Promise<Transactio
 
   if (DATABASE_MODE === 'postgres') {
     if (!pool) { 
-      console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get transactions.");
-      return []; // Or throw
+      console.warn("DATABASE_MODE is postgres but pool is not initialized. Cannot get transactions.");
+      return []; 
     }
     try {
       const res = await pool.query<Transaction>(
@@ -544,7 +544,7 @@ export const updateTransaction = async (userId: string, transactionId: string, d
     const existingTx = db.users[userId].transactions[txIndex];
     const updatedTx: Transaction = {
       ...existingTx,
-      ...data, // Apply updates
+      ...data, 
       date: data.date ? data.date : existingTx.date, 
       amount: data.amount !== undefined ? data.amount : existingTx.amount,
       type: data.type !== undefined ? data.type : existingTx.type,
@@ -598,7 +598,7 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
 
     const investmentsForAI = userInvestments.map(inv => ({
         name: inv.name,
-        type: inv.type as string, // Cast as string if AI expects generic string
+        type: inv.type as string, 
         currentValue: inv.currentValue,
         initialAmount: inv.initialAmount,
         symbol: inv.symbol,
@@ -611,7 +611,7 @@ export async function getFinancialDataForUser(userId: string): Promise<Financial
       creditCards: userCreditCards.map(cc => ({
         name: cc.name,
         limit: cc.limit,
-        balance: 0, // Balance not tracked, provide 0 or estimate
+        balance: 0, 
         dueDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(cc.dueDateDay).padStart(2, '0')}`
       })),
       investments: investmentsForAI,
@@ -664,8 +664,8 @@ export async function getLoansForUser(userId: string): Promise<Loan[]> {
     if (!userId) return [];
     if (DATABASE_MODE === 'postgres') {
         if (!pool) {
-            console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get loans.");
-            return []; // Or throw
+            console.warn("DATABASE_MODE is postgres but pool is not initialized. Cannot get loans.");
+            return []; 
         }
         try {
             const res = await pool.query<Loan>(
@@ -695,37 +695,32 @@ export async function getLoansForUser(userId: string): Promise<Loan[]> {
 export const updateLoan = async (userId: string, loanId: string, data: UpdateLoanData): Promise<UpdateResult> => {
   if (!userId || !loanId) return { success: false, error: "User ID and Loan ID are required." };
 
-  let newEndDate: string | undefined = undefined;
-  
   if (DATABASE_MODE === 'postgres') {
     if (!pool) return { success: false, error: "Database service (PostgreSQL) not configured correctly." };
     try {
-      // Start a transaction if complex logic (like fetching current values for recalculation) is needed
-      // For now, assume direct update or pre-calculated newEndDate if needed
-
-      let currentLoanFromDb: Pick<Loan, 'startDate' | 'installmentsCount'> | undefined;
-      if (data.startDate || data.installmentsCount !== undefined) {
-        const res = await pool.query('SELECT start_date, installments_count FROM loans WHERE id = $1 AND user_id = $2', [loanId, userId]);
-        if (res.rows.length > 0) {
-          currentLoanFromDb = { 
-            startDate: formatDateFns(new Date(res.rows[0].start_date), 'yyyy-MM-dd'), 
-            installmentsCount: parseInt(res.rows[0].installments_count) 
-          };
-        } else {
-          return { success: false, error: "Loan not found to recalculate end date or not owned by user." };
-        }
+      const currentLoanRes = await pool.query(
+        'SELECT start_date, installments_count FROM loans WHERE id = $1 AND user_id = $2',
+        [loanId, userId]
+      );
+      if (currentLoanRes.rowCount === 0) {
+        return { success: false, error: "Loan not found or not owned by user." };
       }
+      const currentLoan = {
+        startDate: formatDateFns(new Date(currentLoanRes.rows[0].start_date), 'yyyy-MM-dd'),
+        installmentsCount: parseInt(currentLoanRes.rows[0].installments_count)
+      };
       
+      let newEndDate = currentLoan.startDate; // Will be recalculated based on potentially new startDate/installmentsCount
       if (data.startDate || data.installmentsCount !== undefined) {
-        if (!currentLoanFromDb) { /* Should have been fetched or errored out */
-           return { success: false, error: "Internal error: Loan data for end date recalculation not available."};
-        }
-        const newStartDateForCalc = data.startDate ? data.startDate : currentLoanFromDb.startDate;
-        const newInstallmentsCountForCalc = data.installmentsCount !== undefined ? data.installmentsCount : currentLoanFromDb.installmentsCount;
-
+        const newStartDateForCalc = data.startDate || currentLoan.startDate;
+        const newInstallmentsCountForCalc = data.installmentsCount !== undefined ? data.installmentsCount : currentLoan.installmentsCount;
         if (newInstallmentsCountForCalc < 1) return { success: false, error: "Installments count must be positive." };
         newEndDate = formatDateFns(addMonths(parseISO(newStartDateForCalc), newInstallmentsCountForCalc - 1), 'yyyy-MM-dd');
+      } else {
+        // If neither startDate nor installmentsCount is being updated, endDate remains derived from current values in DB
+         newEndDate = formatDateFns(addMonths(parseISO(currentLoan.startDate), currentLoan.installmentsCount - 1), 'yyyy-MM-dd');
       }
+
 
       const fields: string[] = [];
       const values: any[] = [];
@@ -742,13 +737,17 @@ export const updateLoan = async (userId: string, loanId: string, data: UpdateLoa
           values.push(data[key]);
         }
       });
-
-      if (newEndDate) {
-        fields.push(`end_date = $${queryIndex++}`);
-        values.push(newEndDate);
-      }
       
-      if (fields.length === 0) return { success: true, error: 'No fields to update (excluding auto-calculated end_date if any).' };
+      fields.push(`end_date = $${queryIndex++}`); // Always set endDate, recalculated or from current
+      values.push(newEndDate);
+      
+      if (fields.length === 1 && fields[0].startsWith('end_date')) { // Only endDate was added (no actual data change other than calculated)
+           // This can happen if only non-data fields or no fields were passed, but endDate is always set.
+           // If only end_date is set (meaning no actual data fields changed, and startDate/installmentsCount weren't in `data`),
+           // we still need to update `updated_at`.
+      } else if (fields.length === 0){
+           return { success: true, error: 'No fields to update.' }; // Should not happen if endDate is always added
+      }
 
       fields.push(`updated_at = $${queryIndex++}`);
       values.push(new Date());
@@ -759,7 +758,7 @@ export const updateLoan = async (userId: string, loanId: string, data: UpdateLoa
       const query = `UPDATE loans SET ${fields.join(', ')} WHERE id = $${queryIndex} AND user_id = $${queryIndex + 1}`;
       const res = await pool.query(query, values);
 
-      if (res.rowCount === 0) return { success: false, error: "Loan not found or not owned by user." };
+      if (res.rowCount === 0) return { success: false, error: "Loan not found or not owned by user (after field prep)." }; // Should be caught earlier
       return { success: true };
     } catch (error: any) {
       console.error("Error updating loan in PostgreSQL:", error.message);
@@ -772,23 +771,38 @@ export const updateLoan = async (userId: string, loanId: string, data: UpdateLoa
     if (loanIndex === -1) return { success: false, error: "Loan not found." };
 
     const currentLoan = db.users[userId].loans[loanIndex];
+    
+    // Prepare an object with only the fields that are actually being updated from `data`
+    const loanUpdates: Partial<Loan> = {};
+    if (data.bankName !== undefined) loanUpdates.bankName = data.bankName;
+    if (data.description !== undefined) loanUpdates.description = data.description;
+    if (data.installmentAmount !== undefined) loanUpdates.installmentAmount = data.installmentAmount;
+    if (data.startDate !== undefined) loanUpdates.startDate = data.startDate;
+    if (data.installmentsCount !== undefined) loanUpdates.installmentsCount = data.installmentsCount;
+
+    // Determine the final startDate and installmentsCount for endDate calculation
+    const finalStartDate = loanUpdates.startDate || currentLoan.startDate;
+    const finalInstallmentsCount = loanUpdates.installmentsCount !== undefined ? loanUpdates.installmentsCount : currentLoan.installmentsCount;
+
+    // Recalculate endDate if startDate or installmentsCount changed or were part of the update
     if (data.startDate || data.installmentsCount !== undefined) {
-        const newStartDateForCalc = data.startDate ? data.startDate : currentLoan.startDate;
-        const newInstallmentsCountForCalc = data.installmentsCount !== undefined ? data.installmentsCount : currentLoan.installmentsCount;
-        if (newInstallmentsCountForCalc < 1) return { success: false, error: "Installments count must be positive." };
-        newEndDate = formatDateFns(addMonths(parseISO(newStartDateForCalc), newInstallmentsCountForCalc - 1), 'yyyy-MM-dd');
+        if (finalInstallmentsCount < 1) {
+            return { success: false, error: "Installments count must be positive." };
+        }
+        loanUpdates.endDate = formatDateFns(addMonths(parseISO(finalStartDate), finalInstallmentsCount - 1), 'yyyy-MM-dd');
+    } else {
+        // If neither startDate nor installmentsCount are in `data`, endDate does not change unless it was never set correctly
+        loanUpdates.endDate = currentLoan.endDate; 
     }
 
-    const updatedLoan: Loan = {
+    loanUpdates.updatedAt = Date.now();
+
+    // Merge existing loan with the specific updates
+    db.users[userId].loans[loanIndex] = {
       ...currentLoan,
-      ...data,
-      updatedAt: Date.now(),
+      ...loanUpdates,
     };
-    if (newEndDate) {
-      updatedLoan.endDate = newEndDate;
-    }
     
-    db.users[userId].loans[loanIndex] = updatedLoan;
     await writeDB(db);
     return { success: true };
   }
@@ -854,8 +868,8 @@ export async function getCreditCardsForUser(userId: string): Promise<CreditCard[
      if (!userId) return [];
     if (DATABASE_MODE === 'postgres') {
         if (!pool) {
-            console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get credit cards.");
-            return []; // Or throw
+            console.warn("DATABASE_MODE is postgres but pool is not initialized. Cannot get credit cards.");
+            return []; 
         }
         try {
             const res = await pool.query<CreditCard>('SELECT id, user_id as "userId", name, limit_amount as "limit", due_date_day as "dueDateDay", closing_date_day as "closingDateDay", created_at as "createdAt", updated_at FROM credit_cards WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
@@ -1001,8 +1015,8 @@ export async function getCreditCardPurchasesForUser(userId: string): Promise<Cre
     if (!userId) return [];
     if (DATABASE_MODE === 'postgres') {
         if (!pool) {
-            console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get credit card purchases.");
-            return []; // Or throw
+            console.warn("DATABASE_MODE is postgres but pool is not initialized. Cannot get credit card purchases.");
+            return []; 
         }
         try {
             const res = await pool.query<CreditCardPurchase>('SELECT id, user_id as "userId", card_id as "cardId", purchase_date as "date", description, category, total_amount as "totalAmount", installments, created_at as "createdAt", updated_at FROM credit_card_purchases WHERE user_id = $1 ORDER BY purchase_date DESC, created_at DESC', [userId]);
@@ -1102,8 +1116,8 @@ export async function getCategoriesForUser(userId: string): Promise<UserCategory
     if (!userId) return [];
     if (DATABASE_MODE === 'postgres') {
         if (!pool) {
-            console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get categories.");
-            return []; // Or throw
+            console.warn("DATABASE_MODE is postgres but pool is not initialized. Cannot get categories.");
+            return []; 
         }
         try {
             const res = await pool.query<UserCategory>(
@@ -1141,20 +1155,17 @@ export const addCategoryForUser = async (userId: string, categoryName: string, i
             if (res.rows.length > 0) {
                  const cat = res.rows[0];
                  return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()} };
-            } else { // Category might already exist, try to fetch it
+            } else { 
                 const existingRes = await pool.query('SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at FROM user_categories WHERE user_id = $1 AND name = $2', [userId, categoryName.trim()]);
                 if (existingRes.rows.length > 0) {
                     const cat = existingRes.rows[0];
-                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()}, error: "Category already exists." }; // Indicate it existed
+                    return { success: true, category: {...cat, createdAt: new Date(cat.createdAt).getTime(), updatedAt: new Date(cat.updatedAt).getTime()}, error: "Category already exists." }; 
                 }
-                // This case should ideally not be reached if ON CONFLICT works as expected or insert succeeds
                 return { success: false, error: "Category already exists, but failed to retrieve." };
             }
         } catch (error: any) {
             console.error("Error adding category to PostgreSQL:", error.message);
-             // Check for unique violation specifically if ON CONFLICT didn't catch it (should not happen with DO NOTHING)
-            if (error.code === '23505') { // Unique violation
-                // Attempt to fetch the existing one again, as a fallback
+            if (error.code === '23505') { 
                 const existingRes = await pool.query('SELECT id, user_id as "userId", name, is_system_defined as "isSystemDefined", created_at as "createdAt", updated_at FROM user_categories WHERE user_id = $1 AND name = $2', [userId, categoryName.trim()]);
                  if (existingRes.rows.length > 0) {
                     const cat = existingRes.rows[0];
@@ -1241,8 +1252,8 @@ export async function getFinancialGoalsForUser(userId: string): Promise<Financia
   if (!userId) return [];
   if (DATABASE_MODE === 'postgres') {
     if (!pool) {
-        console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get financial goals.");
-        return []; // Or throw
+        console.warn("DATABASE_MODE is postgres but pool is not initialized. Cannot get financial goals.");
+        return []; 
     }
     try {
       const res = await pool.query<FinancialGoal>(
@@ -1390,8 +1401,8 @@ export async function getInvestmentsForUser(userId: string): Promise<Investment[
   if (!userId) return [];
   if (DATABASE_MODE === 'postgres') {
     if (!pool) {
-        console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get investments.");
-        return []; // Or throw
+        console.warn("DATABASE_MODE is postgres but pool is not initialized. Cannot get investments.");
+        return []; 
     }
     try {
       const res = await pool.query<Investment>(
@@ -1560,7 +1571,6 @@ async function migrateOldDbStructure() {
                           modified = true;
                       } else { 
                         userRecord.categories = userRecord.categories.map(c => ({...c, updatedAt: c.updatedAt || c.createdAt}));
-                        // No need to set modified = true here, just ensuring the field exists
                       }
 
 
@@ -1602,13 +1612,11 @@ async function migrateOldDbStructure() {
                           const newArray = items.map(item => {
                             if(!item.updatedAt) {
                                 arrayModified = true;
-                                //modified = true; // This 'modified' was global, might be too broad here.
-                                                        // Better to set it based on arrayModified later.
                                 return {...item, updatedAt: item.createdAt};
                             }
                             return item;
                           });
-                          if(arrayModified) modified = true; // Set global modified if any array item was changed.
+                          if(arrayModified) modified = true; 
                           return newArray;
                         }
                         return items || [];
@@ -1651,8 +1659,8 @@ export async function getUserBackupData(userId: string): Promise<UserBackupData 
 
   if (DATABASE_MODE === 'postgres') {
     if (!pool) {
-        console.error("DATABASE_MODE is postgres but pool is not initialized. Cannot get backup data.");
-        return null; // Or throw
+        console.warn("DATABASE_MODE is postgres but pool is not initialized. Cannot get backup data.");
+        return null; 
     }
     const transactions = await getTransactionsForUser(userId);
     const loans = await getLoansForUser(userId);
@@ -1708,7 +1716,6 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      // Delete existing data for the user
       await client.query('DELETE FROM investments WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM financial_goals WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM transactions WHERE user_id = $1', [userId]);
@@ -1717,7 +1724,6 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
       await client.query('DELETE FROM credit_cards WHERE user_id = $1', [userId]);
       await client.query('DELETE FROM user_categories WHERE user_id = $1', [userId]);
 
-      // Update user profile
       let updateUserQuery = 'UPDATE app_users SET updated_at = NOW()';
       const updateUserValues = [];
       let valueIndex = 1;
@@ -1731,8 +1737,6 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
       updateUserValues.push(userId);
       await client.query(updateUserQuery, updateUserValues);
 
-
-      // Insert restored data
       for (const tx of backupData.transactions) {
         await client.query('INSERT INTO transactions (id, user_id, type, amount, category, date, description, recurrence_frequency, created_at, receipt_image_uri, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
           [tx.id, userId, tx.type, tx.amount, tx.category, tx.date, tx.description, tx.recurrenceFrequency || 'none', new Date(tx.createdAt), tx.receiptImageUri, new Date(tx.updatedAt || tx.createdAt)]);
@@ -1750,7 +1754,7 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
           [purchase.id, userId, purchase.cardId, purchase.date, purchase.description, purchase.category, purchase.totalAmount, purchase.installments, new Date(purchase.createdAt), new Date(purchase.updatedAt || purchase.createdAt)]);
       }
       for (const category of backupData.categories) {
-         await client.query('INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)', // Uses created_at for updated_at on new insert
+         await client.query('INSERT INTO user_categories (id, user_id, name, is_system_defined, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)', 
           [category.id, userId, category.name, category.isSystemDefined, new Date(category.createdAt)]);
       }
       for (const goal of backupData.financialGoals) {
@@ -1775,13 +1779,10 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
     const userRecord = db.users[userId];
     if (!userRecord) return { success: false, error: "User not found." };
 
-    // Update profile fields
     userRecord.profile.displayName = backupData.profile.displayName || userRecord.profile.displayName;
     userRecord.profile.notifyByEmail = backupData.profile.notifyByEmail === undefined ? userRecord.profile.notifyByEmail : backupData.profile.notifyByEmail;
     userRecord.profile.updatedAt = Date.now();
 
-
-    // Replace data arrays
     userRecord.transactions = backupData.transactions.map(t => ({...t, userId, recurrenceFrequency: t.recurrenceFrequency || 'none'}));
     userRecord.loans = backupData.loans.map(l => ({...l, userId}));
     userRecord.creditCards = backupData.creditCards.map(cc => ({...cc, userId}));
@@ -1795,6 +1796,4 @@ export async function restoreUserBackupData(userId: string, backupData: UserBack
   }
 }
 
-// Initial migration check
 migrateOldDbStructure().catch(err => console.error("Migration check failed:", err));
-

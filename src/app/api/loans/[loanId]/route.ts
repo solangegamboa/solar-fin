@@ -14,7 +14,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const handlerName = `[API PUT /api/loans/${params?.loanId || 'undefined_loanId'}]`;
   console.log(`${handlerName} Handler started. Request URL: ${req.url}`);
 
-  try {
+  try { 
     const userId = await getUserIdFromAuthHeader(req);
     if (!userId) {
       console.error(`${handlerName} Not authenticated.`);
@@ -31,21 +31,16 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     let updateData: UpdateLoanData;
     try {
       const rawBody = await req.json();
-      updateData = rawBody as UpdateLoanData; // Assume client sends correct structure after Zod validation
+      updateData = rawBody as UpdateLoanData; 
       console.log(`${handlerName} Received update data:`, JSON.stringify(updateData));
     } catch (jsonError: any) {
       console.error(`${handlerName} Error parsing JSON body:`, jsonError.message, jsonError.stack);
       return NextResponse.json({ success: false, message: `Invalid JSON payload: ${jsonError.message}` }, { status: 400 });
     }
     
-    // Basic checks that are critical, Zod handles most on client
-    if (updateData.startDate !== undefined && (typeof updateData.startDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(updateData.startDate) || isNaN(Date.parse(updateData.startDate)))) {
-        console.log(`${handlerName} Invalid start date format: ${updateData.startDate}`);
-        return NextResponse.json({ success: false, message: 'Invalid start date format. Expected YYYY-MM-DD and a valid date.' }, { status: 400 });
-    }
+    // Minimal server-side validation moved to databaseService or handled by client-side Zod
 
-
-    console.log(`${handlerName} Data validated (minimal server validation), calling databaseService.updateLoan.`);
+    console.log(`${handlerName} Calling databaseService.updateLoan with data:`, updateData);
     const result = await databaseService.updateLoan(userId, loanId, updateData);
     console.log(`${handlerName} databaseService.updateLoan result:`, JSON.stringify(result));
 
@@ -60,7 +55,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       console.error(`${handlerName} Failed to update loan: ${errorMessage}`);
       return NextResponse.json({ success: false, message: errorMessage }, { status: statusCode });
     }
-  } catch (error: any) {
+  } catch (error: any) { 
     const errorMsg = error.message || 'An unexpected server error occurred during PUT operation.';
     const errorStack = error.stack || 'No stack trace available for PUT operation.';
     console.error(`${handlerName} CRITICAL UNHANDLED ERROR in handler: ${errorMsg}`, errorStack, error);
