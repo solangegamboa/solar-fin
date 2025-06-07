@@ -20,8 +20,9 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
     *   Cadastre seus empréstimos, edite-os e acompanhe o progresso de pagamento, visualizando o valor total, parcelas pagas, restantes e o status atual.
 *   **Gerenciamento de Cartões de Crédito:**
     *   Cadastre seus cartões de crédito, com auxílio de IA para extrair informações como emissor e bandeira a partir de uma imagem do cartão. Edite cartões existentes.
+    *   Navegue para uma página de detalhes para cada cartão, onde você pode visualizar todas as compras e faturas específicas daquele cartão.
     *   Registre compras parceladas (informando o valor da parcela), visualize um resumo consolidado das suas futuras faturas (mês a mês) e acompanhe estimativas das faturas atuais e próximas para cada cartão.
-    *   Edite compras parceladas existentes.
+    *   Edite ou exclua compras parceladas existentes diretamente na página de detalhes do cartão.
     *   Importe múltiplas transações de uma fatura de cartão de crédito a partir de uma imagem com auxílio de IA (Beta).
 *   **Gerenciamento de Metas Financeiras:**
     *   Cadastre, acompanhe, edite e gerencie suas metas financeiras de curto e longo prazo.
@@ -35,7 +36,7 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
     *   Utilize a inteligência artificial (Genkit) para obter um resumo da sua situação financeira e dicas personalizadas para economizar, baseado nos seus dados registrados.
 *   **Notificações:**
     *   Ícone de notificações no cabeçalho que exibe lembretes de transações recorrentes agendadas para datas próximas (7 dias antes e 14 dias depois do dia atual).
-    *   Indicador de notificações lidas/não lidas gerenciado localmente.
+    *   Indicador de notificações lidas/não lidas gerenciado localmente (via `localStorage`).
 *   **Gerenciamento de Conta e Segurança:**
     *   Sistema de cadastro e login para que múltiplos usuários possam gerenciar suas finanças de forma independente e segura (usando JWT com localStorage).
     *   Altere seu nome de exibição e senha diretamente nas configurações.
@@ -259,16 +260,17 @@ Agora você pode acessar o aplicativo no seu navegador e começar a usá-lo. Se 
 ## Estrutura do Projeto (Simplificada)
 
 *   `src/app/`: Contém as rotas da aplicação (App Router).
-    *   `(app)/`: Rotas protegidas da aplicação principal (Dashboard, Transações, Assinaturas, Empréstimos, Cartões, Metas, Investimentos, Calculadoras, etc.).
+    *   `(app)/`: Rotas protegidas da aplicação principal (Dashboard, Transações, Assinaturas, Empréstimos, Cartões, Metas, Investimentos, Calculadoras, Configurações, etc.).
+        *   `credit-cards/[cardId]/`: Página de detalhes para um cartão de crédito específico.
     *   `(auth)/`: Rotas de autenticação (Login, Signup).
     *   `api/`: Rotas de API (backend).
         *   `auth/`: Endpoints para login, signup, logout, e verificação de sessão (`me`).
-        *   `transactions/`: Endpoint para adicionar transações.
+        *   `transactions/`: Endpoint para adicionar e listar transações.
         *   `transactions/[transactionId]/`: Endpoint para atualizar e excluir transações específicas.
         *   `loans/`: Endpoints para criar e listar empréstimos.
         *   `loans/[loanId]/`: Endpoints para atualizar e excluir empréstimos específicos.
         *   `credit-cards/`: Endpoints para criar e listar cartões de crédito.
-        *   `credit-cards/[cardId]/`: Endpoints para atualizar e excluir cartões específicos.
+        *   `credit-cards/[cardId]/`: Endpoints para atualizar e excluir cartões específicos (o GET pode ser usado pela página de detalhes do cartão, embora a página também possa buscar todos e filtrar).
         *   `goals/`: Endpoints para criar e listar metas financeiras.
         *   `goals/[goalId]/`: Endpoints para atualizar e excluir metas específicas.
         *   `investments/`: Endpoints para criar e listar investimentos.
@@ -338,3 +340,5 @@ yarn add --dev jest @types/jest ts-jest @testing-library/react @testing-library/
 ### Nota sobre os Exemplos de Teste
 
 Os exemplos de código de teste fornecidos nas interações com o AI são conceituais e servem como um guia. Eles podem precisar de adaptações para se integrarem perfeitamente à sua configuração de teste específica, incluindo a configuração de mocks e a interação detalhada com os componentes da UI (especialmente componentes ShadCN UI que podem ter estruturas DOM específicas).
+
+```
