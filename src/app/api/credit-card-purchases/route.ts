@@ -5,6 +5,16 @@ import { addCreditCardPurchase, getCreditCardPurchasesForUser } from '@/lib/data
 import type { NewCreditCardPurchaseData, CreditCardPurchase, AddCreditCardPurchaseResult } from '@/types';
 import { getUserIdFromAuthHeader } from '@/lib/authUtils';
 
+// Interface for the data expected from the client for POST
+interface NewCreditCardPurchaseClientData {
+  cardId: string;
+  date: string;
+  description: string;
+  category: string;
+  installmentAmount: number; // Client sends installmentAmount
+  installments: number;
+}
+
 export async function POST(req: NextRequest) {
   const userId = await getUserIdFromAuthHeader(req);
   if (!userId) {
@@ -12,14 +22,27 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const purchaseData = await req.json() as NewCreditCardPurchaseData;
+    const clientData = await req.json() as NewCreditCardPurchaseClientData;
 
-    // Basic validation
-    if (!purchaseData.cardId || !purchaseData.date || !purchaseData.description || !purchaseData.category || typeof purchaseData.totalAmount !== 'number' || purchaseData.totalAmount <= 0 || typeof purchaseData.installments !== 'number' || purchaseData.installments < 1) {
+    // Basic validation for client data
+    if (!clientData.cardId || !clientData.date || !clientData.description || !clientData.category || typeof clientData.installmentAmount !== 'number' || clientData.installmentAmount <= 0 || typeof clientData.installments !== 'number' || clientData.installments < 1) {
       return NextResponse.json({ success: false, message: 'Missing or invalid required fields for credit card purchase.' }, { status: 400 });
     }
 
-    const result: AddCreditCardPurchaseResult = await addCreditCardPurchase(userId, purchaseData);
+    // Calculate totalAmount
+    const totalAmount = parseFloat((clientData.installmentAmount * clientData.installments).toFixed(2));
+
+    // Prepare data for databaseService (which expects totalAmount)
+    const purchaseDataForDb: NewCreditCardPurchaseData = {
+      cardId: clientData.cardId,
+      date: clientData.date,
+      description: clientData.description,
+      category: clientData.category,
+      totalAmount: totalAmount, // Use calculated totalAmount
+      installments: clientData.installments,
+    };
+
+    const result: AddCreditCardPurchaseResult = await addCreditCardPurchase(userId, purchaseDataForDb);
 
     if (result.success && result.purchaseId) {
       return NextResponse.json({ success: true, purchaseId: result.purchaseId, message: 'Credit card purchase added successfully.' }, { status: 201 });
@@ -42,8 +65,6 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Note: This GET route might not be used directly by the form, but could be for other purposes.
-    // The form usually POSTs data. The page displaying purchases would use this.
     const purchases: CreditCardPurchase[] = await getCreditCardPurchasesForUser(userId);
     return NextResponse.json({ success: true, purchases }, { status: 200 });
   } catch (error: any) {

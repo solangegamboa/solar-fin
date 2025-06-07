@@ -25,22 +25,21 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { useToast } from '@/hooks/use-toast';
 import { Sun } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
-import { addCreditCardPurchase, getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService';
+import { getCategoriesForUser, addCategoryForUser } from '@/lib/databaseService'; // Removed addCreditCardPurchase as it's called via API
 import type { CreditCard, NewCreditCardPurchaseData, UserCategory, CreditCardPurchase, UpdateCreditCardPurchaseData } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { Combobox } from '@/components/ui/combobox';
 import { useAuth } from '@/contexts/AuthContext';
-// CurrencyInput is no longer used
 
 const purchaseSchema = z.object({
   cardId: z.string().min(1, { message: 'Selecione um cartão de crédito.' }),
   date: z.date({ required_error: 'A data da compra é obrigatória.' }),
   description: z.string().min(1, { message: 'A descrição é obrigatória.' }).max(100, { message: 'Máximo de 100 caracteres.'}),
   category: z.string().min(1, { message: 'A categoria é obrigatória.' }).max(50, { message: 'A categoria deve ter no máximo 50 caracteres.'}),
-  totalAmount: z.coerce
-    .number({ invalid_type_error: 'O valor total deve ser um número.', required_error: 'O valor total é obrigatório.' })
-    .positive({ message: 'O valor total deve ser positivo.' })
-    .min(0.01, { message: 'O valor deve ser maior que zero.' }),
+  installmentAmount: z.coerce // Changed from totalAmount
+    .number({ invalid_type_error: 'O valor da parcela deve ser um número.', required_error: 'O valor da parcela é obrigatório.' })
+    .positive({ message: 'O valor da parcela deve ser positivo.' })
+    .min(0.01, { message: 'O valor da parcela deve ser maior que zero.' }),
   installments: z.coerce
     .number({ invalid_type_error: 'O número de parcelas deve ser um número.', required_error: 'O número de parcelas é obrigatório.' })
     .int({ message: 'O número de parcelas deve ser inteiro.' })
@@ -96,32 +95,33 @@ export function CreditCardTransactionForm({
       date: new Date(),
       description: '',
       category: '',
-      totalAmount: undefined,
+      installmentAmount: undefined, // Changed from totalAmount
       installments: 1,
     },
   });
 
   useEffect(() => {
     if (existingPurchase) {
+      const installmentAmount = existingPurchase.totalAmount / existingPurchase.installments;
       form.reset({
         cardId: existingPurchase.cardId,
         date: parseISO(existingPurchase.date),
         description: existingPurchase.description,
         category: existingPurchase.category,
-        totalAmount: existingPurchase.totalAmount,
+        installmentAmount: parseFloat(installmentAmount.toFixed(2)), // Calculate and set installmentAmount
         installments: existingPurchase.installments,
       });
     } else {
       form.reset({ 
-        cardId: '',
+        cardId: userCreditCards.length > 0 ? userCreditCards[0].id : '',
         date: new Date(),
         description: '',
         category: '',
-        totalAmount: undefined,
+        installmentAmount: undefined,
         installments: 1,
       });
     }
-  }, [existingPurchase, form]);
+  }, [existingPurchase, form, userCreditCards]);
   
   const handleAddNewCategory = async (categoryName: string): Promise<UserCategory | null> => {
     if (!userId) {
@@ -153,48 +153,47 @@ export function CreditCardTransactionForm({
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     };
-    let result: { success: boolean; purchaseId?: string; error?: string; message?: string };
+    
+    // Data sent to the API now includes installmentAmount
+    const dataToSendToApi = {
+      cardId: values.cardId,
+      date: format(values.date, 'yyyy-MM-dd'),
+      description: values.description,
+      category: values.category,
+      installmentAmount: Number(values.installmentAmount),
+      installments: Number(values.installments),
+    };
+
+    let response;
+    let result;
 
     try {
       if (existingPurchase) {
-        const updateData: UpdateCreditCardPurchaseData = {
-          cardId: values.cardId,
-          date: format(values.date, 'yyyy-MM-dd'),
-          description: values.description,
-          category: values.category,
-          totalAmount: Number(values.totalAmount),
-          installments: Number(values.installments),
-        };
-        const response = await fetch(`/api/credit-card-purchases/${existingPurchase.id}`, {
+        response = await fetch(`/api/credit-card-purchases/${existingPurchase.id}`, {
             method: 'PUT',
             headers,
-            body: JSON.stringify(updateData),
+            body: JSON.stringify(dataToSendToApi),
         });
-        result = await response.json();
       } else {
-        const purchaseData: NewCreditCardPurchaseData = {
-          ...values,
-          date: format(values.date, 'yyyy-MM-dd'), 
-        };
-         const response = await fetch(`/api/credit-card-purchases`, { 
+         response = await fetch(`/api/credit-card-purchases`, { 
             method: 'POST',
             headers,
-            body: JSON.stringify(purchaseData),
+            body: JSON.stringify(dataToSendToApi),
         });
-        result = await response.json();
       }
+      result = await response.json();
 
-      if (result.success) {
+      if (response.ok && result.success) {
         toast({
           title: 'Sucesso!',
           description: `Compra no cartão ${existingPurchase ? 'atualizada' : 'adicionada'}.`,
         });
         form.reset({
-            cardId: '',
+            cardId: userCreditCards.length > 0 ? userCreditCards[0].id : '',
             date: new Date(),
             description: '',
             category: '',
-            totalAmount: undefined,
+            installmentAmount: undefined,
             installments: 1,
         });
         if (onSuccess) onSuccess();
@@ -203,7 +202,7 @@ export function CreditCardTransactionForm({
         toast({
           variant: 'destructive',
           title: `Erro ao ${existingPurchase ? 'Atualizar' : 'Adicionar'} Compra`,
-          description: result.error || result.message || 'Ocorreu um erro desconhecido.',
+          description: result.message || 'Ocorreu um erro desconhecido.',
         });
       }
     } catch (error: any) {
@@ -297,16 +296,16 @@ export function CreditCardTransactionForm({
         <div className="grid grid-cols-2 gap-4">
           <FormField
             control={form.control}
-            name="totalAmount"
+            name="installmentAmount" // Changed from totalAmount
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Valor Total (R$)</FormLabel>
+                <FormLabel>Valor da Parcela (R$)</FormLabel> {/* Changed label */}
                 <FormControl>
                   <Input
                     type="number"
                     step="0.01"
                     lang="pt-BR"
-                    placeholder="R$ 300,00"
+                    placeholder="R$ 100,00" // Changed placeholder
                     {...field}
                     value={field.value === undefined ? '' : field.value}
                     onChange={e => field.onChange(e.target.valueAsNumber === undefined || isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber)}
