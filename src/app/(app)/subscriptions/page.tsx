@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Repeat, Sun, AlertTriangleIcon, SearchX, CalendarDays, Tag, DollarSign, CheckCircle2 } from "lucide-react"; // Added CheckCircle2
+import { Repeat, Sun, AlertTriangleIcon, SearchX, CalendarDays, Tag, DollarSign, CheckCircle2, Edit3 } from "lucide-react"; // Added Edit3
 import type { Transaction, RecurrenceFrequency } from '@/types';
 import { getTransactionsForUser } from '@/lib/databaseService';
 import { formatCurrency, cn } from '@/lib/utils';
@@ -22,11 +22,13 @@ import {
   addWeeks,
   isPast,
   isToday
-} from 'date-fns'; // Added necessary date-fns functions
+} from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { TransactionForm } from '@/components/transactions/TransactionForm';
 
 const recurrenceFrequencyMap: Record<RecurrenceFrequency, string> = {
   none: 'Não Recorrente',
@@ -41,6 +43,9 @@ export default function SubscriptionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
 
   const fetchRecurringExpenses = useCallback(async () => {
     if (!user) {
@@ -80,6 +85,17 @@ export default function SubscriptionsPage() {
       }
     }
   }, [fetchRecurringExpenses, user, authLoading]);
+
+  const handleOpenEditModal = (transaction: Transaction) => {
+    setTransactionToEdit(transaction);
+    setIsEditModalOpen(true);
+  };
+
+  const handleTransactionUpserted = () => {
+    fetchRecurringExpenses();
+    setIsEditModalOpen(false);
+    setTransactionToEdit(null);
+  };
 
 
   if (authLoading || (isLoading && !user)) {
@@ -146,7 +162,7 @@ export default function SubscriptionsPage() {
             let firstDayOfCurrentMonth = startOfMonth(today);
             
             let firstOccurrenceThisMonth = new Date(firstDayOfCurrentMonth);
-            let count = 0; // Safety break for loop
+            let count = 0; 
             while(getDay(firstOccurrenceThisMonth) !== originalDayOfWeek && count < 7) {
                 firstOccurrenceThisMonth = addDays(firstOccurrenceThisMonth, 1);
                 if (getMonth(firstOccurrenceThisMonth) !== currentMonth) {
@@ -155,7 +171,7 @@ export default function SubscriptionsPage() {
                 }
                 count++;
             }
-            if(count >= 7) firstOccurrenceThisMonth = null; // Did not find the day in first week
+            if(count >= 7) firstOccurrenceThisMonth = null;
 
             if (firstOccurrenceThisMonth && isSameMonth(firstOccurrenceThisMonth, today)) {
                 let latestPastOrTodayOccurrenceInMonth: Date | null = null;
@@ -164,11 +180,11 @@ export default function SubscriptionsPage() {
                     if (isPast(currentWeeklyDate) || isToday(currentWeeklyDate)) {
                         latestPastOrTodayOccurrenceInMonth = new Date(currentWeeklyDate);
                     } else {
-                        break;
+                        break; 
                     }
                     const nextWeeklyDate = addWeeks(currentWeeklyDate, 1);
-                    if (getMonth(nextWeeklyDate) !== currentMonth && getMonth(currentWeeklyDate) === currentMonth) { // Check if adding a week crosses the month boundary
-                        break; // stop if next iteration is in next month
+                    if (!isSameMonth(nextWeeklyDate, today) && isSameMonth(currentWeeklyDate, today)) { 
+                        break;
                     }
                     currentWeeklyDate = nextWeeklyDate;
                 }
@@ -188,12 +204,24 @@ export default function SubscriptionsPage() {
                       <Repeat className="mr-2 h-5 w-5 text-primary opacity-80" />
                       {expense.description || "Despesa Recorrente"}
                   </CardTitle>
-                  {isPaidThisMonth && (
-                    <Badge variant="default" className="ml-auto text-xs bg-green-100 text-green-700 border-green-300 dark:bg-green-700/30 dark:text-green-300 dark:border-green-600">
-                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                      Pago este Mês
-                    </Badge>
-                  )}
+                  <div className="flex items-center space-x-1">
+                    {isPaidThisMonth && (
+                        <Badge variant="default" className="ml-auto text-xs bg-green-100 text-green-700 border-green-300 dark:bg-green-700/30 dark:text-green-300 dark:border-green-600">
+                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                        Pago este Mês
+                        </Badge>
+                    )}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => handleOpenEditModal(expense)}
+                        disabled={!user}
+                        title="Editar Assinatura"
+                    >
+                        <Edit3 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <CardDescription className="text-xs pt-1">
                   <Badge variant="secondary">{expense.category}</Badge>
@@ -243,6 +271,25 @@ export default function SubscriptionsPage() {
         </div>
       </div>
       {renderContent()}
+
+      <Dialog open={isEditModalOpen} onOpenChange={(isOpen) => { setIsEditModalOpen(isOpen); if(!isOpen) setTransactionToEdit(null); }}>
+        <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Despesa Recorrente</DialogTitle>
+            <DialogDescription>
+              Atualize os detalhes da sua despesa recorrente.
+            </DialogDescription>
+          </DialogHeader>
+          {user && transactionToEdit && (
+            <TransactionForm 
+              onSuccess={handleTransactionUpserted} 
+              setOpen={setIsEditModalOpen} 
+              userId={user.id} 
+              existingTransaction={transactionToEdit} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
