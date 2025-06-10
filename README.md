@@ -39,6 +39,7 @@ Bem-vindo ao Solar Fin! Este é um aplicativo Next.js projetado para ajudá-lo a
     *   Indicador de notificações lidas/não lidas gerenciado localmente (via `localStorage`).
 *   **Gerenciamento de Conta e Segurança:**
     *   Sistema de cadastro e login para que múltiplos usuários possam gerenciar suas finanças de forma independente e segura (usando JWT com localStorage).
+    *   Possibilidade de desabilitar novos cadastros via variável de ambiente (`ALLOW_NEW_SIGNUPS`).
     *   Altere seu nome de exibição e senha diretamente nas configurações.
     *   Opção para configurar preferência de recebimento de notificações por e-mail sobre transações agendadas (o envio real de e-mails requer configuração adicional no servidor e um sistema de cron job).
     *   Funcionalidade de backup local para salvar todos os seus dados (perfil, transações, cartões, empréstimos, categorias, metas, investimentos) em um arquivo JSON.
@@ -95,6 +96,11 @@ Crie um arquivo chamado `.env` na raiz do projeto. Este arquivo armazenará suas
 # Exemplo: openssl rand -base64 32
 JWT_SECRET=SEU_SEGREDO_JWT_AQUI
 
+# (Opcional) Controle de Cadastro de Novos Usuários
+# Defina como 'true' para permitir novos cadastros.
+# Se 'false' ou não definido, novos cadastros serão bloqueados.
+# ALLOW_NEW_SIGNUPS=true
+
 # Configuração do Banco de Dados (escolha uma das opções abaixo)
 
 # Opção 1: Usar arquivo JSON local (padrão se DATABASE_URL não estiver definido ou DATABASE_MODE=local)
@@ -117,6 +123,7 @@ DATABASE_URL="postgresql://solaruser:solarpass@localhost:5433/solar_fin_db"
 **Notas sobre as variáveis:**
 
 *   **`JWT_SECRET`:** **Obrigatório.** É crucial para a segurança da autenticação. Use uma string longa e aleatória.
+*   **`ALLOW_NEW_SIGNUPS`:** (Opcional) Controla se novos usuários podem se cadastrar. Defina como `true` para permitir. Se for `false` ou não estiver definida, os novos cadastros serão bloqueados pela API. Por padrão (se a variável não existir no `.env`), os cadastros são desabilitados.
 *   **`DATABASE_MODE`:** Define se o sistema usará `local` (db.json) ou `postgres`. Se `DATABASE_URL` estiver preenchido e `DATABASE_MODE` não, o sistema tentará usar `postgres`.
 *   **`DATABASE_URL`:** **Obrigatório se `DATABASE_MODE="postgres"`.** Forneça a string de conexão para seu servidor PostgreSQL. Se estiver usando Docker Compose, esta URL (com `localhost:5433`) é para acesso externo; o contêiner do app usará uma URL interna (`db:5432`).
 *   **`GOOGLE_API_KEY`:** Necessário para as funcionalidades de IA que utilizam Genkit com o Google AI.
@@ -225,7 +232,7 @@ Se você utilizou `docker-compose up --build` (Opção 4A):
         **Atenção:** `docker-compose down -v` apagará todos os dados do seu banco de dados PostgreSQL. Use com cuidado.
 
 *   **Variáveis de Ambiente e `.env`:**
-    *   O serviço `app` no `docker-compose.yml` está configurado para usar o arquivo `.env` da raiz do seu projeto. Certifique-se de que `JWT_SECRET` está definido nele.
+    *   O serviço `app` no `docker-compose.yml` está configurado para usar o arquivo `.env` da raiz do seu projeto. Certifique-se de que `JWT_SECRET` e `ALLOW_NEW_SIGNUPS` (se desejado) estão definidos nele.
     *   As variáveis `DATABASE_MODE=postgres` e `DATABASE_URL=postgresql://solaruser:solarpass@db:5432/solar_fin_db` são definidas diretamente no `docker-compose.yml` para o contêiner `app`, garantindo que ele se conecte ao contêiner `db` usando a rede interna do Docker (onde o `db` escuta na porta `5432`).
 
 *   **Desenvolvimento Genkit (IA):**
@@ -341,4 +348,3 @@ yarn add --dev jest @types/jest ts-jest @testing-library/react @testing-library/
 
 Os exemplos de código de teste fornecidos nas interações com o AI são conceituais e servem como um guia. Eles podem precisar de adaptações para se integrarem perfeitamente à sua configuração de teste específica, incluindo a configuração de mocks e a interação detalhada com os componentes da UI (especialmente componentes ShadCN UI que podem ter estruturas DOM específicas).
 
-```

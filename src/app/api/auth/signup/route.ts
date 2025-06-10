@@ -9,6 +9,12 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // const COOKIE_NAME = 'authToken'; // Cookie no longer used here
 
 export async function POST(req: NextRequest) {
+  // Check if new signups are allowed
+  const allowNewSignups = process.env.ALLOW_NEW_SIGNUPS === 'true';
+  if (!allowNewSignups) {
+    return NextResponse.json({ success: false, message: 'Novos cadastros estão temporariamente desabilitados.' }, { status: 403 });
+  }
+
   if (!JWT_SECRET) {
     console.error('JWT_SECRET is not set');
     return NextResponse.json({ success: false, message: 'Server configuration error.' }, { status: 500 });
@@ -63,3 +69,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, message: error.message || 'An internal server error occurred.' }, { status: 500 });
   }
 }
+
