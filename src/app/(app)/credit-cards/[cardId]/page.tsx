@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation'; // Keep useRouter
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +24,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialogTrigger, // Ensured this is imported
 } from "@/components/ui/alert-dialog";
 import { PlusCircle, CreditCardIcon as CreditCardLucideIcon, CalendarDays, AlertTriangleIcon, SearchX, Sun, ShoppingBag, Trash2, TrendingUp, TrendingDown, FileText, Edit3, ArrowLeft, BarChart3, ListTree, Filter } from "lucide-react";
 import { CreditCardForm } from "@/components/credit-cards/CreditCardForm";
@@ -70,9 +70,13 @@ const ptBRMonthNames = [
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
 ];
 
-export default function CreditCardDetailPage() {
-  const params = useParams();
-  const cardId = params.cardId as string;
+// Define props interface for the page component
+interface CreditCardDetailPageProps {
+  params: { cardId: string };
+}
+
+export default function CreditCardDetailPage({ params }: CreditCardDetailPageProps) {
+  const cardId = params.cardId as string; // Use cardId from props
   const router = useRouter();
   const { user, loading: authLoading, getToken } = useAuth();
   const { toast } = useToast();
@@ -340,47 +344,36 @@ export default function CreditCardDetailPage() {
 
     if (categoryFilterMode === 'currentInvoice') {
       const today = new Date();
-      const currentClosingDate = setDate(today, cardDetails.closingDateDay);
-      let previousClosingDate = setDate(subMonths(today, 1), cardDetails.closingDateDay);
-
-      // Adjust if currentClosingDate has already passed this month
-      if (isBefore(currentClosingDate, today)) {
-         // previousClosingDate becomes this month's closing date
-         // currentClosingDate becomes next month's closing date (for purchases made after this month's close)
-         // This logic seems complex for "fatura aberta". Simpler: use current month's expected closing date
-         // For "fatura aberta", we care about purchases made AFTER the PREVIOUS closing and BEFORE or ON the CURRENT closing.
-      }
-      // If today is after this month's closing day, the "current open invoice" is for next month.
-      // purchases after cardDetails.closingDateDay of *current* month until closingDateDay of *next* month.
-      // If today is before this month's closing day, "current open invoice" is for this month.
-      // purchases after cardDetails.closingDateDay of *previous* month until closingDateDay of *current* month.
-
+      // Correctly determine the current open invoice period
       let invoicePeriodStart: Date;
       let invoicePeriodEnd: Date;
 
       if (getDate(today) > cardDetails.closingDateDay) {
-        // We are past this month's closing day. The "open invoice" collects for next month's payment.
-        invoicePeriodStart = setDate(today, cardDetails.closingDateDay); // Closing day of current month
-        invoicePeriodEnd = setDate(addMonths(today, 1), cardDetails.closingDateDay); // Closing day of next month
+        // Past this month's closing day, so open invoice is for purchases made *after* this month's closing day
+        // up to next month's closing day.
+        invoicePeriodStart = setDate(today, cardDetails.closingDateDay); 
+        invoicePeriodEnd = setDate(addMonths(today, 1), cardDetails.closingDateDay);
       } else {
-        // We are before this month's closing day. The "open invoice" collects for this month's payment.
-        invoicePeriodStart = setDate(subMonths(today, 1), cardDetails.closingDateDay); // Closing day of previous month
-        invoicePeriodEnd = setDate(today, cardDetails.closingDateDay); // Closing day of current month
+        // Before this month's closing day, so open invoice is for purchases made *after* last month's closing day
+        // up to this month's closing day.
+        invoicePeriodStart = setDate(subMonths(today, 1), cardDetails.closingDateDay);
+        invoicePeriodEnd = setDate(today, cardDetails.closingDateDay);
       }
       
       purchasesToConsider = cardPurchases.filter(p => {
         const purchaseDate = parseISO(p.date);
+        // Purchases made ON invoicePeriodStart are part of previous invoice, so AFTER.
+        // Purchases made ON invoicePeriodEnd are part of current invoice.
         return isAfter(purchaseDate, invoicePeriodStart) && (isBefore(purchaseDate, invoicePeriodEnd) || isSameDay(purchaseDate, invoicePeriodEnd));
       });
     }
 
     if (purchasesToConsider.length === 0 && categoryFilterMode === 'currentInvoice') {
-        return []; // No purchases in the current invoice period
+        return []; 
     }
     if (purchasesToConsider.length === 0 && categoryFilterMode === 'allTime' && cardPurchases.length === 0) {
-        return []; // No purchases at all
+        return [];
     }
-
 
     const summary: Record<string, number> = purchasesToConsider.reduce((acc, purchase) => {
       acc[purchase.category] = (acc[purchase.category] || 0) + purchase.totalAmount;
@@ -488,21 +481,22 @@ export default function CreditCardDetailPage() {
         <h2 className="text-2xl font-semibold tracking-tight font-headline">Gastos por Categoria (Este Cartão)</h2>
         <div className="flex items-center space-x-2 mt-2 sm:mt-0">
             <Label htmlFor="category-filter-mode" className="text-sm text-muted-foreground">
-                Fatura Aberta
+                Todo o Período
             </Label>
             <Switch
                 id="category-filter-mode"
                 checked={categoryFilterMode === 'currentInvoice'}
                 onCheckedChange={(checked) => setCategoryFilterMode(checked ? 'currentInvoice' : 'allTime')}
+                aria-label="Alternar filtro de categoria entre todo o período e fatura aberta"
             />
             <Label htmlFor="category-filter-mode" className="text-sm text-muted-foreground">
-                Todo o Período
+                Fatura Aberta
             </Label>
         </div>
       </div>
       <Card className="shadow-lg">
         <CardContent className="pt-6">
-            {(categoryFilterMode === 'allTime' && cardPurchases.length === 0) || (categoryFilterMode === 'currentInvoice' && categorySpendingSummaryForThisCard.length === 0) ? (
+            {(categoryFilterMode === 'allTime' && cardPurchases.length === 0) || (categoryFilterMode === 'currentInvoice' && categorySpendingSummaryForThisCard.length === 0 && purchasesToConsider.length === 0) ? (
                 <p className="text-muted-foreground text-center py-4">
                     {categoryFilterMode === 'currentInvoice' 
                         ? "Nenhuma compra na fatura aberta para exibir o resumo por categoria."
@@ -631,3 +625,5 @@ export default function CreditCardDetailPage() {
   );
 }
 
+
+    
