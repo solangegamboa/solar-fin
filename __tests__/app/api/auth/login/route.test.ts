@@ -9,7 +9,7 @@ jest.mock('@/lib/databaseService');
 jest.mock('bcryptjs');
 jest.mock('jsonwebtoken');
 
-const mockRequest = (body: any) => ({
+const mockRequest = (body) => ({
   json: jest.fn().mockResolvedValue(body),
   headers: new Headers(), // Adicionado para consistência com NextRequest
 }) as any; // Uso de 'any' para simplificar o mock de NextRequest

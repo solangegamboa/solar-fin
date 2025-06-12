@@ -6,7 +6,7 @@ import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { AuthProvider, AuthContextType } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import * as databaseService from '@/lib/databaseService';
-import * * as extractTransactionDetailsFlow from '@/ai/flows/extract-transaction-details-flow';
+import * as extractTransactionDetailsFlow from '@/ai/flows/extract-transaction-details-flow';
 
 // Mocks
 jest.mock('@/hooks/use-toast');
@@ -196,4 +196,3 @@ describe('TransactionForm', () => {
   // - Lógica de extração de valor do comprovante pela IA (mockar extractTransactionDetailsFromImage)
   // - Adição de nova categoria através do Combobox
 });
-

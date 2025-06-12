@@ -18,7 +18,7 @@ jest.mock('@/hooks/use-toast', () => ({
 
 // Mock localStorage (já deve estar no jest.setup.js, mas pode ser redefinido aqui para clareza ou controle específico do teste)
 const localStorageMock = (() => {
-  let store: Record<string, string> = {};
+  let store = {};
   return {
     getItem: (key: string) => store[key] || null,
     setItem: (key: string, value: string) => { store[key] = value.toString(); },
@@ -127,4 +127,3 @@ describe('AuthContext - login', () => {
     }));
   });
 });
-

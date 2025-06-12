@@ -7,7 +7,7 @@ import * as authUtils from '@/lib/authUtils'; // Importar o módulo mockado
 jest.mock('@/lib/databaseService');
 jest.mock('@/lib/authUtils');
 
-const mockRequest = (body: any, authorizationHeader?: string) => {
+const mockRequest = (body, authorizationHeader) => {
   const headers = new Headers();
   if (authorizationHeader) {
     headers.set('Authorization', authorizationHeader);
